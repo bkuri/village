@@ -9,6 +9,7 @@ from village.probes.repo import find_git_root
 
 TMUX_SESSION = "village"
 DEFAULT_WORKTREES_DIR_NAME = ".worktrees"
+DEFAULT_AGENT = "worker"
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class Config:
     village_dir: Path
     worktrees_dir: Path
     tmux_session: str = TMUX_SESSION
+    default_agent: str = DEFAULT_AGENT
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
 
