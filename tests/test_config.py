@@ -90,3 +90,55 @@ def test_config_config_exists(tmp_path: Path):
 
     # Config file exists now
     assert config.config_exists()
+
+
+def test_config_default_max_workers(tmp_path: Path):
+    """Test default max_workers value."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.max_workers == 2
+
+
+def test_config_env_max_workers_override(tmp_path: Path):
+    """Test VILLAGE_MAX_WORKERS environment variable."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_MAX_WORKERS"] = "5"
+
+    try:
+        config = get_config()
+        assert config.max_workers == 5
+    finally:
+        del os.environ["VILLAGE_MAX_WORKERS"]
+
+
+def test_config_env_max_workers_invalid(tmp_path: Path):
+    """Test invalid VILLAGE_MAX_WORKERS uses default."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_MAX_WORKERS"] = "invalid"
+
+    try:
+        config = get_config()
+        assert config.max_workers == 2
+    finally:
+        del os.environ["VILLAGE_MAX_WORKERS"]
+
+
+def test_config_env_max_workers_too_low(tmp_path: Path):
+    """Test VILLAGE_MAX_WORKERS < 1 uses default."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_MAX_WORKERS"] = "0"
+
+    try:
+        config = get_config()
+        assert config.max_workers == 2
+    finally:
+        del os.environ["VILLAGE_MAX_WORKERS"]

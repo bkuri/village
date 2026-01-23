@@ -1,10 +1,18 @@
 """Village CLI entrypoint."""
 
+import sys
+
 import click
 
 from village.config import get_config
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import clear_pane_cache, session_exists
+from village.queue import (
+    execute_queue_plan,
+    generate_queue_plan,
+    render_queue_plan,
+    render_queue_plan_json,
+)
 from village.render.text import render_initialization_plan
 from village.resume import execute_resume, plan_resume
 from village.runtime import collect_runtime_state
@@ -409,3 +417,139 @@ def resume(
         from village.render.html import render_resume_html
 
         click.echo(render_resume_html(contract))
+
+
+@village.command()
+@click.option("--n", "count", type=int, help="Number of tasks to start")
+@click.option("--plan", is_flag=True, help="Generate queue plan")
+@click.option("--dry-run", is_flag=True, help="Preview execution")
+@click.option("--max-workers", type=int, help="Override concurrency limit")
+@click.option("--agent", help="Filter tasks by agent type")
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def queue(
+    count: int, plan: bool, dry_run: bool, max_workers: int, agent: str, json_output: bool
+) -> None:
+    """
+    Queue and execute ready tasks from Beads.
+
+    Default: Show queue plan (no execution).
+    Use --n N or just N to start N tasks.
+
+    Flags:
+      --plan: Show plan only (default behavior)
+      --dry-run: Preview what would happen
+      --max-workers N: Override concurrency limit
+      --agent TYPE: Filter tasks by agent type
+      --json: Full JSON output (with --plan)
+
+    Examples:
+      village queue                    # Show plan
+      village queue --plan --json       # Full JSON plan
+      village queue 2                 # Start 2 tasks
+      village queue --n 3             # Start 3 tasks
+      village queue --agent build        # Start only build tasks
+      village queue --dry-run 2        # Preview starting 2 tasks
+    """
+    config = get_config()
+
+    # Use config max_workers or override from CLI
+    concurrency_limit = max_workers if max_workers else config.max_workers
+
+    # Generate queue plan
+    queue_plan = generate_queue_plan(config.tmux_session, concurrency_limit, config)
+
+    # Filter by agent if requested
+    if agent:
+        queue_plan.ready_tasks = [t for t in queue_plan.ready_tasks if t.agent == agent]
+        queue_plan.available_tasks = [t for t in queue_plan.available_tasks if t.agent == agent]
+        queue_plan.blocked_tasks = [t for t in queue_plan.blocked_tasks if t.agent == agent]
+
+    # Render plan (default or --plan)
+    if plan or count is None:
+        if json_output:
+            click.echo(render_queue_plan_json(queue_plan))
+        else:
+            click.echo(render_queue_plan(queue_plan))
+        return
+
+    # Execution mode (--n N provided)
+    # Apply dry-run if requested
+    if dry_run:
+        click.echo("(dry-run: previewing execution)")
+        click.echo(render_queue_plan(queue_plan))
+        return
+
+    # Limit tasks to start if count specified
+    if count is not None:
+        queue_plan.available_tasks = queue_plan.available_tasks[:count]
+
+    # Check if there are tasks to start
+    if not queue_plan.available_tasks:
+        if json_output:
+            import json
+
+            click.echo(
+                json.dumps(
+                    {
+                        "tasks_started": 0,
+                        "tasks_failed": 0,
+                        "results": [],
+                        "message": "No tasks available to start",
+                    },
+                    indent=2,
+                )
+            )
+        else:
+            click.echo("No tasks available to start")
+        sys.exit(1)
+
+    # Execute queue plan
+    click.echo(f"Starting {len(queue_plan.available_tasks)} task(s)...")
+    results = execute_queue_plan(queue_plan, config.tmux_session, config)
+
+    # Count successes and failures
+    tasks_started = sum(1 for r in results if r.success)
+    tasks_failed = sum(1 for r in results if not r.success)
+
+    # Render results
+    if not json_output:
+        click.echo(f"\nTasks started: {tasks_started}")
+        click.echo(f"Tasks failed: {tasks_failed}")
+
+        if tasks_failed > 0:
+            click.echo("\nFailed tasks:")
+            for result in results:
+                if not result.success:
+                    click.echo(f"  - {result.task_id}: {result.error or 'Unknown error'}")
+    else:
+        import json
+
+        # JSON output with results
+        output = {
+            "tasks_started": tasks_started,
+            "tasks_failed": tasks_failed,
+            "results": [
+                {
+                    "task_id": r.task_id,
+                    "agent": r.agent,
+                    "success": r.success,
+                    "worktree_path": str(r.worktree_path),
+                    "window_name": r.window_name,
+                    "pane_id": r.pane_id,
+                    "error": r.error,
+                }
+                for r in results
+            ],
+        }
+        click.echo(json.dumps(output, indent=2, sort_keys=True))
+
+    # Exit codes:
+    # 0: All tasks started successfully
+    # 4: Some tasks started, some failed (partial success)
+    # 1: No tasks started (all failed)
+    if tasks_started > 0 and tasks_failed == 0:
+        sys.exit(0)
+    elif tasks_started > 0:
+        sys.exit(4)
+    else:
+        sys.exit(1)

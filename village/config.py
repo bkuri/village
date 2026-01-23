@@ -10,6 +10,7 @@ from village.probes.repo import find_git_root
 TMUX_SESSION = "village"
 DEFAULT_WORKTREES_DIR_NAME = ".worktrees"
 DEFAULT_AGENT = "worker"
+DEFAULT_MAX_WORKERS = 2
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ class Config:
     worktrees_dir: Path
     tmux_session: str = TMUX_SESSION
     default_agent: str = DEFAULT_AGENT
+    max_workers: int = DEFAULT_MAX_WORKERS
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
 
@@ -75,12 +77,30 @@ def get_config() -> Config:
         )
     )
 
+    # Override max_workers from env var if provided
+    max_workers_str = os.environ.get("VILLAGE_MAX_WORKERS")
+    max_workers = DEFAULT_MAX_WORKERS
+    if max_workers_str:
+        try:
+            max_workers = int(max_workers_str)
+            if max_workers < 1:
+                logger.warning(
+                    f"VILLAGE_MAX_WORKERS must be >= 1, using default: {DEFAULT_MAX_WORKERS}"
+                )
+                max_workers = DEFAULT_MAX_WORKERS
+        except ValueError:
+            logger.warning(
+                f"Invalid VILLAGE_MAX_WORKERS value, using default: {DEFAULT_MAX_WORKERS}"
+            )
+
     logger.debug(f"Git root: {git_root}")
     logger.debug(f"Village dir: {village_dir}")
     logger.debug(f"Worktrees dir: {worktrees_dir}")
+    logger.debug(f"Max workers: {max_workers}")
 
     return Config(
         git_root=git_root,
         village_dir=village_dir,
         worktrees_dir=worktrees_dir,
+        max_workers=max_workers,
     )
