@@ -40,12 +40,11 @@ def test_status_json(tmp_path: Path):
     data = json.loads(result.output)
     assert data["command"] == "status"
     assert data["version"] == 1
-    assert "tmux" in data
-    assert "config" in data
-    assert "locks" in data
-    assert "worktrees" in data
-    assert isinstance(data["tmux"]["running"], bool)
-    assert isinstance(data["locks"]["count"], int)
+    assert "summary" in data
+    assert "workers" in data
+    assert "orphans" in data
+    assert isinstance(data["summary"]["tmux_running"], bool)
+    assert isinstance(data["summary"]["locks_count"], int)
 
 
 def test_status_full(tmp_path: Path):

@@ -5,6 +5,7 @@ import click
 from village.config import get_config
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import clear_pane_cache, session_exists
+from village.status import collect_workers
 
 logger = get_logger(__name__)
 
@@ -21,50 +22,42 @@ def village(verbose: bool) -> None:
 @village.command()
 @click.option("--short", is_flag=True, help="Short output")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
-def status(short: bool, json_output: bool) -> None:
+@click.option("--workers", is_flag=True, help="Show workers view")
+@click.option("--locks", is_flag=True, help="Show locks view")
+@click.option("--orphans", is_flag=True, help="Show orphans view")
+def status(
+    short: bool,
+    json_output: bool,
+    workers: bool,
+    locks: bool,
+    orphans: bool,
+) -> None:
     """
     Show village status.
 
     Non-mutating. Probes actual state, doesn't create directories.
+
+    Flags:
+      --short: Minimal status (tmux + locks count)
+      --workers: Tabular workers view
+      --locks: Detailed locks view
+      --orphans: Orphans with suggested actions
+      --json: Full status as JSON (no suggested actions)
+
+    Default: Summary only (use flags for details)
     """
+    from village.render.json import render_status_json
+    from village.render.text import render_full_status
+    from village.status import collect_full_status
+
     config = get_config()
 
-    # Probe tmux session
-    tmux_running = session_exists(config.tmux_session)
-
-    # Probe lock directory (non-mutating)
-    lock_files = list(config.locks_dir.glob("*.lock")) if config.locks_dir.exists() else []
-
-    # Probe config file existence
-    config_exists = config.config_exists()
-
     if json_output:
-        import json
-
-        output = {
-            "command": "status",
-            "version": 1,
-            "tmux": {
-                "session": config.tmux_session,
-                "running": tmux_running,
-            },
-            "config": {
-                "exists": config_exists,
-                "path": str(config.config_path),
-            },
-            "locks": {
-                "directory": str(config.locks_dir),
-                "exists": config.locks_dir.exists(),
-                "count": len(lock_files),
-            },
-            "worktrees": {
-                "directory": str(config.worktrees_dir),
-                "exists": config.worktrees_dir.exists(),
-            },
-        }
-        click.echo(json.dumps(output, sort_keys=True))
+        full_status = collect_full_status(config.tmux_session)
+        click.echo(render_status_json(full_status))
     elif short:
-        # Minimal status: tmux + locks only
+        tmux_running = session_exists(config.tmux_session)
+        lock_files = list(config.locks_dir.glob("*.lock")) if config.locks_dir.exists() else []
         parts = []
         if tmux_running:
             parts.append(f"tmux:{config.tmux_session}")
@@ -78,13 +71,14 @@ def status(short: bool, json_output: bool) -> None:
 
         click.echo(" ".join(parts))
     else:
-        # Full status (placeholder for Phase 4)
-        click.echo(f"Village directory: {config.village_dir}")
-        click.echo(
-            f"TMUX session: {config.tmux_session} {'running' if tmux_running else 'not running'}"
-        )
-        click.echo(f"Lock files: {len(lock_files)}")
-        click.echo(f"Config file: {'exists' if config_exists else 'not created'}")
+        full_status = collect_full_status(config.tmux_session)
+        flags_dict = {
+            "workers": workers,
+            "locks": locks,
+            "orphans": orphans,
+        }
+        output = render_full_status(full_status, flags_dict)
+        click.echo(output)
 
 
 @village.command()
@@ -104,28 +98,17 @@ def up() -> None:
 @village.command()
 def locks() -> None:
     """List all locks with ACTIVE/STALE status."""
-    from village.locks import evaluate_locks, parse_lock
+    from village.render.text import render_worker_table
 
     config = get_config()
-    lock_files = list(config.locks_dir.glob("*.lock"))
+    workers = collect_workers(config.tmux_session)
 
-    if not lock_files:
+    if not workers:
         click.echo("No locks found")
         return
 
-    parsed_locks = []
-    for lock_file in lock_files:
-        lock = parse_lock(lock_file)
-        if lock:
-            parsed_locks.append(lock)
-
-    # Evaluate status
-    status_map = evaluate_locks(parsed_locks, config.tmux_session)
-
-    # Display
-    for lock in parsed_locks:
-        status = "ACTIVE" if status_map[lock.task_id] else "STALE"
-        click.echo(f"{lock.task_id}: {status} (pane: {lock.pane_id})")
+    output = render_worker_table(workers)
+    click.echo(output)
 
 
 @village.command()
