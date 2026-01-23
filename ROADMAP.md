@@ -77,16 +77,27 @@ Deliverable: - deterministic runtime management
 
 ## Phase 7 --- Resume Flow
 
--   [ ] resume `<id>`{=html}
--   [ ] resume (no id) planner
--   [ ] --apply execution path
--   [ ] detached mode
+-   [x] resume `<id>`{=html}
+-   [x] resume (no id) planner
+-   [x] --apply execution path
+-   [x] detached mode
 
 Deliverable: - unified resume semantics
 
 ------------------------------------------------------------------------
 
-## Phase 8 --- Queue Scheduler
+## Phase 8 --- CLI Integration Testing
+
+-   [x] CLI unit tests (11 tests)
+-   [x] Integration tests (20 tests)
+-   [x] Coverage targets (>90% resume, >85% CLI)
+-   [x] Mock subprocess at wrapper level
+
+Deliverable: - comprehensive test coverage for resume flow
+
+------------------------------------------------------------------------
+
+## Phase 9 --- Queue Scheduler
 
 -   [ ] ready extraction
 -   [ ] lock arbitration
@@ -98,7 +109,7 @@ Deliverable: - `village queue`
 
 ------------------------------------------------------------------------
 
-## Phase 9 --- Contracts
+## Phase 10 --- Contracts
 
 -   [ ] ppc detection
 -   [ ] agent → args mapping
@@ -109,7 +120,7 @@ Deliverable: - behavior parity with bash
 
 ------------------------------------------------------------------------
 
-## Phase 10 --- Hardening
+## Phase 11 --- Hardening
 
 -   [ ] error classification
 -   [ ] exit codes
@@ -118,7 +129,7 @@ Deliverable: - behavior parity with bash
 
 ------------------------------------------------------------------------
 
-## Phase 11 --- Polish
+## Phase 12 --- Polish
 
 -   [ ] colored TTY output
 -   [ ] shell completion
