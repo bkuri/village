@@ -66,10 +66,10 @@ Deliverable: - `village ready`
 
 ## Phase 6 --- Runtime Lifecycle
 
--   [ ] `village up`
--   [ ] `village down`
--   [ ] dry-run support
--   [ ] dashboard creation
+-   [x] `village up`
+-   [x] `village down`
+-   [x] dry-run support
+-   [x] dashboard creation
 
 Deliverable: - deterministic runtime management
 
