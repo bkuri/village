@@ -99,11 +99,11 @@ Deliverable: - comprehensive test coverage for resume flow
 
 ## Phase 9 --- Queue Scheduler
 
--   [ ] ready extraction
--   [ ] lock arbitration
--   [ ] auto naming
--   [ ] concurrency limits
--   [ ] plan mode
+-   [x] ready extraction
+-   [x] lock arbitration
+-   [x] auto naming
+-   [x] concurrency limits
+-   [x] plan mode
 
 Deliverable: - `village queue`
 
