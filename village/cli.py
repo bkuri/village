@@ -6,6 +6,7 @@ from village.config import get_config
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import clear_pane_cache, session_exists
 from village.render.text import render_initialization_plan
+from village.resume import execute_resume, plan_resume
 from village.runtime import collect_runtime_state
 from village.status import collect_workers
 
@@ -276,3 +277,135 @@ def ready(json_output: bool) -> None:
         click.echo(render_ready_json(assessment))
     else:
         click.echo(render_ready_text(assessment))
+
+
+@village.command()
+@click.argument("task_id", default=None, required=False, type=str)
+@click.option(
+    "--agent",
+    type=str,
+    help="Agent name (auto-detect from Beads if not provided)",
+)
+@click.option(
+    "--detached",
+    is_flag=True,
+    help="Run in detached mode (no tmux attach)",
+)
+@click.option(
+    "--html",
+    is_flag=True,
+    help="Output HTML with JSON metadata",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Preview mode without making changes",
+)
+def resume(
+    task_id: str | None,
+    agent: str | None,
+    detached: bool,
+    html: bool,
+    dry_run: bool,
+) -> None:
+    """
+    Resume a task (explicit or planner).
+
+    If task_id provided: Explicit resume of specific task
+    If no task_id: Use planner to suggest next action
+
+    Agent Selection:
+      - If --agent provided: Use specified agent
+      - If no --agent: Auto-detect from Beads
+      - If Beads unavailable: Use config.default_agent (falls back to "worker")
+
+    Flags:
+      --detached: Run without attaching to tmux pane
+      --html: Output HTML with embedded JSON metadata
+      --dry-run: Preview mode (no mutations)
+
+    Planning Logic (when no task_id):
+      1. Ensure runtime via 'village up'
+      2. Attach if active workers exist
+      3. Cleanup if stale locks exist
+      4. Queue ready tasks if available
+      5. Otherwise show 'village ready'
+
+    Examples:
+      village resume bd-a3f8              # Explicit resume
+      village resume --agent build       # Use specific agent
+      village resume bd-a3f8 --detached # Detached mode
+      village resume                    # Use planner
+      village resume --html            # HTML output
+      village resume --dry-run          # Preview mode
+    """
+    config = get_config()
+
+    # If no task_id provided, use planner
+    if task_id is None:
+        action = plan_resume(config=config)
+
+        # Render suggested action
+        if action.action == "resume":
+            click.echo(f"Ready to resume task: {action.meta.get('task_id')}")
+        elif action.action == "up":
+            click.echo(f"Action: village {action.action}")
+            click.echo(f"Reason: {action.reason}")
+            click.echo(f"Run: {action.meta.get('command', 'village up')}")
+        elif action.action == "status":
+            click.echo(f"Action: village {action.action}")
+            click.echo(f"Reason: {action.reason}")
+            click.echo(f"Run: {action.meta.get('command', 'village status --workers')}")
+        elif action.action == "cleanup":
+            click.echo(f"Action: village {action.action}")
+            click.echo(f"Reason: {action.reason}")
+            click.echo(f"Run: {action.meta.get('command', 'village cleanup')}")
+        elif action.action == "queue":
+            click.echo(f"Action: village {action.action}")
+            click.echo(f"Reason: {action.reason}")
+            click.echo(f"Run: {action.meta.get('command', 'village queue')}")
+        elif action.action == "ready":
+            click.echo(f"Action: village {action.action}")
+            click.echo(f"Reason: {action.reason}")
+            click.echo(f"Run: {action.meta.get('command', 'village ready')}")
+        else:
+            click.echo(f"Action: {action.action}")
+            click.echo(f"Reason: {action.reason}")
+
+        return
+
+    # Validate agent selection
+    if agent is None:
+        # Use config default as fallback (Beads auto-detect in resume module)
+        agent = config.default_agent
+
+    # Execute resume
+    result = execute_resume(
+        task_id=task_id,
+        agent=agent,
+        detached=detached,
+        dry_run=dry_run,
+        config=config,
+    )
+
+    # Render result
+    if result.success:
+        click.echo(f"✓ Resume successful: {result.task_id}")
+        click.echo(f"  Window: {result.window_name}")
+        click.echo(f"  Pane: {result.pane_id}")
+        click.echo(f"  Worktree: {result.worktree_path}")
+    else:
+        click.echo(f"✗ Resume failed: {result.task_id}")
+        if result.error:
+            click.echo(f"  Error: {result.error}")
+
+    # HTML output if requested
+    if html and result.success:
+        from village.contracts import generate_contract
+
+        contract = generate_contract(
+            result.task_id, result.agent, result.worktree_path, result.window_name, config
+        )
+        from village.render.html import render_resume_html
+
+        click.echo(render_resume_html(contract))

@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from village.ready import ReadyAssessment, SuggestedAction
+from village.resume import ResumeAction, ResumeResult
 from village.runtime import InitializationPlan
 from village.status import FullStatus, Orphan, StatusSummary, Worker
 
@@ -323,3 +324,53 @@ def render_initialization_plan(plan: "InitializationPlan", *, plan_mode: bool = 
         lines.append("  Beads: would initialize (not found)")
 
     return "\n".join(lines)
+
+
+def render_resume_result(result: "ResumeResult") -> str:
+    """
+    Render resume result as text.
+
+    Args:
+        result: ResumeResult object
+
+    Returns:
+        Formatted output
+    """
+    if result.success:
+        output = [
+            f"✓ Resume successful: {result.task_id}",
+            f"  Window: {result.window_name}",
+            f"  Pane: {result.pane_id}",
+            f"  Worktree: {result.worktree_path}",
+        ]
+        return "\n".join(output)
+    else:
+        output = [
+            f"✗ Resume failed: {result.task_id}",
+        ]
+        if result.error:
+            output.append(f"  Error: {result.error}")
+        return "\n".join(output)
+
+
+def render_resume_actions(action: "ResumeAction") -> str:
+    """
+    Render resume action as text.
+
+    Args:
+        action: ResumeAction object
+
+    Returns:
+        Formatted output
+    """
+    output = [
+        f"Action: village {action.action}",
+        f"Reason: {action.reason}",
+    ]
+
+    if action.meta:
+        command = action.meta.get("command", "")
+        if command:
+            output.append(f"Run: {command}")
+
+    return "\n".join(output)
