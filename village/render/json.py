@@ -2,6 +2,7 @@
 
 import json
 
+from village.ready import ReadyAssessment
 from village.status import FullStatus
 
 JSON_VERSION = 1
@@ -61,6 +62,56 @@ def render_status_json(status: FullStatus) -> str:
             }
             for o in status.orphans
         ],
+    }
+
+    return json.dumps(output, sort_keys=True)
+
+
+def render_ready_json(assessment: ReadyAssessment) -> str:
+    """
+    Render readiness assessment as JSON.
+
+    Schema version 1:
+      {
+        "command": "ready",
+        "version": 1,
+        "assessment": {
+          "overall": "<state>",
+          "environment_ready": bool,
+          "runtime_ready": bool,
+          "work_available": "<status>",
+          "orphans_count": int,
+          "stale_locks_count": int,
+          "untracked_worktrees_count": int,
+          "active_workers_count": int,
+          "ready_tasks_count": int|null,
+          "error": string|null
+        }
+      }
+
+    NOTE: No suggested_actions in JSON (text renderer only).
+
+    Args:
+        assessment: ReadyAssessment object to render
+
+    Returns:
+        JSON string with stable key ordering
+    """
+    output = {
+        "command": "ready",
+        "version": JSON_VERSION,
+        "assessment": {
+            "overall": assessment.overall,
+            "environment_ready": assessment.environment_ready,
+            "runtime_ready": assessment.runtime_ready,
+            "work_available": assessment.work_available,
+            "orphans_count": assessment.orphans_count,
+            "stale_locks_count": assessment.stale_locks_count,
+            "untracked_worktrees_count": assessment.untracked_worktrees_count,
+            "active_workers_count": assessment.active_workers_count,
+            "ready_tasks_count": assessment.ready_tasks_count,
+            "error": assessment.error,
+        },
     }
 
     return json.dumps(output, sort_keys=True)

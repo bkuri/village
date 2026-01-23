@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from village.ready import ReadyAssessment, SuggestedAction
 from village.status import FullStatus, Orphan, StatusSummary, Worker
 
 
@@ -183,5 +184,105 @@ def render_full_status(status: FullStatus, flags: dict[str, bool]) -> str:
 
     if show_orphans:
         lines.append(render_orphans_grouped(status.orphans))
+
+    return "\n".join(lines)
+
+
+def render_suggested_actions(actions: list[SuggestedAction]) -> str:
+    """
+    Render suggested actions in priority order.
+
+    Format:
+      SUGGESTED ACTIONS:
+        1. [BLOCKING] village up
+           Reason: Runtime not initialized
+        2. village cleanup
+           Reason: Remove 2 stale locks
+
+    Blocking actions shown first with [BLOCKING] label.
+
+    Args:
+        actions: List of SuggestedAction objects
+
+    Returns:
+        Formatted suggested actions string
+    """
+    if not actions:
+        return "SUGGESTED ACTIONS:\n  None (everything looks good)"
+
+    lines = ["SUGGESTED ACTIONS:", ""]
+
+    for i, action in enumerate(actions, 1):
+        prefix = f"  {i}. [BLOCKING]" if action.blocking else f"  {i}."
+        lines.append(f"{prefix} {action.action}")
+        lines.append(f"     Reason: {action.reason}")
+
+    return "\n".join(lines)
+
+
+def render_ready_text(assessment: ReadyAssessment) -> str:
+    """
+    Render readiness assessment as human-readable text.
+
+    Layout:
+      1. Overall state (prominent)
+      2. Status of each check (environment, runtime, work)
+      3. Orphans summary
+      4. Suggested actions (with priorities)
+
+    Args:
+        assessment: ReadyAssessment object
+
+    Returns:
+        Formatted readiness string
+    """
+    lines = []
+
+    # Overall state
+    state_label = assessment.overall.upper().replace("_", " ")
+    lines.append(f"OVERALL STATUS: {state_label}")
+    lines.append("")
+
+    # Environment check
+    if assessment.environment_ready:
+        lines.append("Environment Check:   ✓ Git repository found")
+    else:
+        lines.append("Environment Check:   ✗ Village runtime not initialized")
+
+    # Runtime check
+    if assessment.runtime_ready:
+        lines.append("Runtime Check:       ✓ Tmux session running")
+    else:
+        lines.append("Runtime Check:       ✗ Tmux session not running")
+
+    # Work availability
+    if assessment.work_available == "available":
+        count = assessment.ready_tasks_count or 0
+        lines.append(f"Work Available:      ✓ {count} ready task(s) available")
+    elif assessment.work_available == "not_available":
+        lines.append("Work Available:      ✓ No ready tasks available")
+    elif assessment.work_available == "unknown":
+        lines.append("Work Available:      ? Cannot determine (Beads not available)")
+
+    # Orphans
+    if assessment.orphans_count > 0:
+        orphans_parts = []
+        if assessment.stale_locks_count > 0:
+            orphans_parts.append(f"{assessment.stale_locks_count} stale locks")
+        if assessment.untracked_worktrees_count > 0:
+            orphans_parts.append(f"{assessment.untracked_worktrees_count} untracked worktrees")
+
+        lines.append(f"Orphans:             ✗ {', '.join(orphans_parts)}")
+    else:
+        lines.append("Orphans:             ✓ None")
+
+    # Error message if present
+    if assessment.error:
+        lines.append("")
+        lines.append(f"ERROR: {assessment.error}")
+
+    # Suggested actions
+    lines.append("")
+    lines.append(render_suggested_actions(assessment.suggested_actions))
 
     return "\n".join(lines)

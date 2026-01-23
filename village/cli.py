@@ -178,3 +178,29 @@ def unlock(task_id: str, force: bool) -> None:
     # Remove lock
     lock_path.unlink()
     click.echo(f"Unlocked: {task_id}")
+
+
+@village.command()
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def ready(json_output: bool) -> None:
+    """
+    Check if village is ready for work.
+
+    Non-mutating. Assesses environment, runtime, and work availability.
+
+    Flags:
+      --json: Full assessment as JSON (no suggested actions)
+
+    Default: Text output with suggested actions
+    """
+    from village.ready import assess_readiness
+    from village.render.json import render_ready_json
+    from village.render.text import render_ready_text
+
+    config = get_config()
+    assessment = assess_readiness(config.tmux_session)
+
+    if json_output:
+        click.echo(render_ready_json(assessment))
+    else:
+        click.echo(render_ready_text(assessment))
