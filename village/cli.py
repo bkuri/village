@@ -5,6 +5,8 @@ import click
 from village.config import get_config
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import clear_pane_cache, session_exists
+from village.render.text import render_initialization_plan
+from village.runtime import collect_runtime_state
 from village.status import collect_workers
 
 logger = get_logger(__name__)
@@ -82,17 +84,54 @@ def status(
 
 
 @village.command()
-def up() -> None:
+@click.option("--dry-run", is_flag=True, help="Show what would be done")
+@click.option("--plan", is_flag=True, help="Alias for --dry-run")
+@click.option(
+    "--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window"
+)
+def up(dry_run: bool, plan: bool, dashboard: bool) -> None:
     """
-    Initialize village runtime.
+    Initialize village runtime (idempotent).
 
-    Mutating. Creates directories and config.
+    Brings system to desired state:
+      - Creates .village/ directories
+      - Creates .village/config (with defaults)
+      - Initializes Beads (if needed)
+      - Creates tmux session (if missing)
+      - Creates dashboard window (if enabled)
 
-    NOTE: Full implementation in Phase 6.
+    Skips components that already exist.
+    Does not start workers.
+
+    Supports: --dry-run, --plan (preview mode)
     """
+    from village.runtime import execute_initialization, plan_initialization
+
     config = get_config()
-    config.ensure_exists()
-    click.echo(f"Runtime initialized at {config.village_dir}")
+
+    if dry_run or plan:
+        # Show plan, don't execute
+        state = collect_runtime_state(config.tmux_session)
+        init_plan = plan_initialization(state)
+        plan_mode = True
+        if not dashboard:
+            click.echo("Note: Dashboard creation disabled (--no-dashboard)")
+        click.echo(render_initialization_plan(init_plan, plan_mode=plan_mode))
+        return
+
+    # Execute initialization
+    state = collect_runtime_state(config.tmux_session)
+    init_plan = plan_initialization(state)
+    success = execute_initialization(
+        init_plan,
+        dry_run=False,
+        dashboard=dashboard,
+    )
+
+    if success:
+        click.echo("Runtime initialized")
+    else:
+        raise click.ClickException("Failed to initialize runtime")
 
 
 @village.command()
@@ -178,6 +217,39 @@ def unlock(task_id: str, force: bool) -> None:
     # Remove lock
     lock_path.unlink()
     click.echo(f"Unlocked: {task_id}")
+
+
+@village.command()
+@click.option("--dry-run", is_flag=True, help="Show what would be killed")
+@click.option("--plan", is_flag=True, help="Alias for --dry-run")
+def down(dry_run: bool, plan: bool) -> None:
+    """
+    Stop village runtime.
+
+    Kills tmux session only (doesn't delete work data).
+    Safe to run while workers are active (they'll be detached).
+
+    Supports: --dry-run, --plan (preview mode)
+    """
+    from village.config import get_config
+    from village.runtime import shutdown_runtime
+
+    config = get_config()
+
+    if dry_run or plan:
+        if session_exists(config.tmux_session):
+            click.echo(f"Would kill session '{config.tmux_session}'")
+        else:
+            click.echo("No session to stop")
+        return
+
+    # Execute shutdown
+    success = shutdown_runtime(config.tmux_session)
+
+    if success:
+        click.echo(f"Runtime stopped (session '{config.tmux_session}' terminated)")
+    else:
+        raise click.ClickException("Failed to stop runtime")
 
 
 @village.command()

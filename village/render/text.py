@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from village.ready import ReadyAssessment, SuggestedAction
+from village.runtime import InitializationPlan
 from village.status import FullStatus, Orphan, StatusSummary, Worker
 
 
@@ -284,5 +285,41 @@ def render_ready_text(assessment: ReadyAssessment) -> str:
     # Suggested actions
     lines.append("")
     lines.append(render_suggested_actions(assessment.suggested_actions))
+
+    return "\n".join(lines)
+
+
+def render_initialization_plan(plan: "InitializationPlan", *, plan_mode: bool = False) -> str:
+    """Render initialization plan as concise one-screen summary.
+
+    Example output:
+    DRY RUN: Would initialize village runtime
+      Session: village (new)
+      Directories: .village/ (create)
+      Beads: .beads/ (create)
+      Dashboard: yes
+
+    Args:
+        plan: InitializationPlan to render
+        plan_mode: If True, show "DRY RUN" prefix
+    """
+    prefix = "DRY RUN: " if plan_mode else ""
+
+    lines = [f"{prefix} Would initialize village runtime", ""]
+
+    if plan.session_exists:
+        lines.append(f"  Session: {plan.session_name} (exists)")
+    else:
+        lines.append(f"  Session: {plan.session_name} (new)")
+
+    if plan.directories_exist:
+        lines.append("  Directories: .village/ (exists)")
+    else:
+        lines.append("  Directories: .village/ (create)")
+
+    if plan.beads_initialized:
+        lines.append("  Beads: .beads/ (exists)")
+    else:
+        lines.append("  Beads: would initialize (not found)")
 
     return "\n".join(lines)

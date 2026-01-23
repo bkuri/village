@@ -7,8 +7,8 @@ from typing import Any, Optional
 from village.config import get_config
 from village.probes.beads import beads_available
 from village.probes.tmux import session_exists
-from village.status import collect_full_status
 from village.probes.tools import SubprocessError, run_command_output
+from village.status import collect_full_status
 
 logger = logging.getLogger(__name__)
 
