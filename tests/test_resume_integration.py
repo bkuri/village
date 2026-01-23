@@ -10,6 +10,7 @@ import pytest
 from village.cli import village
 from village.config import Config
 from village.contracts import ResumeContract
+from village.probes.tools import SubprocessError
 from village.resume import ResumeResult, execute_resume
 
 
@@ -114,23 +115,31 @@ class TestResumeIntegrationCollisionRetry:
 
         with patch("village.resume.create_worktree") as mock_create:
             with patch("village.resume.get_worktree_info") as mock_info:
-                # First attempt fails with collision
-                mock_create.side_effect = [
-                    Exception("worktree already exists"),
-                    (
-                        mock_config.worktrees_dir / f"{base_task_id}-2",
-                        f"worker-1-{base_task_id}-2",
-                    ),
-                ]
-                mock_info.return_value = None
+                with patch("village.resume._create_resume_window", return_value="%12"):
+                    with patch("village.resume.write_lock"):
+                        with patch("village.resume._inject_contract"):
+                            with patch("village.resume.generate_contract"):
+                                # First attempt fails with collision
+                                mock_create.side_effect = [
+                                    SubprocessError("worktree already exists"),
+                                    (
+                                        mock_config.worktrees_dir / f"{base_task_id}-2",
+                                        f"worker-1-{base_task_id}-2",
+                                    ),
+                                ]
+                                mock_info.return_value = None
 
-                result = execute_resume(
-                    base_task_id, "build", detached=False, dry_run=False, config=mock_config
-                )
+                                result = execute_resume(
+                                    base_task_id,
+                                    "build",
+                                    detached=False,
+                                    dry_run=False,
+                                    config=mock_config,
+                                )
 
-                assert result.success is True
-                assert result.task_id == f"{base_task_id}-2"
-                assert mock_create.call_count == 2
+                                assert result.success is True
+                                assert result.task_id == f"{base_task_id}-2"
+                                assert mock_create.call_count == 2
 
     def test_collision_retry_second(self, mock_config: Config) -> None:
         """Test second collision retries as bd-a3f8-3."""
@@ -138,24 +147,32 @@ class TestResumeIntegrationCollisionRetry:
 
         with patch("village.resume.create_worktree") as mock_create:
             with patch("village.resume.get_worktree_info") as mock_info:
-                # Two collisions
-                mock_create.side_effect = [
-                    Exception("worktree already exists"),
-                    Exception("worktree already exists"),
-                    (
-                        mock_config.worktrees_dir / f"{base_task_id}-3",
-                        f"worker-1-{base_task_id}-3",
-                    ),
-                ]
-                mock_info.return_value = None
+                with patch("village.resume._create_resume_window", return_value="%12"):
+                    with patch("village.resume.write_lock"):
+                        with patch("village.resume._inject_contract"):
+                            with patch("village.resume.generate_contract"):
+                                # Two collisions
+                                mock_create.side_effect = [
+                                    SubprocessError("worktree already exists"),
+                                    SubprocessError("worktree already exists"),
+                                    (
+                                        mock_config.worktrees_dir / f"{base_task_id}-3",
+                                        f"worker-1-{base_task_id}-3",
+                                    ),
+                                ]
+                                mock_info.return_value = None
 
-                result = execute_resume(
-                    base_task_id, "build", detached=False, dry_run=False, config=mock_config
-                )
+                                result = execute_resume(
+                                    base_task_id,
+                                    "build",
+                                    detached=False,
+                                    dry_run=False,
+                                    config=mock_config,
+                                )
 
-                assert result.success is True
-                assert result.task_id == f"{base_task_id}-3"
-                assert mock_create.call_count == 3
+                                assert result.success is True
+                                assert result.task_id == f"{base_task_id}-3"
+                                assert mock_create.call_count == 3
 
     def test_collision_retry_max(self, mock_config: Config) -> None:
         """Test max retries (3) and then fail."""
@@ -163,11 +180,12 @@ class TestResumeIntegrationCollisionRetry:
 
         with patch("village.resume.create_worktree") as mock_create:
             with patch("village.resume.get_worktree_info") as mock_info:
-                # Three collisions
+                # Four collisions (3 retries + 1 initial attempt)
                 mock_create.side_effect = [
-                    Exception("worktree already exists"),
-                    Exception("worktree already exists"),
-                    Exception("worktree already exists"),
+                    SubprocessError("worktree already exists"),
+                    SubprocessError("worktree already exists"),
+                    SubprocessError("worktree already exists"),
+                    SubprocessError("worktree already exists"),
                 ]
                 mock_info.return_value = None
 
@@ -194,8 +212,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.resume.execute_resume", return_value=result_obj):
-            with patch("village.resume.plan_resume"):
+        with patch("village.cli.execute_resume", return_value=result_obj):
+            with patch("village.cli.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ResumeContract(
                         task_id="bd-a3f8",
@@ -229,8 +247,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.resume.execute_resume", return_value=result_obj):
-            with patch("village.resume.plan_resume"):
+        with patch("village.cli.execute_resume", return_value=result_obj):
+            with patch("village.cli.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ResumeContract(
                         task_id="bd-a3f8",
@@ -394,33 +412,30 @@ class TestResumeIntegrationE2E:
         task_id = "bd-a3f8"
 
         with patch("village.resume._ensure_worktree_exists") as mock_ensure:
-            with patch("village.resume.execute_resume") as mock_execute:
-                mock_ensure.return_value = (
-                    mock_config.worktrees_dir / task_id,
-                    "worker-1-bd-a3f8",
-                    task_id,
-                )
+            with patch("village.resume._create_resume_window") as mock_create_window:
+                with patch("village.resume.write_lock"):
+                    with patch("village.resume._inject_contract"):
+                        with patch("village.resume.generate_contract"):
+                            mock_ensure.return_value = (
+                                mock_config.worktrees_dir / task_id,
+                                "worker-1-bd-a3f8",
+                                task_id,
+                            )
 
-                # First call: dry-run
-                mock_execute.return_value = mock_execute.call_args.args[0][:1][3] = ResumeResult(
-                    success=True,
-                    task_id=task_id,
-                    agent="worker",
-                    worktree_path=mock_config.worktrees_dir / task_id,
-                    window_name="worker-1-bd-a3f8",
-                    pane_id="",
-                )
+                            # First call: dry-run (no pane_id)
+                            result1 = execute_resume(
+                                task_id, "worker", detached=False, dry_run=True, config=mock_config
+                            )
 
-                result1 = mock_execute.call_args.args[0][:1][3](
-                    task_id, "worker", detached=False, dry_run=True, config=mock_config
-                )
+                            assert result1.success is True
+                            assert result1.pane_id == ""  # Dry run
 
-                assert result1.pane_id == ""  # Dry run
+                            # Second call: execute (with pane_id)
+                            mock_create_window.return_value = "%12"
+                            result2 = execute_resume(
+                                task_id, "worker", detached=False, dry_run=False, config=mock_config
+                            )
 
-                # Second call: execute
-                result2 = mock_execute.call_args.args[0][:1][3](
-                    task_id, "worker", detached=False, dry_run=False, config=mock_config
-                )
-
-                assert result2.success is True
-                assert mock_execute.call_count == 2
+                            assert result2.success is True
+                            assert result2.pane_id == "%12"  # Real execution
+                            assert mock_create_window.call_count == 1

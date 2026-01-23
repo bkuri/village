@@ -300,14 +300,14 @@ def _ensure_worktree_exists(
                     "worktree already exists",
                 ]
             ):
-                if attempt < max_retries - 1:
+                if attempt < max_retries:
                     # Increment worker number and retry
                     task_id = f"{base_task_id}-{attempt + 2}"
                     logger.debug(f"Worktree collision detected, retrying as: {task_id}")
                     continue
                 else:
                     raise RuntimeError(
-                        f"Worktree creation failed after {max_retries} attempts: {e}"
+                        f"Worktree creation failed after {max_retries} attempts: {str(e)}"
                     )
             else:
                 # Non-collision error - abort immediately

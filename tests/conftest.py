@@ -1,9 +1,8 @@
 """Test fixtures and utilities."""
 
 from pathlib import Path
-from types import TracebackType
-from unittest.mock import patch
 from typing import Generator
+from unittest.mock import patch
 
 import click.testing
 import pytest
@@ -29,10 +28,10 @@ def mock_tmux_output(monkeypatch):
                 return output
             raise SubprocessError("Unexpected command")
 
-    monkeypatch.setattr(
-        "village.probes.tmux.run_command_output",
-        _run_command_output,
-    )
+        monkeypatch.setattr(
+            "village.probes.tmux.run_command_output",
+            _run_command_output,
+        )
 
     return _mock
 

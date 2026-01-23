@@ -3,12 +3,11 @@
 import subprocess
 from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from village.config import Config, get_config
+from village.config import Config
 from village.probes.tools import SubprocessError
 from village.worktrees import (
     WorktreeInfo,

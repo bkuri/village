@@ -143,7 +143,7 @@ class TestResumeCLIPlanner:
             meta={"command": "village up"},
         )
 
-        with patch("village.resume.plan_resume", return_value=action):
+        with patch("village.cli.plan_resume", return_value=action):
             result = runner.invoke(village, ["resume"])
 
             assert result.exit_code == 0
@@ -158,7 +158,7 @@ class TestResumeCLIPlanner:
             meta={"command": "village cleanup"},
         )
 
-        with patch("village.resume.plan_resume", return_value=action):
+        with patch("village.cli.plan_resume", return_value=action):
             result = runner.invoke(village, ["resume"])
 
             assert result.exit_code == 0
@@ -173,7 +173,7 @@ class TestResumeCLIPlanner:
             meta={"command": "village status --workers"},
         )
 
-        with patch("village.resume.plan_resume", return_value=action):
+        with patch("village.cli.plan_resume", return_value=action):
             result = runner.invoke(village, ["resume"])
 
             assert result.exit_code == 0
@@ -188,7 +188,7 @@ class TestResumeCLIPlanner:
             meta={"command": "village queue"},
         )
 
-        with patch("village.resume.plan_resume", return_value=action):
+        with patch("village.cli.plan_resume", return_value=action):
             result = runner.invoke(village, ["resume"])
 
             assert result.exit_code == 0
@@ -203,7 +203,7 @@ class TestResumeCLIPlanner:
             meta={"command": "village ready"},
         )
 
-        with patch("village.resume.plan_resume", return_value=action):
+        with patch("village.cli.plan_resume", return_value=action):
             result = runner.invoke(village, ["resume"])
 
             assert result.exit_code == 0
