@@ -1,8 +1,11 @@
 """Test fixtures and utilities."""
 
 from pathlib import Path
+from types import TracebackType
 from unittest.mock import patch
+from typing import Generator
 
+import click.testing
 import pytest
 
 from village.probes.tools import SubprocessError
@@ -26,9 +29,32 @@ def mock_tmux_output(monkeypatch):
                 return output
             raise SubprocessError("Unexpected command")
 
-        monkeypatch.setattr(
-            "village.probes.tmux.run_command_output",
-            _run_command_output,
-        )
+    monkeypatch.setattr(
+        "village.probes.tmux.run_command_output",
+        _run_command_output,
+    )
 
     return _mock
+
+
+@pytest.fixture
+def runner() -> click.testing.CliRunner:
+    """Click CliRunner for testing CLI commands."""
+    return click.testing.CliRunner()
+
+
+@pytest.fixture
+def mock_subproc() -> Generator[tuple[type, type], None, None]:
+    """
+    Mock subprocess wrapper at single point.
+
+    Mocks:
+    - village.probes.tools.run_command
+    - village.probes.tools.run_command_output
+
+    Yields:
+        Tuple of (mock_run, mock_output)
+    """
+    with patch("village.probes.tools.run_command") as mock_run:
+        with patch("village.probes.tools.run_command_output") as mock_output:
+            yield mock_run, mock_output
