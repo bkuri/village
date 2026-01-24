@@ -3,10 +3,12 @@
 import logging
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from village.config import Config, get_config
 from village.event_log import is_task_recent, log_task_start, read_events
+from village.locks import Lock, parse_lock
 from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
@@ -23,6 +25,12 @@ class QueueTask:
     agent: str
     agent_metadata: dict[str, str] = field(default_factory=dict)
     skip_reason: Optional[str] = None
+    lock_exists: bool = False
+    lock_pane_id: Optional[str] = None
+    lock_window: Optional[str] = None
+    lock_agent: Optional[str] = None
+    lock_claimed_at: Optional[str] = None
+    worktree_path: Optional[Path] = None
 
 
 @dataclass
@@ -129,7 +137,7 @@ def arbitrate_locks(
         force: Skip deduplication checks
 
     Returns:
-        QueuePlan with available and blocked tasks
+        QueuePlan with available and blocked tasks (with lock details)
     """
     # Collect active workers (locks with ACTIVE panes)
     workers = collect_workers(session_name)
@@ -141,10 +149,32 @@ def arbitrate_locks(
     # Identify tasks with existing locks
     active_task_ids = {worker.task_id for worker in workers}
 
+    # Pre-collect all lock files for lookup
+    all_locks: dict[str, Lock] = {}
+    for lock_file in config.locks_dir.glob("*.lock"):
+        lock = parse_lock(lock_file)
+        if lock:
+            all_locks[lock.task_id] = lock
+
     available_tasks: list[QueueTask] = []
     blocked_tasks: list[QueueTask] = []
 
     for task in tasks:
+        # Add lock info to task
+        if task.task_id in all_locks:
+            lock = all_locks[task.task_id]
+            task.lock_exists = True
+            task.lock_pane_id = lock.pane_id
+            task.lock_window = lock.window
+            task.lock_agent = lock.agent
+            if lock.claimed_at:
+                task.lock_claimed_at = lock.claimed_at.isoformat()
+
+        # Add workspace path
+        worktree_path = config.worktrees_dir / task.task_id
+        if worktree_path.exists():
+            task.worktree_path = worktree_path
+
         # Deduplication check (skip if forced)
         if not force:
             events = read_events(config.village_dir)
@@ -267,6 +297,12 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
             "agent": task.agent,
             "skip_reason": task.skip_reason,
             "agent_metadata": task.agent_metadata,
+            "lock_exists": task.lock_exists,
+            "lock_pane_id": task.lock_pane_id,
+            "lock_window": task.lock_window,
+            "lock_agent": task.lock_agent,
+            "lock_claimed_at": task.lock_claimed_at,
+            "worktree_path": str(task.worktree_path) if task.worktree_path else None,
         }
 
     plan_dict: dict[str, object] = {
