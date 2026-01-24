@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -61,6 +61,9 @@ def append_event(event: Event, config_path: Path) -> None:
             },
             sort_keys=True,
         )
+
+        # Ensure directory exists
+        event_log_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic append operation
         with open(event_log_path, "a", encoding="utf-8") as f:
@@ -157,7 +160,7 @@ def is_task_recent(
         logger.warning(f"Invalid timestamp format: {last_event.ts}")
         return False, None
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     elapsed = now - event_time
     is_recent = elapsed < timedelta(minutes=ttl_minutes)
 
@@ -177,7 +180,7 @@ def log_task_start(task_id: str, cmd: str, config_path: Path) -> None:
         config_path: Path to village directory
     """
     event = Event(
-        ts=datetime.utcnow().isoformat(),
+        ts=datetime.now(timezone.utc).isoformat(),
         cmd=cmd,
         task_id=task_id,
         result=None,  # Task started, not completed yet
@@ -201,7 +204,7 @@ def log_task_success(
         config_path: Path to village directory
     """
     event = Event(
-        ts=datetime.utcnow().isoformat(),
+        ts=datetime.now(timezone.utc).isoformat(),
         cmd=cmd,
         task_id=task_id,
         pane=pane,
@@ -227,7 +230,7 @@ def log_task_error(
         config_path: Path to village directory
     """
     event = Event(
-        ts=datetime.utcnow().isoformat(),
+        ts=datetime.now(timezone.utc).isoformat(),
         cmd=cmd,
         task_id=task_id,
         pane=None,
