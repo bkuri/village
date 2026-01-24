@@ -10,6 +10,7 @@ from typing import Optional
 from village.config import Config, get_config
 from village.contracts import ContractEnvelope, generate_contract
 from village.errors import InterruptedResume
+from village.event_log import log_task_error, log_task_start, log_task_success
 from village.locks import Lock, parse_lock, write_lock
 from village.probes.beads import beads_available
 from village.probes.tmux import (
@@ -185,6 +186,9 @@ def execute_resume(
     session_name = config.tmux_session
     base_task_id = task_id
 
+    # Log task start
+    log_task_start(task_id, "resume", config.village_dir)
+
     # Resource tracking for cleanup on interrupt
     created_resources: dict[str, object] = {
         "worktree_path": None,
@@ -237,6 +241,9 @@ def execute_resume(
 
         logger.info(f"Resume complete: task_id={task_id}, pane_id={pane_id}")
 
+        # Log task success
+        log_task_success(task_id, "resume", pane_id, config.village_dir)
+
         return ResumeResult(
             success=True,
             task_id=task_id,
@@ -263,6 +270,9 @@ def execute_resume(
             if isinstance(created_resources["window_name"], str)
             else ""
         )
+
+        # Log task error
+        log_task_error(task_id, "resume", str(e), config.village_dir)
 
         return ResumeResult(
             success=False,

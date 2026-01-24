@@ -2,8 +2,11 @@
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Optional
 
-from village.config import get_config
+from village.config import Config, get_config
+from village.event_log import Event, append_event
 from village.locks import Lock, is_active, parse_lock
 from village.probes.tmux import refresh_panes
 
@@ -72,13 +75,27 @@ def plan_cleanup(session_name: str, *, force_refresh: bool = False) -> CleanupPl
     )
 
 
-def execute_cleanup(plan: CleanupPlan) -> None:
+def execute_cleanup(plan: CleanupPlan, config: Optional[Config] = None) -> None:
     """
     Execute cleanup plan (remove stale locks).
 
     Args:
         plan: CleanupPlan to execute
+        config: Optional config (uses default if not provided)
     """
+    if config is None:
+        config = get_config()
+
     for lock in plan.locks_to_remove:
         lock.path.unlink()
         logger.debug(f"Removed lock: {lock.task_id}")
+
+        # Log cleanup event
+        event = Event(
+            ts=datetime.now(timezone.utc).isoformat(),
+            cmd="cleanup",
+            task_id=lock.task_id,
+            pane=lock.pane_id,
+            result="ok",
+        )
+        append_event(event, config.village_dir)

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from village.config import Config, get_config
+from village.event_log import log_task_start
 from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
@@ -247,7 +248,7 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
     """
     import json
 
-    def task_to_dict(task: QueueTask) -> dict[str, str]:
+    def task_to_dict(task: QueueTask) -> dict[str, object]:
         return {
             "task_id": task.task_id,
             "agent": task.agent,
@@ -290,6 +291,9 @@ def execute_queue_plan(
 
     for task in plan.available_tasks:
         logger.info(f"Starting task: {task.task_id} (agent: {task.agent})")
+
+        # Log queue task start
+        log_task_start(task.task_id, "queue", config.village_dir)
 
         try:
             result = execute_resume(

@@ -2,6 +2,7 @@
 
 import signal
 import sys
+from datetime import datetime, timezone
 
 import click
 
@@ -13,6 +14,7 @@ from village.errors import (
     EXIT_SUCCESS,
     InterruptedResume,
 )
+from village.event_log import Event, append_event
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
     clear_pane_cache,
@@ -161,6 +163,14 @@ def up(dry_run: bool, plan: bool, dashboard: bool) -> None:
     )
 
     if success:
+        event = Event(
+            ts=datetime.now(timezone.utc).isoformat(),
+            cmd="up",
+            task_id=None,
+            pane=None,
+            result="ok",
+        )
+        append_event(event, config.village_dir)
         click.echo("Runtime initialized")
     else:
         raise click.ClickException("Failed to initialize runtime")
@@ -211,7 +221,7 @@ def cleanup(dry_run: bool, plan: bool) -> None:
     if dry_run or plan:
         click.echo("(preview: nothing removed)")
     else:
-        execute_cleanup(cleanup_plan)
+        execute_cleanup(cleanup_plan, config)
         click.echo("Cleanup complete")
 
 
@@ -279,6 +289,14 @@ def down(dry_run: bool, plan: bool) -> None:
     success = shutdown_runtime(config.tmux_session)
 
     if success:
+        event = Event(
+            ts=datetime.now(timezone.utc).isoformat(),
+            cmd="down",
+            task_id=None,
+            pane=None,
+            result="ok",
+        )
+        append_event(event, config.village_dir)
         click.echo(f"Runtime stopped (session '{config.tmux_session}' terminated)")
     else:
         raise click.ClickException("Failed to stop runtime")
