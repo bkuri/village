@@ -5,8 +5,8 @@ from pathlib import Path
 from village.chat.context import (
     ContextUpdate,
     apply_context_update,
-    get_current_context,
     get_context_dir,
+    get_current_context,
     write_context_file,
 )
 

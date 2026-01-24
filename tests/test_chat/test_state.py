@@ -1,18 +1,13 @@
 """Test session state management."""
 
-import json
-from pathlib import Path
-from unittest.mock import patch
 from datetime import datetime
-import pytest
 
 from village.chat.conversation import ConversationState
 from village.chat.state import (
-    SessionSnapshot,
-    save_session_state,
-    load_session_state,
-    take_session_snapshot,
     count_pending_changes,
+    load_session_state,
+    save_session_state,
+    take_session_snapshot,
 )
 
 

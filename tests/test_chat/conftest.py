@@ -1,9 +1,8 @@
 """Test fixtures for Village Chat."""
 
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock
 
 import pytest
 

@@ -1,6 +1,6 @@
 """Test JSON schema validation for LLM responses."""
 
-from village.chat.schema import validate_schema, ValidationError
+from village.chat.schema import validate_schema
 
 
 def test_valid_schema():

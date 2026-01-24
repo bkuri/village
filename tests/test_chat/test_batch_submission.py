@@ -1,28 +1,26 @@
 """Test batch submission and task creation workflow."""
 
-import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 from datetime import datetime
+from unittest.mock import patch
+
 import pytest
 
 from village.chat.conversation import (
     ConversationState,
-    ConversationMessage,
-    start_conversation,
-    _handle_task_subcommand,
-    _switch_to_create_mode,
-    _handle_enable,
-    _handle_edit,
-    _handle_discard,
-    _handle_submit,
-    _handle_reset,
-    _handle_drafts,
-    _prepare_batch_summary,
     _display_batch_summary,
+    _handle_discard,
+    _handle_drafts,
+    _handle_edit,
+    _handle_enable,
+    _handle_reset,
+    _handle_submit,
+    _handle_task_subcommand,
+    _prepare_batch_summary,
+    _switch_to_create_mode,
+    start_conversation,
 )
-from village.chat.drafts import DraftTask, generate_draft_id, save_draft, load_draft
-from village.chat.state import SessionSnapshot, save_session_state, load_session_state
+from village.chat.drafts import DraftTask, generate_draft_id, load_draft, save_draft
+from village.chat.state import SessionSnapshot, load_session_state, save_session_state
 
 
 @pytest.fixture

@@ -2,31 +2,26 @@
 
 import json
 import subprocess
-from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
 
 from village.chat.conversation import (
-    ConversationState,
-    start_conversation,
-    _switch_to_create_mode,
-    _handle_enable,
-    _handle_edit,
     _handle_discard,
-    _handle_submit,
+    _handle_edit,
+    _handle_enable,
     _handle_reset,
-    _handle_drafts,
+    _handle_submit,
+    _switch_to_create_mode,
+    start_conversation,
 )
 from village.chat.drafts import (
-    DraftTask,
-    generate_draft_id,
-    save_draft,
-    load_draft,
     draft_id_to_task_id,
+    load_draft,
+    save_draft,
 )
-from village.chat.state import SessionSnapshot, save_session_state, load_session_state
+from village.chat.state import load_session_state, save_session_state
 from village.config import Config
 
 

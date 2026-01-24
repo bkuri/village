@@ -2,13 +2,12 @@
 
 from unittest.mock import patch
 
-from village.chat.prompts import detect_prompt_backend, generate_initial_prompt
+from village.chat.prompts import detect_prompt_backend
 
 
 def test_detect_backend_none_available():
     """Test backend detection when neither PPC nor Fabric available."""
     from village.chat.prompts import SubprocessError
-    from village.probes.tools import run_command_output
 
     with patch("village.chat.prompts.run_command_output") as mock_run:
         mock_run.side_effect = SubprocessError("ppc not found")
@@ -22,7 +21,6 @@ def test_detect_backend_none_available():
 def test_detect_backend_fabric_only():
     """Test backend detection when only Fabric available."""
     from village.chat.prompts import SubprocessError
-    from village.probes.tools import run_command_output
 
     with patch("village.chat.prompts.run_command_output") as mock_run:
 
@@ -41,7 +39,6 @@ def test_detect_backend_fabric_only():
 
 def test_detect_backend_ppc_fabric():
     """Test backend detection when both PPC and Fabric available."""
-    from village.probes.tools import run_command_output
 
     with patch("village.chat.prompts.run_command_output") as mock_run:
         mock_run.return_value = "PPC v0.2.0"

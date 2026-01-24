@@ -1,6 +1,5 @@
 """Tests for worktree management."""
 
-import subprocess
 from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import patch
@@ -9,11 +8,13 @@ import pytest
 
 from village.config import Config
 from village.probes.tools import SubprocessError
+from village.scm import (
+    generate_window_name,
+    increment_task_id,
+    parse_window_name,
+)
 from village.worktrees import (
     WorktreeInfo,
-    _generate_window_name,
-    _increment_worker_num,
-    _parse_window_name,
     create_worktree,
     delete_worktree,
     get_worktree_info,
@@ -261,9 +262,8 @@ class TestWindowNamingHelpers:
     def test_generate_window_name(self) -> None:
         """Test window name generation."""
         task_id = "bd-a3f8"
-        session_name = "village"
 
-        window_name = _generate_window_name(task_id, session_name)
+        window_name = generate_window_name(task_id, 1)
 
         assert window_name == f"worker-1-{task_id}"
 
@@ -271,7 +271,7 @@ class TestWindowNamingHelpers:
         """Test parsing valid window name."""
         window_name = "build-1-bd-a3f8"
 
-        parts = _parse_window_name(window_name)
+        parts = parse_window_name(window_name)
 
         assert parts["agent"] == "build"
         assert parts["worker_num"] == "1"
@@ -281,60 +281,21 @@ class TestWindowNamingHelpers:
         """Test parsing invalid window name."""
         window_name = "invalid-name"
 
-        parts = _parse_window_name(window_name)
+        parts = parse_window_name(window_name)
 
         assert parts == {}
 
-    def test_increment_worker_num(self) -> None:
-        """Test worker number increment."""
+    def test_increment_task_id(self) -> None:
+        """Test task ID increment."""
         task_id = "bd-a3f8"
 
-        incremented = _increment_worker_num(task_id, 2)
+        incremented = increment_task_id(task_id, 2)
 
         assert incremented == "bd-a3f8-2"
 
-        incremented = _increment_worker_num(task_id, 3)
+        incremented = increment_task_id(task_id, 3)
 
         assert incremented == "bd-a3f8-3"
-
-
-class TestCheckGitDirty:
-    """Tests for _check_git_dirty."""
-
-    def test_raises_error_on_dirty_repo(
-        self,
-        mock_config: Config,
-    ) -> None:
-        """Test that dirty repo raises error."""
-        with patch("village.worktrees.run_command") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                ["git", "status", "--porcelain"],
-                returncode=0,
-                stdout=" M file.txt\n",
-                stderr="",
-            )
-
-            with pytest.raises(RuntimeError, match="uncommitted changes"):
-                from village.worktrees import _check_git_dirty
-
-                _check_git_dirty(mock_config.git_root)
-
-    def test_passes_on_clean_repo(
-        self,
-        mock_config: Config,
-    ) -> None:
-        """Test that clean repo passes."""
-        with patch("village.worktrees.run_command") as mock_run:
-            mock_run.return_value = subprocess.CompletedProcess(
-                ["git", "status", "--porcelain"],
-                returncode=0,
-                stdout="",
-                stderr="",
-            )
-
-            from village.worktrees import _check_git_dirty
-
-            _check_git_dirty(mock_config.git_root)
 
 
 class TestWorktreeInfo:

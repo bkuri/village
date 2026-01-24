@@ -13,6 +13,7 @@ TMUX_SESSION = "village"
 DEFAULT_WORKTREES_DIR_NAME = ".worktrees"
 DEFAULT_AGENT = "worker"
 DEFAULT_MAX_WORKERS = 2
+DEFAULT_SCM_KIND = "git"
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class Config:
     village_dir: Path
     worktrees_dir: Path
     tmux_session: str = TMUX_SESSION
+    scm_kind: str = DEFAULT_SCM_KIND
     default_agent: str = DEFAULT_AGENT
     max_workers: int = DEFAULT_MAX_WORKERS
     agents: dict[str, AgentConfig] = field(default_factory=dict)
@@ -157,6 +159,9 @@ def get_config() -> Config:
                 f"Invalid VILLAGE_MAX_WORKERS value, using default: {DEFAULT_MAX_WORKERS}"
             )
 
+    # Override scm_kind from env var or config file
+    scm_kind = os.environ.get("VILLAGE_SCM") or file_config.get("SCM_KIND") or DEFAULT_SCM_KIND
+
     # Override default_agent from env var or config file
     default_agent = (
         os.environ.get("VILLAGE_DEFAULT_AGENT") or file_config.get("DEFAULT_AGENT") or DEFAULT_AGENT
@@ -193,6 +198,7 @@ def get_config() -> Config:
     logger.debug(f"Village dir: {village_dir}")
     logger.debug(f"Worktrees dir: {worktrees_dir}")
     logger.debug(f"Max workers: {max_workers}")
+    logger.debug(f"SCM kind: {scm_kind}")
     logger.debug(f"Default agent: {default_agent}")
     logger.debug(f"Agent configs: {list(agents.keys())}")
 
@@ -200,6 +206,7 @@ def get_config() -> Config:
         git_root=git_root,
         village_dir=village_dir,
         worktrees_dir=worktrees_dir,
+        scm_kind=scm_kind,
         max_workers=max_workers,
         default_agent=default_agent,
         agents=agents,

@@ -1,10 +1,8 @@
 """Test conversation orchestrator."""
 
 from village.chat.conversation import (
-    ConversationMessage,
-    ConversationState,
-    start_conversation,
     should_exit,
+    start_conversation,
 )
 
 
