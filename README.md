@@ -597,6 +597,8 @@ MIT
 ## See Also
 
 - [AGENTS.md](AGENTS.md) - Agent development guide
+- [docs/PRD.md](docs/PRD.md) - Product requirements document
+- [docs/ROADMAP.md](docs/ROADMAP.md) - Implementation roadmap and future versions
+- [docs/PROPOSALS.md](docs/PROPOSALS.md) - Optional extensions and proposals
 - [docs/examples/](docs/examples/) - Practical examples
 - [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) - Shell setup
-- [ROADMAP.md](ROADMAP.md) - Implementation roadmap
