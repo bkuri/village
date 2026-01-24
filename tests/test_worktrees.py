@@ -1,14 +1,14 @@
-"""Tests for worktree management."""
+"""Tests for workspace management via SCM abstraction."""
 
 from collections.abc import Generator
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from village.config import Config
-from village.probes.tools import SubprocessError
 from village.scm import (
+    WorkspaceInfo,
     generate_window_name,
     increment_task_id,
     parse_window_name,
@@ -40,6 +40,19 @@ def mock_get_config(mock_config: Config) -> Generator[None, None, None]:
         yield
 
 
+@pytest.fixture
+def mock_scm() -> Generator[Mock, None, None]:
+    """Mock SCM backend."""
+    scm_mock = Mock()
+    scm_mock.kind = "git"
+    scm_mock.check_clean.return_value = True
+    scm_mock.ensure_workspace.return_value = None
+    scm_mock.remove_workspace.return_value = True
+    scm_mock.list_workspaces.return_value = []
+    with patch("village.worktrees.get_scm", return_value=scm_mock):
+        yield scm_mock
+
+
 class TestGetWorktreePath:
     """Tests for get_worktree_path."""
 
@@ -53,211 +66,204 @@ class TestGetWorktreePath:
 class TestCreateWorktree:
     """Tests for create_worktree."""
 
-    def test_creates_worktree_successfully(
+    def test_creates_workspace_successfully(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test successful worktree creation."""
+        """Test successful workspace creation."""
         task_id = "bd-a3f8"
         session_name = "village"
 
-        with patch("village.worktrees.run_command") as mock_run:
-            with patch("village.worktrees._check_git_dirty"):
-                result = create_worktree(task_id, session_name, mock_config)
+        with patch("village.scm.utils.generate_window_name", return_value=f"worker-1-{task_id}"):
+            result = create_worktree(task_id, session_name, mock_config)
 
-                path, window_name = result
-                assert path == mock_config.worktrees_dir / task_id
-                assert window_name == f"worker-1-{task_id}"
+            path, window_name = result
+            assert path == mock_config.worktrees_dir / task_id
+            assert window_name == f"worker-1-{task_id}"
 
-                # Verify git worktree add command
-                mock_run.assert_called_once()
-                cmd = mock_run.call_args[0][0]
-                assert cmd[0] == "git"
-                assert cmd[1] == "worktree"
-                assert cmd[2] == "add"
-                assert str(mock_config.worktrees_dir / task_id) in cmd
-                assert "-b" in cmd
-                assert f"worktree-{task_id}" in cmd
+            # Verify SCM methods called
+            mock_scm.check_clean.assert_called_once_with(mock_config.git_root)
+            mock_scm.ensure_workspace.assert_called_once()
+            call_args = mock_scm.ensure_workspace.call_args
+            assert call_args[0][0] == mock_config.git_root
+            assert call_args[0][1] == mock_config.worktrees_dir / task_id
+            assert call_args[0][2] == f"worktree-{task_id}"
 
     def test_fails_on_dirty_repo(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
         """Test that dirty repo raises error."""
         task_id = "bd-a3f8"
         session_name = "village"
 
-        with patch("village.worktrees._check_git_dirty") as mock_check:
-            mock_check.side_effect = RuntimeError("Repository has uncommitted changes")
+        mock_scm.check_clean.return_value = False
 
-            with pytest.raises(RuntimeError, match="uncommitted changes"):
-                create_worktree(task_id, session_name, mock_config)
+        with pytest.raises(RuntimeError, match="uncommitted changes"):
+            create_worktree(task_id, session_name, mock_config)
 
-    def test_fails_on_git_error(
+    def test_fails_on_scm_error(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test that git errors are raised."""
+        """Test that SCM errors are raised."""
         task_id = "bd-a3f8"
         session_name = "village"
 
-        with patch("village.worktrees.run_command") as mock_run:
-            with patch("village.worktrees._check_git_dirty"):
-                mock_run.side_effect = SubprocessError("git worktree failed")
+        mock_scm.ensure_workspace.side_effect = RuntimeError("Failed to create workspace")
 
-                with pytest.raises(SubprocessError, match="git worktree failed"):
-                    create_worktree(task_id, session_name, mock_config)
+        with pytest.raises(RuntimeError, match="Failed to create workspace"):
+            create_worktree(task_id, session_name, mock_config)
 
 
 class TestDeleteWorktree:
     """Tests for delete_worktree."""
 
-    def test_deletes_existing_worktree(
+    def test_deletes_existing_workspace(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test successful worktree deletion."""
+        """Test successful workspace deletion."""
         task_id = "bd-a3f8"
 
-        with patch("village.worktrees.run_command") as mock_run:
-            with patch.object(Path, "exists", return_value=True):
-                result = delete_worktree(task_id, mock_config)
+        mock_scm.remove_workspace.return_value = True
 
-                assert result is True
-
-                # Verify git worktree remove command
-                mock_run.assert_called_once()
-                cmd = mock_run.call_args[0][0]
-                assert cmd[0] == "git"
-                assert cmd[1] == "worktree"
-                assert cmd[2] == "remove"
-
-    def test_returns_false_for_nonexistent_worktree(
-        self,
-        mock_config: Config,
-    ) -> None:
-        """Test that nonexistent worktree returns False."""
-        task_id = "bd-a3f8"
-
-        # Worktree path doesn't exist
         result = delete_worktree(task_id, mock_config)
+
+        assert result is True
+
+        # Verify SCM method called
+        mock_scm.remove_workspace.assert_called_once_with(mock_config.worktrees_dir / task_id)
+
+    def test_returns_false_for_nonexistent_workspace(
+        self,
+        mock_config: Config,
+        mock_scm: Mock,
+    ) -> None:
+        """Test that nonexistent workspace returns False."""
+        task_id = "bd-a3f8"
+
+        mock_scm.remove_workspace.return_value = False
+
+        result = delete_worktree(task_id, mock_config)
+
         assert result is False
 
 
 class TestListWorktrees:
     """Tests for list_worktrees."""
 
-    def test_lists_all_worktrees(
+    def test_lists_all_workspaces(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test listing worktrees."""
-        output = f"""worktree {mock_config.git_root}
-HEAD abc123
-branch refs/heads/main
+        """Test listing workspaces."""
+        workspace1 = WorkspaceInfo(
+            path=mock_config.worktrees_dir / "bd-a3f8",
+            branch="refs/heads/worktree-bd-a3f8",
+            commit="def456",
+        )
+        workspace2 = WorkspaceInfo(
+            path=mock_config.worktrees_dir / "bd-b2c4",
+            branch="refs/heads/worktree-bd-b2c4",
+            commit="ghi789",
+        )
 
-worktree {mock_config.worktrees_dir / "bd-a3f8"}
-HEAD def456
-branch refs/heads/worktree-bd-a3f8
+        mock_scm.list_workspaces.return_value = [workspace1, workspace2]
 
-worktree {mock_config.worktrees_dir / "bd-b2c4"}
-HEAD ghi789
-branch refs/heads/worktree-bd-b2c4
-"""
+        worktrees = list_worktrees(mock_config)
 
-        with patch("village.worktrees.run_command_output") as mock_run:
-            mock_run.return_value = output
+        assert len(worktrees) == 2
+        assert worktrees[0].task_id == "bd-a3f8"
+        assert worktrees[1].task_id == "bd-b2c4"
+        assert worktrees[0].branch == "refs/heads/worktree-bd-a3f8"
+        assert worktrees[1].branch == "refs/heads/worktree-bd-b2c4"
 
-            worktrees = list_worktrees(mock_config)
-
-            assert len(worktrees) == 2
-            assert worktrees[0].task_id == "bd-a3f8"
-            assert worktrees[1].task_id == "bd-b2c4"
-            assert worktrees[0].branch == "refs/heads/worktree-bd-a3f8"
-            assert worktrees[1].branch == "refs/heads/worktree-bd-b2c4"
-
-    def test_ignores_non_village_worktrees(
+    def test_ignores_non_village_workspaces(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test that non-village worktrees are filtered out."""
-        output = f"""worktree {mock_config.git_root}
-HEAD abc123
-branch refs/heads/main
+        """Test that non-village workspaces are filtered out."""
+        workspace = WorkspaceInfo(
+            path=Path("/tmp/other-workspace"),
+            branch="refs/heads/other-branch",
+            commit="def456",
+        )
 
-worktree /tmp/other-worktree
-HEAD def456
-branch refs/heads/other-branch
-"""
+        mock_scm.list_workspaces.return_value = [workspace]
 
-        with patch("village.worktrees.run_command_output") as mock_run:
-            mock_run.return_value = output
+        worktrees = list_worktrees(mock_config)
 
-            worktrees = list_worktrees(mock_config)
+        assert len(worktrees) == 0
 
-            assert len(worktrees) == 0
-
-    def test_handles_detached_worktrees(
+    def test_handles_detached_workspaces(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test that detached worktrees are handled correctly."""
-        output = f"""worktree {mock_config.worktrees_dir / "bd-a3f8"}
-HEAD def456
-detached
-"""
+        """Test that detached workspaces are handled correctly."""
+        workspace = WorkspaceInfo(
+            path=mock_config.worktrees_dir / "bd-a3f8",
+            branch="(detached)",
+            commit="def456",
+        )
 
-        with patch("village.worktrees.run_command_output") as mock_run:
-            mock_run.return_value = output
+        mock_scm.list_workspaces.return_value = [workspace]
 
-            worktrees = list_worktrees(mock_config)
+        worktrees = list_worktrees(mock_config)
 
-            assert len(worktrees) == 1
-            assert worktrees[0].task_id == "bd-a3f8"
-            assert worktrees[0].branch == "(detached)"
+        assert len(worktrees) == 1
+        assert worktrees[0].task_id == "bd-a3f8"
+        assert worktrees[0].branch == "(detached)"
 
 
 class TestGetWorktreeInfo:
     """Tests for get_worktree_info."""
 
-    def test_returns_info_for_existing_worktree(
+    def test_returns_info_for_existing_workspace(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test getting info for existing worktree."""
+        """Test getting info for existing workspace."""
         task_id = "bd-a3f8"
-        output = f"""worktree {mock_config.worktrees_dir / task_id}
-HEAD def456
-branch refs/heads/worktree-bd-a3f8
-"""
+        workspace = WorkspaceInfo(
+            path=mock_config.worktrees_dir / task_id,
+            branch="refs/heads/worktree-bd-a3f8",
+            commit="def456",
+        )
 
-        with patch("village.worktrees.run_command_output") as mock_run:
-            mock_run.return_value = output
+        mock_scm.list_workspaces.return_value = [workspace]
 
-            info = get_worktree_info(task_id, mock_config)
+        info = get_worktree_info(task_id, mock_config)
 
-            assert info is not None
-            assert info.task_id == task_id
-            assert info.branch == "refs/heads/worktree-bd-a3f8"
+        assert info is not None
+        assert info.task_id == task_id
+        assert info.branch == "refs/heads/worktree-bd-a3f8"
 
-    def test_returns_none_for_nonexistent_worktree(
+    def test_returns_none_for_nonexistent_workspace(
         self,
         mock_config: Config,
+        mock_scm: Mock,
     ) -> None:
-        """Test that nonexistent worktree returns None."""
+        """Test that nonexistent workspace returns None."""
         task_id = "bd-a3f8"
-        output = ""
 
-        with patch("village.worktrees.run_command_output") as mock_run:
-            mock_run.return_value = output
+        mock_scm.list_workspaces.return_value = []
 
-            info = get_worktree_info(task_id, mock_config)
+        info = get_worktree_info(task_id, mock_config)
 
-            assert info is None
+        assert info is None
 
 
-class TestWindowNamingHelpers:
-    """Tests for window naming helper functions."""
+class TestWorkspaceNamingHelpers:
+    """Tests for workspace naming helper functions."""
 
     def test_generate_window_name(self) -> None:
         """Test window name generation."""
