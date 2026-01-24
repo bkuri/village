@@ -124,11 +124,12 @@ It simply coordinates reality.
 | `VILLAGE_WORKTREES_DIR` | Worktrees directory | `.worktrees/` |
 | `VILLAGE_MAX_WORKERS` | Max parallel workers | 2 |
 | `VILLAGE_DEFAULT_AGENT` | Default agent name | `worker` |
+| `VILLAGE_SCM` | SCM backend (Git or Jujutsu) | `git` |
 
 **Example:**
 ```bash
 export VILLAGE_MAX_WORKERS=4
-export VILLAGE_DEFAULT_AGENT=build
+export VILLAGE_SCM=git
 village queue --n 2
 ```
 
@@ -172,6 +173,40 @@ ppc_format=markdown
 3. Fallback Markdown template
 
 If PPC is unavailable, Village falls back to Markdown templates.
+
+---
+
+## Version History
+
+### v1.1 - SCM Abstraction Edition
+
+Village now uses a pluggable SCM (Source Control Management) layer for workspace operations.
+
+**Current Support (v1.1):**
+- Git backend (default, fully functional)
+- All existing Village commands work identically
+
+**Planned (v2):**
+- Jujutsu (jj) backend support
+- Zero core logic changes required
+- Enable `SCM=jj` in configuration
+
+**Configuration:**
+```bash
+# Default (Git)
+village queue
+
+# Future (when v2 ready)
+SCM=jj village queue
+```
+
+**Benefits:**
+- Core Village logic remains SCM-agnostic
+- Enables future jj backend without refactoring
+- Supports custom SCM backends (e.g., Mercurial, Bazaar)
+- Isolates all Git-specific commands to `village/scm/git.py`
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for complete implementation details.
 
 ---
 
