@@ -1,6 +1,7 @@
 """Tmux runtime probes."""
 
 import logging
+import pathlib
 import shutil
 import subprocess
 import time
@@ -233,8 +234,7 @@ def _is_terminal_wide_enough(required_length: int) -> bool:
         columns, _ = shutil.get_terminal_size()
         return columns >= required_length
     except Exception:
-        # Fallback: assume wide enough if we can't detect
-        return True
+        return False
 
 
 def rename_window(session_name: str, old_name: str, new_name: str) -> bool:
@@ -250,7 +250,6 @@ def rename_window(session_name: str, old_name: str, new_name: str) -> bool:
         True if successful, False otherwise
     """
     try:
-        # Get window index by name
         cmd = ["tmux", "list-windows", "-t", session_name, "-F", "'#{window_index} #{window_name}'"]
         result = subprocess.run(
             cmd,
@@ -262,16 +261,14 @@ def rename_window(session_name: str, old_name: str, new_name: str) -> bool:
         if result.returncode != 0:
             return False
 
-        # Find window index
         window_index = None
         for line in result.stdout.split("\n"):
             if old_name in line:
-                window_index = line.split()[0]
+                window_index = line.split()[0].strip("'")
                 break
         else:
             return False
 
-        # Rename window
         rename_cmd = ["tmux", "rename-window", "-t", f"{session_name}:{window_index}", new_name]
         result = subprocess.run(rename_cmd, capture_output=True, text=True, check=False)
 
@@ -292,7 +289,6 @@ def get_current_window(session_name: str) -> str | None:
         Window name or None if not in session
     """
     try:
-        # Get window ID from pane
         cmd = ["tmux", "display-message", "-p", "-t", session_name, "'#{window_name}'"]
         result = subprocess.run(
             cmd,
@@ -301,7 +297,7 @@ def get_current_window(session_name: str) -> str | None:
             check=False,
         )
 
-        return result.stdout.strip() if result.returncode == 0 else None
+        return result.stdout.strip().strip("'") if result.returncode == 0 else None
 
     except Exception:
         return None
@@ -332,40 +328,154 @@ def set_window_indicator(
       4. <original> - Default (no active editing)
     """
     try:
-        # If base_name is None, get current window name
         if base_name is None:
             base_name = get_current_window(session_name)
             if base_name is None:
                 return False
 
-        # Determine indicator
         indicator = ""
         if draft_id:
-            # Check if terminal is wide enough
             indicator = f"[DRAFT {draft_id}]"
-            # Check if terminal is wide enough
             if not _is_terminal_wide_enough(len(indicator) + len(base_name) + 5):
-                # Not enough space, skip indicator
                 return True
         elif task_id:
             indicator = f"[TASK {task_id}]"
-            # Check if terminal is wide enough
             if not _is_terminal_wide_enough(len(indicator) + len(base_name) + 5):
                 return True
         else:
-            # No active editing, restore base name
             if base_name.startswith("[DRAFT ") or base_name.startswith("[TASK "):
-                # Strip old indicator if present
                 base_name = " ".join(base_name.split()[1:])
 
-        # Determine new name
         if indicator:
             new_name = f"{indicator} {base_name}" if base_name else indicator
         else:
             new_name = base_name
 
-        # Rename window
         return rename_window(session_name, base_name, new_name)
 
     except Exception:
+        return False
+
+
+def load_village_config(village_dir: pathlib.Path) -> bool:
+    """
+    Load Village tmux configuration file.
+
+    Loads .village/tmux.conf and applies it to current session.
+    Configuration contains status bar formatting, colors, and variables.
+
+    Args:
+        village_dir: Path to .village directory
+
+    Returns:
+        True if successful, False otherwise
+    """
+    config_path = village_dir / "tmux.conf"
+
+    if not config_path.exists():
+        logger.debug(f"Village tmux config not found: {config_path}")
+        return False
+
+    try:
+        cmd = ["tmux", "source-file", str(config_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            logger.error(f"Failed to load tmux config: {result.stderr}")
+            return False
+
+        logger.debug(f"Loaded tmux config from {config_path}")
+        return True
+
+    except OSError as e:
+        logger.error(f"Error loading tmux config: {e}")
+        return False
+
+
+def update_status_mode(mode: str) -> bool:
+    """
+    Update tmux status bar mode indicator.
+
+    Sets @village_mode variable which is referenced in .village/tmux.conf.
+
+    Args:
+        mode: Mode indicator (e.g., "#NORMAL", "#CREATE", "#DRAFT df-xxxx", "#TASK bd-xxxx")
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cmd = ["tmux", "set-environment", "-g", "@village_mode", mode]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            logger.debug(f"Failed to update status mode: {result.stderr}")
+            return False
+
+        logger.debug(f"Updated status mode: {mode}")
+        return True
+
+    except OSError:
+        return False
+
+
+def update_status_draft_count(count: int) -> bool:
+    """
+    Update tmux status bar draft count.
+
+    Sets @village_draft_count variable which is referenced in .village/tmux.conf.
+
+    Args:
+        count: Number of drafts
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cmd = ["tmux", "set-environment", "-g", "@village_draft_count", str(count)]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if result.returncode != 0:
+            logger.debug(f"Failed to update draft count: {result.stderr}")
+            return False
+
+        logger.debug(f"Updated draft count: {count}")
+        return True
+
+    except OSError:
+        return False
+
+
+def update_status_border_colour(colour: str) -> bool:
+    """
+    Update tmux pane border colour.
+
+    Sets @village_border_colour variable and updates active border style.
+
+    Args:
+        colour: Colour name (e.g., "blue", "green", "red")
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        cmd = ["tmux", "set-environment", "-g", "@village_border_colour", colour]
+        subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        if colour == "green":
+            style = "fg=green"
+        elif colour == "red":
+            style = "fg=red"
+        elif colour == "blue":
+            style = "fg=blue"
+        else:
+            style = "fg=colour238"
+
+        cmd = ["tmux", "set-option", "-g", "pane-active-border-style", style]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+        logger.debug(f"Updated border colour: {colour} ({style})")
+        return result.returncode == 0
+
+    except OSError:
         return False

@@ -14,7 +14,15 @@ from village.errors import (
     InterruptedResume,
 )
 from village.logging import get_logger, setup_logging
-from village.probes.tmux import clear_pane_cache, session_exists
+from village.probes.tmux import (
+    clear_pane_cache,
+    load_village_config,
+    session_exists,
+    set_window_indicator,
+    update_status_border_colour,
+    update_status_draft_count,
+    update_status_mode,
+)
 from village.queue import (
     execute_queue_plan,
     generate_queue_plan,
@@ -614,7 +622,8 @@ def chat(start_mode: bool, force: bool) -> None:
     """
     Start conversational interface for project knowledge and task creation.
 
-    Non-mutating. Creates context files in `.village/context/` and draft tasks in `.village/drafts/`.
+    Non-mutating. Creates context files in `.village/context/`
+    and draft tasks in `.village/drafts/`.
 
     \b
     Knowledge-Share Mode (default):
@@ -664,9 +673,9 @@ def chat(start_mode: bool, force: bool) -> None:
         should_exit,
         start_conversation,
     )
+    from village.chat.drafts import list_drafts
     from village.chat.errors import ChatExitCode
     from village.chat.state import count_pending_changes, save_session_state
-    from village.probes.tmux import set_window_indicator
 
     config = get_config()
 
@@ -683,7 +692,29 @@ def chat(start_mode: bool, force: bool) -> None:
     mode = "task-create" if start_mode else "knowledge-share"
     state = start_conversation(config, mode=mode)
 
-    def update_window_indicator(state: ConversationState):
+    def update_status_bar(state: ConversationState) -> None:
+        """Update tmux status bar with mode and draft count."""
+        if not config.village_dir.exists():
+            return
+
+        try:
+            all_drafts = list_drafts(config)
+
+            if state.active_draft_id:
+                update_status_mode(f"#DRAFT {state.active_draft_id}")
+                update_status_border_colour("blue")
+            elif start_mode:
+                update_status_mode("#CREATE")
+                update_status_border_colour("green")
+            else:
+                update_status_mode("#NORMAL")
+                update_status_border_colour("blue")
+
+            update_status_draft_count(len(all_drafts))
+        except Exception as e:
+            logger.debug(f"Failed to update status bar: {e}")
+
+    def update_tmux_window(state: ConversationState) -> bool:
         """Update window indicator based on active draft."""
         if config.village_dir.exists():
             return set_window_indicator(
@@ -694,7 +725,9 @@ def chat(start_mode: bool, force: bool) -> None:
             )
         return False
 
-    update_window_indicator(state)
+    load_village_config(config.village_dir)
+    update_status_bar(state)
+    update_tmux_window(state)
 
     try:
         while True:
@@ -707,7 +740,8 @@ def chat(start_mode: bool, force: bool) -> None:
             state = process_user_input(state, user_input, config)
 
             if old_active_draft != state.active_draft_id:
-                update_window_indicator(state)
+                update_tmux_window(state)
+                update_status_bar(state)
 
             if state.errors:
                 for error in state.errors:

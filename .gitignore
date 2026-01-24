@@ -43,3 +43,6 @@ htmlcov/
 # Project specific
 .village/
 .worktrees/
+
+# Exception: Track tmux configuration
+!.village/tmux.conf
