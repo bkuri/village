@@ -64,6 +64,34 @@ Village is intentionally:
 - Stale locks (panes that no longer exist)
 - Untracked worktrees (no corresponding lock)
 
+### SCM Abstraction
+
+Village uses a pluggable SCM (Source Control Management) layer for workspace operations:
+
+**Supported SCMs:**
+- Git (current, v1.0)
+- Jujutsu (jj) - Planned for v2
+
+**SCM Protocol:**
+- `ensure_repo()` - Verify repository exists
+- `check_clean()` - Check for uncommitted changes
+- `ensure_workspace()` - Create/update workspace
+- `remove_workspace()` - Delete workspace
+- `list_workspaces()` - List all workspaces
+
+**Configuration:**
+```ini
+[DEFAULT]
+SCM=git
+```
+
+Environment variable: `VILLAGE_SCM=git|jj`
+
+This design enables:
+- Future jj backend without core logic changes
+- Custom SCM backends
+- Core Village logic remains SCM-agnostic
+
 ---
 
 ## Command Surface
@@ -307,7 +335,7 @@ village/
   contracts.py           # Contract generation
   errors.py             # Exception hierarchy + exit codes
   locks.py              # Lock file handling
-  worktrees.py          # Git worktree management
+  worktrees.py          # Workspace management via SCM abstraction
   queue.py              # Task queue scheduler
   resume.py             # Resume logic + planner
   cleanup.py            # Cleanup operations
@@ -318,6 +346,10 @@ village/
   ppc.py                # PPC integration (optional)
   runtime.py            # Runtime lifecycle
   agents.py             # Agent configuration
+  scm/                  # SCM abstraction layer (v1.1)
+    protocol.py         # SCM Protocol interface
+    utils.py            # Common workspace utilities
+    git.py              # GitSCM backend implementation
   probes/               # Runtime probes
     tmux.py             # Tmux session/pane queries
     beads.py            # Beads availability
@@ -356,12 +388,13 @@ village/
 
 ### Config File (.village/config)
 
-INI-style config for agent configuration:
+INI-style config for agent configuration and SCM selection:
 
 ```ini
 [DEFAULT]
 DEFAULT_AGENT=worker
 MAX_WORKERS=2
+SCM=git
 
 [agent.build]
 opencode_args=--mode patch --safe
@@ -417,5 +450,6 @@ Village remains a **local-first flow engine**.
 
 ## Version History
 
-- **v0.1.0** (Current) - Alpha release with core functionality
+- **v0.1.1** (Current) - Alpha with SCM abstraction layer
+- **v0.1.0** - Alpha release with core functionality
 - **v1.0** - Target release with full PRD implementation
