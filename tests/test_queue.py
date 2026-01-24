@@ -1,6 +1,7 @@
 """Test queue scheduler operations."""
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -651,3 +652,38 @@ class TestExecuteQueuePlan:
 
             assert len(results) == 0
             mock_resume.assert_not_called()
+
+    def test_execute_queue_logs_events(self, mock_config: Config):
+        """Test execute_queue_plan logs queue events."""
+        from village.event_log import read_events
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        plan = QueuePlan(
+            ready_tasks=[QueueTask(task_id="bd-a3f8", agent="build")],
+            available_tasks=[QueueTask(task_id="bd-a3f8", agent="build")],
+            blocked_tasks=[],
+            slots_available=1,
+            workers_count=0,
+            concurrency_limit=2,
+        )
+
+        def mock_resume(task_id, agent, detached, dry_run, config):
+            return ResumeResult(
+                success=True,
+                task_id=task_id,
+                agent=agent,
+                worktree_path=mock_config.worktrees_dir / task_id,
+                window_name="worker-1-bd-a3f8",
+                pane_id="%12",
+            )
+
+        with patch("village.queue.execute_resume", side_effect=mock_resume):
+            execute_queue_plan(plan, "village", mock_config)
+
+        events = read_events(mock_config.village_dir)
+        queue_events = [e for e in events if e.cmd == "queue"]
+        assert len(queue_events) >= 1
+        assert queue_events[0].task_id == "bd-a3f8"

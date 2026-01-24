@@ -1,12 +1,13 @@
 """Test cleanup operations."""
 
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from village.cleanup import find_stale_locks, plan_cleanup
+from village.cleanup import execute_cleanup, find_stale_locks, plan_cleanup
 from village.config import Config
 from village.locks import Lock, write_lock
 
@@ -103,3 +104,33 @@ def test_plan_cleanup_no_stale(mock_config: Config):
 
         assert len(plan.stale_locks) == 0
         assert len(plan.locks_to_remove) == 0
+
+
+def test_execute_cleanup_logs_events(mock_config: Config):
+    """Test execute_cleanup logs cleanup events."""
+    from village.event_log import read_events
+
+    mock_config.git_root.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+    mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+    stale_lock = Lock(
+        task_id="bd-stale",
+        pane_id="%99",
+        window="test-window-stale",
+        agent="test",
+        claimed_at=datetime.now(timezone.utc),
+    )
+    write_lock(stale_lock)
+
+    plan = plan_cleanup("village")
+    execute_cleanup(plan, mock_config)
+
+    events = read_events(mock_config.village_dir)
+    cleanup_events = [e for e in events if e.cmd == "cleanup"]
+    assert len(cleanup_events) >= 1
+    assert cleanup_events[0].task_id == "bd-stale"
+    assert cleanup_events[0].pane == "%99"
+    assert cleanup_events[0].result == "ok"
+
+    stale_lock.path.unlink(missing_ok=True)

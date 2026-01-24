@@ -610,3 +610,98 @@ class TestGetAgentFromTaskId:
             agent = _get_agent_from_task_id("bd-a3f8", default_agent=None)
 
             assert agent == "worker"
+
+
+class TestResumeEventLogging:
+    """Tests for event logging in resume operations."""
+
+    def test_execute_resume_logs_start(self, mock_config: Config) -> None:
+        """Test execute_resume logs task start event."""
+        from village.event_log import read_events
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("village.resume._ensure_worktree_exists") as mock_worktree:
+            mock_worktree.return_value = (
+                mock_config.worktrees_dir / "bd-a3f8",
+                "worker-1-bd-a3f8",
+                "bd-a3f8",
+            )
+            with patch("village.resume._create_resume_window") as mock_window:
+                mock_window.return_value = "%12"
+                with patch("village.resume._inject_contract"):
+                    with patch("village.resume.write_lock"):
+                        execute_resume(
+                            task_id="bd-a3f8",
+                            agent="build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
+
+        events = read_events(mock_config.village_dir)
+        assert len(events) >= 1
+        start_events = [e for e in events if e.result is None and e.cmd == "resume"]
+        assert len(start_events) >= 1
+        assert start_events[0].task_id == "bd-a3f8"
+
+    def test_execute_resume_logs_success(self, mock_config: Config) -> None:
+        """Test execute_resume logs task success event."""
+        from village.event_log import read_events
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("village.resume._ensure_worktree_exists") as mock_worktree:
+            mock_worktree.return_value = (
+                mock_config.worktrees_dir / "bd-a3f8",
+                "worker-1-bd-a3f8",
+                "bd-a3f8",
+            )
+            with patch("village.resume._create_resume_window") as mock_window:
+                mock_window.return_value = "%12"
+                with patch("village.resume._inject_contract"):
+                    with patch("village.resume.write_lock"):
+                        result = execute_resume(
+                            task_id="bd-a3f8",
+                            agent="build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
+                        assert result.success is True
+
+        events = read_events(mock_config.village_dir)
+        success_events = [e for e in events if e.result == "ok" and e.cmd == "resume"]
+        assert len(success_events) >= 1
+        assert success_events[0].task_id == "bd-a3f8"
+        assert success_events[0].pane == "%12"
+
+    def test_execute_resume_logs_error(self, mock_config: Config) -> None:
+        """Test execute_resume logs task error event on failure."""
+        from village.event_log import read_events
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch("village.resume._ensure_worktree_exists") as mock_worktree:
+            mock_worktree.side_effect = RuntimeError("Worktree creation failed")
+            result = execute_resume(
+                task_id="bd-a3f8",
+                agent="build",
+                detached=False,
+                dry_run=False,
+                config=mock_config,
+            )
+            assert result.success is False
+
+        events = read_events(mock_config.village_dir)
+        error_events = [e for e in events if e.result == "error" and e.cmd == "resume"]
+        assert len(error_events) >= 1
+        assert error_events[0].task_id == "bd-a3f8"
+        assert error_events[0].error is not None
+        assert "Worktree creation failed" in error_events[0].error
