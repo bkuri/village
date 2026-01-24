@@ -14,6 +14,7 @@ DEFAULT_WORKTREES_DIR_NAME = ".worktrees"
 DEFAULT_AGENT = "worker"
 DEFAULT_MAX_WORKERS = 2
 DEFAULT_SCM_KIND = "git"
+DEFAULT_QUEUE_TTL_MINUTES = 5
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ class Config:
     scm_kind: str = DEFAULT_SCM_KIND
     default_agent: str = DEFAULT_AGENT
     max_workers: int = DEFAULT_MAX_WORKERS
+    queue_ttl_minutes: int = DEFAULT_QUEUE_TTL_MINUTES
     agents: dict[str, AgentConfig] = field(default_factory=dict)
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
@@ -151,12 +153,32 @@ def get_config() -> Config:
             max_workers = int(max_workers_str)
             if max_workers < 1:
                 logger.warning(
-                    f"VILLAGE_MAX_WORKERS must be >= 1, using default: {DEFAULT_MAX_WORKERS}"
+                    f"VILLAGE_MAX_WORKERS must be >=1, using default: {DEFAULT_MAX_WORKERS}"
                 )
                 max_workers = DEFAULT_MAX_WORKERS
         except ValueError:
             logger.warning(
                 f"Invalid VILLAGE_MAX_WORKERS value, using default: {DEFAULT_MAX_WORKERS}"
+            )
+
+    # Override queue_ttl_minutes from env var or config file
+    queue_ttl_str = os.environ.get("VILLAGE_QUEUE_TTL_MINUTES") or file_config.get(
+        "QUEUE_TTL_MINUTES"
+    )
+    queue_ttl_minutes = DEFAULT_QUEUE_TTL_MINUTES
+    if queue_ttl_str:
+        try:
+            queue_ttl_minutes = int(queue_ttl_str)
+            if queue_ttl_minutes < 0:
+                logger.warning(
+                    f"VILLAGE_QUEUE_TTL_MINUTES must be >=0, "
+                    f"using default: {DEFAULT_QUEUE_TTL_MINUTES}"
+                )
+                queue_ttl_minutes = DEFAULT_QUEUE_TTL_MINUTES
+        except ValueError:
+            logger.warning(
+                f"Invalid VILLAGE_QUEUE_TTL_MINUTES value, "
+                f"using default: {DEFAULT_QUEUE_TTL_MINUTES}"
             )
 
     # Override scm_kind from env var or config file
@@ -198,6 +220,7 @@ def get_config() -> Config:
     logger.debug(f"Village dir: {village_dir}")
     logger.debug(f"Worktrees dir: {worktrees_dir}")
     logger.debug(f"Max workers: {max_workers}")
+    logger.debug(f"Queue TTL minutes: {queue_ttl_minutes}")
     logger.debug(f"SCM kind: {scm_kind}")
     logger.debug(f"Default agent: {default_agent}")
     logger.debug(f"Agent configs: {list(agents.keys())}")
@@ -208,6 +231,7 @@ def get_config() -> Config:
         worktrees_dir=worktrees_dir,
         scm_kind=scm_kind,
         max_workers=max_workers,
+        queue_ttl_minutes=queue_ttl_minutes,
         default_agent=default_agent,
         agents=agents,
     )

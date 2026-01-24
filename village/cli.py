@@ -467,8 +467,15 @@ def resume(
 @click.option("--max-workers", type=int, help="Override concurrency limit")
 @click.option("--agent", help="Filter tasks by agent type")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
+@click.option("--force", is_flag=True, help="Skip deduplication checks")
 def queue(
-    count: int, plan: bool, dry_run: bool, max_workers: int, agent: str, json_output: bool
+    count: int,
+    plan: bool,
+    dry_run: bool,
+    max_workers: int,
+    agent: str,
+    json_output: bool,
+    force: bool,
 ) -> None:
     """
     Queue and execute ready tasks from Beads.
@@ -482,6 +489,7 @@ def queue(
       --max-workers N: Override concurrency limit
       --agent TYPE: Filter tasks by agent type
       --json: Full JSON output (with --plan)
+      --force: Skip deduplication checks
 
     Examples:
       village queue                    # Show plan
@@ -497,7 +505,7 @@ def queue(
     concurrency_limit = max_workers if max_workers else config.max_workers
 
     # Generate queue plan
-    queue_plan = generate_queue_plan(config.tmux_session, concurrency_limit, config)
+    queue_plan = generate_queue_plan(config.tmux_session, concurrency_limit, config, force)
 
     # Filter by agent if requested
     if agent:
@@ -547,7 +555,7 @@ def queue(
     # Execute queue plan
     if not json_output:
         click.echo(f"Starting {len(queue_plan.available_tasks)} task(s)...")
-    results = execute_queue_plan(queue_plan, config.tmux_session, config)
+    results = execute_queue_plan(queue_plan, config.tmux_session, config, force)
 
     # Count successes and failures
     tasks_started = sum(1 for r in results if r.success)

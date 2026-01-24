@@ -266,3 +266,70 @@ def test_config_file_env_default_agent(tmp_path: Path):
         assert config.default_agent == "test"
     finally:
         del os.environ["VILLAGE_DEFAULT_AGENT"]
+
+
+def test_config_queue_ttl_default(tmp_path: Path):
+    """Test default queue_ttl_minutes value."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.queue_ttl_minutes == 5
+
+
+def test_config_queue_ttl_env_override(tmp_path: Path):
+    """Test VILLAGE_QUEUE_TTL_MINUTES environment variable."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_QUEUE_TTL_MINUTES"] = "10"
+
+    try:
+        config = get_config()
+        assert config.queue_ttl_minutes == 10
+    finally:
+        del os.environ["VILLAGE_QUEUE_TTL_MINUTES"]
+
+
+def test_config_queue_ttl_file_override(tmp_path: Path):
+    """Test config file QUEUE_TTL_MINUTES."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("[DEFAULT]\nQUEUE_TTL_MINUTES=15")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.queue_ttl_minutes == 15
+
+
+def test_config_queue_ttl_invalid_uses_default(tmp_path: Path):
+    """Test invalid VILLAGE_QUEUE_TTL_MINUTES uses default."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_QUEUE_TTL_MINUTES"] = "invalid"
+
+    try:
+        config = get_config()
+        assert config.queue_ttl_minutes == 5
+    finally:
+        del os.environ["VILLAGE_QUEUE_TTL_MINUTES"]
+
+
+def test_config_queue_ttl_negative_uses_default(tmp_path: Path):
+    """Test negative VILLAGE_QUEUE_TTL_MINUTES uses default."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_QUEUE_TTL_MINUTES"] = "-5"
+
+    try:
+        config = get_config()
+        assert config.queue_ttl_minutes == 5
+    finally:
+        del os.environ["VILLAGE_QUEUE_TTL_MINUTES"]

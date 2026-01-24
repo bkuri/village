@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from village.config import Config, get_config
-from village.event_log import log_task_start
+from village.event_log import is_task_recent, log_task_start, read_events
 from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
@@ -116,6 +116,7 @@ def arbitrate_locks(
     session_name: str,
     max_workers: int,
     config: Config,
+    force: bool = False,
 ) -> QueuePlan:
     """
     Arbitrate locks and apply concurrency limits.
@@ -125,6 +126,7 @@ def arbitrate_locks(
         session_name: Tmux session name
         max_workers: Maximum concurrent workers
         config: Config object
+        force: Skip deduplication checks
 
     Returns:
         QueuePlan with available and blocked tasks
@@ -143,6 +145,15 @@ def arbitrate_locks(
     blocked_tasks: list[QueueTask] = []
 
     for task in tasks:
+        # Deduplication check (skip if forced)
+        if not force:
+            events = read_events(config.village_dir)
+            is_recent, last_event = is_task_recent(events, task.task_id, config.queue_ttl_minutes)
+            if is_recent:
+                task.skip_reason = "recently_executed"
+                blocked_tasks.append(task)
+                continue
+
         # Check if task already has an active lock
         if task.task_id in active_task_ids:
             task.skip_reason = "active_lock"
@@ -172,6 +183,7 @@ def generate_queue_plan(
     session_name: str,
     max_workers: int,
     config: Optional[Config] = None,
+    force: bool = False,
 ) -> QueuePlan:
     """
     Generate complete queue plan.
@@ -180,6 +192,7 @@ def generate_queue_plan(
         session_name: Tmux session name
         max_workers: Maximum concurrent workers
         config: Optional config (uses default if not provided)
+        force: Skip deduplication checks
 
     Returns:
         QueuePlan with ready, available, and blocked tasks
@@ -191,7 +204,7 @@ def generate_queue_plan(
     tasks = extract_ready_tasks(config)
 
     # Arbitrate locks and apply concurrency limits
-    return arbitrate_locks(tasks, session_name, max_workers, config)
+    return arbitrate_locks(tasks, session_name, max_workers, config, force)
 
 
 def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
@@ -272,6 +285,7 @@ def execute_queue_plan(
     plan: QueuePlan,
     session_name: str,
     config: Optional[Config] = None,
+    force: bool = False,
 ) -> list[ResumeResult]:
     """
     Execute queue plan by starting available tasks.
@@ -280,6 +294,7 @@ def execute_queue_plan(
         plan: QueuePlan to execute
         session_name: Tmux session name
         config: Optional config (uses default if not provided)
+        force: Skip deduplication checks (for consistency with planning)
 
     Returns:
         List of ResumeResult for each started task

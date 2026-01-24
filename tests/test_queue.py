@@ -687,3 +687,111 @@ class TestExecuteQueuePlan:
         queue_events = [e for e in events if e.cmd == "queue"]
         assert len(queue_events) >= 1
         assert queue_events[0].task_id == "bd-a3f8"
+
+
+class TestQueueDeduplication:
+    """Tests for queue deduplication guard."""
+
+    def test_deduplication_blocks_recent_tasks(self, mock_config: Config):
+        """Test deduplication blocks tasks executed recently."""
+        from village.event_log import append_event, Event
+        from datetime import datetime, timedelta, timezone
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add a recent event for bd-a3f8 (2 minutes ago)
+        recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        event = Event(
+            ts=recent_ts,
+            cmd="resume",
+            task_id="bd-a3f8",
+            pane="%12",
+            result="ok",
+        )
+        append_event(event, mock_config.village_dir)
+
+        # Plan queue with bd-a3f8
+        tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
+        with patch("village.status.collect_workers", return_value=[]):
+            plan = arbitrate_locks(tasks, "village", 2, mock_config, force=False)
+
+        assert len(plan.blocked_tasks) == 1
+        assert plan.blocked_tasks[0].task_id == "bd-a3f8"
+        assert plan.blocked_tasks[0].skip_reason == "recently_executed"
+
+    def test_force_bypasses_deduplication(self, mock_config: Config):
+        """Test --force flag bypasses deduplication check."""
+        from village.event_log import append_event, Event
+        from datetime import datetime, timezone
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        # Add a recent event for bd-a3f8
+        recent_ts = datetime.now(timezone.utc).isoformat()
+        event = Event(
+            ts=recent_ts,
+            cmd="resume",
+            task_id="bd-a3f8",
+            pane="%12",
+            result="ok",
+        )
+        append_event(event, mock_config.village_dir)
+
+        # Plan queue with force=True
+        tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
+        with patch("village.status.collect_workers", return_value=[]):
+            plan = arbitrate_locks(tasks, "village", 2, mock_config, force=True)
+
+        # With force=True, task should be available
+        assert len(plan.available_tasks) == 1
+        assert plan.available_tasks[0].task_id == "bd-a3f8"
+
+    def test_ttl_zero_allows_immediate_reexecution(self, mock_config: Config):
+        """Test TTL of 0 allows immediate re-execution."""
+        from village.event_log import append_event, Event
+        from datetime import datetime, timezone
+
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        # Set queue_ttl_minutes to 0
+        mock_config.queue_ttl_minutes = 0
+
+        # Add a recent event for bd-a3f8
+        recent_ts = datetime.now(timezone.utc).isoformat()
+        event = Event(
+            ts=recent_ts,
+            cmd="resume",
+            task_id="bd-a3f8",
+            pane="%12",
+            result="ok",
+        )
+        append_event(event, mock_config.village_dir)
+
+        # Plan queue with TTL=0
+        tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
+        with patch("village.status.collect_workers", return_value=[]):
+            plan = arbitrate_locks(tasks, "village", 2, mock_config, force=False)
+
+        # With TTL=0, task should be available
+        assert len(plan.available_tasks) == 1
+
+    def test_no_event_allows_task(self, mock_config: Config):
+        """Test tasks without events are not blocked."""
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+
+        # Plan queue with no events in log
+        tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
+        with patch("village.status.collect_workers", return_value=[]):
+            plan = arbitrate_locks(tasks, "village", 2, mock_config, force=False)
+
+        # Task should be available
+        assert len(plan.available_tasks) == 1
+        assert plan.available_tasks[0].task_id == "bd-a3f8"
