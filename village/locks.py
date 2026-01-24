@@ -37,7 +37,7 @@ class Lock:
 
 def parse_lock(lock_path: Path) -> Optional[Lock]:
     """
-    Parse lock file from disk.
+    Parse lock file from disk with validation.
 
     Args:
         lock_path: Path to lock file
@@ -57,26 +57,44 @@ def parse_lock(lock_path: Path) -> Optional[Lock]:
                 key, value = line.split("=", 1)
                 data[key.strip()] = value.strip()
 
-        # Parse datetime
-        claimed_at_str = data.get("claimed_at", "")
-        if claimed_at_str:
-            try:
-                claimed_at = datetime.fromisoformat(claimed_at_str)
-            except ValueError:
-                logger.warning(f"Invalid datetime in lock: {lock_path}")
+        # Validate required fields
+        required_fields = {
+            "id": "task_id",
+            "pane": "pane_id",
+            "window": "window",
+            "agent": "agent",
+            "claimed_at": "claimed_at",
+        }
+
+        for lock_key, _ in required_fields.items():
+            if lock_key not in data:
+                logger.error(f"Corrupted lock {lock_path}: missing field '{lock_key}'")
                 return None
-        else:
+
+            if not data[lock_key].strip():
+                logger.error(f"Corrupted lock {lock_path}: empty field '{lock_key}'")
+                return None
+
+        # Validate datetime format
+        claimed_at_str = data["claimed_at"]
+        try:
+            claimed_at = datetime.fromisoformat(claimed_at_str)
+        except ValueError as e:
+            logger.error(f"Corrupted lock {lock_path}: invalid datetime: {e}")
             return None
 
         return Lock(
-            task_id=data.get("id", ""),
-            pane_id=data.get("pane", ""),
-            window=data.get("window", ""),
-            agent=data.get("agent", ""),
+            task_id=data["id"],
+            pane_id=data["pane"],
+            window=data["window"],
+            agent=data["agent"],
             claimed_at=claimed_at,
         )
     except (IOError, OSError) as e:
         logger.error(f"Failed to read lock file {lock_path}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error parsing lock {lock_path}: {e}")
         return None
 
 

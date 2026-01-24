@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from village.config import Config
-from village.contracts import ResumeContract
+from village.contracts import ContractEnvelope
 from village.locks import Lock
 from village.probes.tools import SubprocessError
 from village.resume import (
@@ -539,34 +539,27 @@ class TestInjectContract:
         """Test contract injection."""
         session_name = "village"
         pane_id = "%12"
-        contract = ResumeContract(
+        contract = ContractEnvelope(
             task_id="bd-a3f8",
             agent="build",
-            worktree_path=Path("/tmp/.worktrees/bd-a3f8"),
-            git_root=Path("/tmp/repo"),
-            window_name="worker-1-bd-a3f8",
-            claimed_at=datetime.now(),
+            content="# Task: bd-a3f8\nWork on this task.",
+            created_at=datetime.now().isoformat(),
         )
 
         with patch("village.resume.send_keys") as mock_send:
-            with patch("village.resume.format_contract_for_stdin") as mock_format:
-                mock_format.return_value = '{"task_id":"bd-a3f8"}'
+            _inject_contract(session_name, pane_id, contract, dry_run=False)
 
-                _inject_contract(session_name, pane_id, contract, dry_run=False)
-
-                assert mock_send.call_count == 2
+            assert mock_send.call_count == 2
 
     def test_skips_on_dry_run(self) -> None:
         """Test skips injection on dry run."""
         session_name = "village"
         pane_id = "%12"
-        contract = ResumeContract(
+        contract = ContractEnvelope(
             task_id="bd-a3f8",
             agent="build",
-            worktree_path=Path("/tmp/.worktrees/bd-a3f8"),
-            git_root=Path("/tmp/repo"),
-            window_name="worker-1-bd-a3f8",
-            claimed_at=datetime.now(),
+            content="# Task: bd-a3f8\nWork on this task.",
+            created_at=datetime.now().isoformat(),
         )
 
         with patch("village.resume.send_keys") as mock_send:

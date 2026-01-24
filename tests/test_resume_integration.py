@@ -9,7 +9,7 @@ import pytest
 
 from village.cli import village
 from village.config import Config
-from village.contracts import ResumeContract
+from village.contracts import ContractEnvelope
 from village.probes.tools import SubprocessError
 from village.resume import ResumeResult, execute_resume
 
@@ -215,13 +215,11 @@ class TestResumeIntegrationHTML:
         with patch("village.cli.execute_resume", return_value=result_obj):
             with patch("village.cli.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
-                    mock_contract.return_value = ResumeContract(
+                    mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",
                         agent="worker",
-                        worktree_path=mock_config.worktrees_dir / "bd-a3f8",
-                        git_root=mock_config.git_root,
-                        window_name="worker-1-bd-a3f8",
-                        claimed_at=datetime.now(),
+                        content="# Test content",
+                        created_at=datetime.now().isoformat(),
                     )
 
                     result = runner.invoke(village, ["resume", "bd-a3f8", "--html"])
@@ -250,13 +248,11 @@ class TestResumeIntegrationHTML:
         with patch("village.cli.execute_resume", return_value=result_obj):
             with patch("village.cli.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
-                    mock_contract.return_value = ResumeContract(
+                    mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",
                         agent="worker",
-                        worktree_path=mock_config.worktrees_dir / "bd-a3f8",
-                        git_root=mock_config.git_root,
-                        window_name="worker-1-bd-a3f8",
-                        claimed_at=datetime.now(),
+                        content="# Test content",
+                        created_at=datetime.now().isoformat(),
                     )
 
                     result = runner.invoke(village, ["resume", "bd-a3f8", "--html"])
@@ -271,9 +267,9 @@ class TestResumeIntegrationHTML:
                     # Assert required fields
                     assert "task_id" in metadata
                     assert "agent" in metadata
-                    assert "worktree_path" in metadata
-                    assert "window_name" in metadata
-                    assert "claimed_at" in metadata
+                    assert "content" in metadata
+                    assert "version" in metadata
+                    assert "created_at" in metadata
 
                     # Assert keys are sorted
                     keys = list(metadata.keys())

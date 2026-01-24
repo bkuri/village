@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Optional
 
 from village.config import Config, get_config
-from village.contracts import ResumeContract, format_contract_for_stdin, generate_contract
+from village.contracts import ContractEnvelope, generate_contract
+from village.errors import InterruptedResume
 from village.locks import Lock, parse_lock, write_lock
 from village.probes.beads import beads_available
 from village.probes.tmux import (
@@ -184,6 +185,13 @@ def execute_resume(
     session_name = config.tmux_session
     base_task_id = task_id
 
+    # Resource tracking for cleanup on interrupt
+    created_resources: dict[str, object] = {
+        "worktree_path": None,
+        "window_name": None,
+        "lock": None,
+    }
+
     logger.info(f"Executing resume: task_id={task_id}, agent={agent}, detached={detached}")
 
     try:
@@ -191,6 +199,7 @@ def execute_resume(
         worktree_path, window_name, task_id = _ensure_worktree_exists(
             base_task_id, session_name, dry_run, config
         )
+        created_resources["worktree_path"] = worktree_path
 
         if dry_run:
             logger.info("Dry run: would create worktree and window")
@@ -206,6 +215,7 @@ def execute_resume(
 
         # Phase 2: Create tmux window
         pane_id = _create_resume_window(session_name, window_name, dry_run)
+        created_resources["window_name"] = window_name
 
         if not pane_id:
             raise RuntimeError(f"Failed to create tmux window '{window_name}'")
@@ -219,6 +229,7 @@ def execute_resume(
             claimed_at=datetime.now(),
         )
         write_lock(lock)
+        created_resources["lock"] = lock
 
         # Phase 4: Generate and inject contract
         contract = generate_contract(task_id, agent, worktree_path, window_name, config)
@@ -235,14 +246,30 @@ def execute_resume(
             pane_id=pane_id,
         )
 
+    except KeyboardInterrupt:
+        logger.warning("Resume interrupted by user")
+        logger.info(f"Resources remain for manual cleanup: {created_resources}")
+        raise InterruptedResume()
+
     except Exception as e:
         logger.error(f"Resume failed: {e}")
+        worktree_path = (
+            created_resources["worktree_path"]
+            if isinstance(created_resources["worktree_path"], Path)
+            else Path("")
+        )
+        window_name = (
+            created_resources["window_name"]
+            if isinstance(created_resources["window_name"], str)
+            else ""
+        )
+
         return ResumeResult(
             success=False,
             task_id=task_id,
             agent=agent,
-            worktree_path=Path(""),
-            window_name="",
+            worktree_path=worktree_path,
+            window_name=window_name,
             pane_id="",
             error=str(e),
         )
@@ -393,7 +420,7 @@ def _create_resume_window(
 def _inject_contract(
     session_name: str,
     pane_id: str,
-    contract: ResumeContract,
+    contract: ContractEnvelope,
     dry_run: bool,
 ) -> None:
     """
@@ -404,15 +431,20 @@ def _inject_contract(
     Args:
         session_name: Tmux session name
         pane_id: Pane ID (e.g., "%12")
-        contract: ResumeContract to inject
+        contract: ContractEnvelope to inject
         dry_run: Preview mode
     """
     if dry_run:
         logger.info(f"Dry run: would inject contract to pane {pane_id}")
         return
 
+    # Log warnings if any
+    if contract.warnings:
+        for warning in contract.warnings:
+            logger.warning(f"Contract warning: {warning}")
+
     # Format contract as JSON
-    contract_json = format_contract_for_stdin(contract)
+    contract_json = contract.to_json()
 
     # Build heredoc command: opencode <<'EOF'
     # {contract_json}

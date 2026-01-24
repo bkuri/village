@@ -122,7 +122,10 @@ def test_beads_ready_capability_false():
 @pytest.mark.integration
 def test_beads_available_integration():
     """Test beads detection with real bd command."""
-    pytest.importorskip("bd", reason="bd command not available")
+    import shutil
+
+    if not shutil.which("bd"):
+        pytest.skip("bd command not available")
 
     status = beads_available()
     assert isinstance(status, BeadsStatus)

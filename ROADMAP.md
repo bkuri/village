@@ -111,10 +111,10 @@ Deliverable: - `village queue`
 
 ## Phase 10 --- Contracts
 
--   [ ] ppc detection
--   [ ] agent → args mapping
--   [ ] fallback contracts
--   [ ] injection formatting
+-   [x] ppc detection
+-   [x] agent → args mapping
+-   [x] fallback contracts
+-   [x] injection formatting
 
 Deliverable: - behavior parity with bash
 
@@ -122,19 +122,21 @@ Deliverable: - behavior parity with bash
 
 ## Phase 11 --- Hardening
 
--   [ ] error classification
--   [ ] exit codes
--   [ ] interrupted execution recovery
--   [ ] corrupted lock handling
+-   [x] error classification
+-   [x] exit codes
+-   [x] interrupted execution recovery
+-   [x] corrupted lock handling
+
+Deliverable: - robust error handling and recovery
 
 ------------------------------------------------------------------------
 
 ## Phase 12 --- Polish
 
--   [ ] colored TTY output
--   [ ] shell completion
--   [ ] README
--   [ ] examples
+-   [x] colored TTY output
+-   [x] shell completion
+-   [x] README
+-   [x] examples
 -   [ ] migration notes
 
 ------------------------------------------------------------------------

@@ -1,10 +1,18 @@
 """Village CLI entrypoint."""
 
+import signal
 import sys
 
 import click
 
 from village.config import get_config
+from village.errors import (
+    EXIT_BLOCKED,
+    EXIT_ERROR,
+    EXIT_PARTIAL,
+    EXIT_SUCCESS,
+    InterruptedResume,
+)
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import clear_pane_cache, session_exists
 from village.queue import (
@@ -21,6 +29,12 @@ from village.status import collect_workers
 logger = get_logger(__name__)
 
 
+def _handle_interrupt(signum: int, frame: object) -> None:
+    """Handle SIGINT (Ctrl+C)."""
+    logger.info("Interrupted by user")
+    raise InterruptedResume()
+
+
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
 @click.version_option()
@@ -28,6 +42,7 @@ def village(verbose: bool) -> None:
     """Village - CLI-native parallel development orchestrator."""
     setup_logging(verbose=verbose)
     clear_pane_cache()
+    signal.signal(signal.SIGINT, _handle_interrupt)
 
 
 @village.command()
@@ -501,10 +516,11 @@ def queue(
             )
         else:
             click.echo("No tasks available to start")
-        sys.exit(1)
+        sys.exit(EXIT_BLOCKED)
 
     # Execute queue plan
-    click.echo(f"Starting {len(queue_plan.available_tasks)} task(s)...")
+    if not json_output:
+        click.echo(f"Starting {len(queue_plan.available_tasks)} task(s)...")
     results = execute_queue_plan(queue_plan, config.tmux_session, config)
 
     # Count successes and failures
@@ -544,12 +560,12 @@ def queue(
         click.echo(json.dumps(output, indent=2, sort_keys=True))
 
     # Exit codes:
-    # 0: All tasks started successfully
-    # 4: Some tasks started, some failed (partial success)
-    # 1: No tasks started (all failed)
+    # EXIT_SUCCESS (0): All tasks started successfully
+    # EXIT_PARTIAL (4): Some tasks started, some failed
+    # EXIT_ERROR (1): No tasks started (all failed)
     if tasks_started > 0 and tasks_failed == 0:
-        sys.exit(0)
+        sys.exit(EXIT_SUCCESS)
     elif tasks_started > 0:
-        sys.exit(4)
+        sys.exit(EXIT_PARTIAL)
     else:
-        sys.exit(1)
+        sys.exit(EXIT_ERROR)

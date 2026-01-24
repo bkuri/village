@@ -142,3 +142,127 @@ def test_config_env_max_workers_too_low(tmp_path: Path):
         assert config.max_workers == 2
     finally:
         del os.environ["VILLAGE_MAX_WORKERS"]
+
+
+def test_parse_ppc_traits():
+    """Test PPC traits parsing."""
+    from village.config import _parse_ppc_traits
+
+    # Empty string
+    assert _parse_ppc_traits("") == []
+
+    # Single trait
+    assert _parse_ppc_traits("conservative") == ["conservative"]
+
+    # Multiple traits
+    assert _parse_ppc_traits("conservative,terse,verbose") == ["conservative", "terse", "verbose"]
+
+    # Traits with spaces
+    assert _parse_ppc_traits("conservative, terse , verbose") == [
+        "conservative",
+        "terse",
+        "verbose",
+    ]
+
+    # Traits with mixed case
+    assert _parse_ppc_traits("Conservative,TERSE,Verbose") == ["conservative", "terse", "verbose"]
+
+
+def test_config_file_empty(tmp_path: Path):
+    """Test config file doesn't exist."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.agents == {}
+    assert config.default_agent == "worker"
+
+
+def test_config_file_with_agents(tmp_path: Path):
+    """Test parsing agent configs from file."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    # Create config file
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[DEFAULT]
+DEFAULT_AGENT=build
+
+[agent.build]
+opencode_args=--mode patch --safe
+contract=contracts/build.md
+ppc_mode=build
+ppc_traits=conservative,terse
+ppc_format=markdown
+
+[agent.test]
+opencode_args=--mode patch
+ppc_mode=ship
+ppc_traits=conservative
+ppc_format=code
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.default_agent == "build"
+    assert "build" in config.agents
+    assert "test" in config.agents
+
+    # Check build agent config
+    build_agent = config.agents["build"]
+    assert build_agent.opencode_args == "--mode patch --safe"
+    assert build_agent.contract == "contracts/build.md"
+    assert build_agent.ppc_mode == "build"
+    assert build_agent.ppc_traits == ["conservative", "terse"]
+    assert build_agent.ppc_format == "markdown"
+
+    # Check test agent config
+    test_agent = config.agents["test"]
+    assert test_agent.opencode_args == "--mode patch"
+    assert test_agent.contract is None
+    assert test_agent.ppc_mode == "ship"
+    assert test_agent.ppc_traits == ["conservative"]
+    assert test_agent.ppc_format == "code"
+
+
+def test_config_file_default_ppc_values(tmp_path: Path):
+    """Test default PPC values when not specified."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[agent.build]
+opencode_args=--mode patch
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    build_agent = config.agents["build"]
+    assert build_agent.contract is None
+    assert build_agent.ppc_mode is None
+    assert build_agent.ppc_traits == []
+    assert build_agent.ppc_format == "markdown"
+
+
+def test_config_file_env_default_agent(tmp_path: Path):
+    """Test environment variable overrides DEFAULT_AGENT."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("[DEFAULT]\nDEFAULT_AGENT=build")
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_DEFAULT_AGENT"] = "test"
+
+    try:
+        config = get_config()
+        assert config.default_agent == "test"
+    finally:
+        del os.environ["VILLAGE_DEFAULT_AGENT"]

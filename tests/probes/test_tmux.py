@@ -134,7 +134,10 @@ def test_tmux_probes_against_real_session():
 
     Scenario A: Tests pane snapshot truth model end-to-end.
     """
-    pytest.importorskip("tmux", reason="tmux not available")
+    import shutil
+
+    if not shutil.which("tmux"):
+        pytest.skip("tmux not available")
 
     session_name = f"village-test-{os.getpid()}"
     pane_id = None
@@ -198,7 +201,10 @@ def test_lock_classification_integration():
     Scenario B: Validates lock correctness with real panes.
     Uses ephemeral tmux session always.
     """
-    pytest.importorskip("tmux", reason="tmux not available")
+    import shutil
+
+    if not shutil.which("tmux"):
+        pytest.skip("tmux not available")
 
     from datetime import datetime, timezone
 

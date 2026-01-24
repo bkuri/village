@@ -175,3 +175,87 @@ def test_evaluate_locks():
 
         assert status_map["bd-a3f8"] is True
         assert status_map["bd-1234"] is False
+
+
+def test_parse_lock_missing_task_id():
+    """Test parsing lock with missing task_id field."""
+    with patch("village.config.get_config") as mock_config:
+        mock_config.return_value = Config(
+            git_root=Path("/tmp/test"),
+            village_dir=Path("/tmp/test/.village"),
+            worktrees_dir=Path("/tmp/test/.worktrees"),
+        )
+
+    content = "pane=%12\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=2026-01-22T10:41:12\n"
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
+        f.write(content)
+        f.flush()
+
+        lock = parse_lock(Path(f.name))
+
+        assert lock is None
+
+
+def test_parse_lock_empty_pane_id():
+    """Test parsing lock with empty pane_id field."""
+    with patch("village.config.get_config") as mock_config:
+        mock_config.return_value = Config(
+            git_root=Path("/tmp/test"),
+            village_dir=Path("/tmp/test/.village"),
+            worktrees_dir=Path("/tmp/test/.worktrees"),
+        )
+
+    content = (
+        "id=bd-a3f8\npane=\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=2026-01-22T10:41:12\n"
+    )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
+        f.write(content)
+        f.flush()
+
+        lock = parse_lock(Path(f.name))
+
+        assert lock is None
+
+
+def test_parse_lock_invalid_datetime_format():
+    """Test parsing lock with invalid datetime format."""
+    with patch("village.config.get_config") as mock_config:
+        mock_config.return_value = Config(
+            git_root=Path("/tmp/test"),
+            village_dir=Path("/tmp/test/.village"),
+            worktrees_dir=Path("/tmp/test/.worktrees"),
+        )
+
+    content = (
+        "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=not-a-datetime\n"
+    )
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
+        f.write(content)
+        f.flush()
+
+        lock = parse_lock(Path(f.name))
+
+        assert lock is None
+
+
+def test_parse_lock_corrupted_binary():
+    """Test parsing corrupted binary lock file."""
+    with patch("village.config.get_config") as mock_config:
+        mock_config.return_value = Config(
+            git_root=Path("/tmp/test"),
+            village_dir=Path("/tmp/test/.village"),
+            worktrees_dir=Path("/tmp/test/.worktrees"),
+        )
+
+    content = b"\x00\x01\x02corrupted\xfe\xff"
+
+    with tempfile.NamedTemporaryFile(mode="wb", suffix=".lock", delete=False) as f:
+        f.write(content)
+        f.flush()
+
+        lock = parse_lock(Path(f.name))
+
+        assert lock is None

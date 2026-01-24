@@ -8,6 +8,7 @@ import pytest
 
 from village.cli import village
 from village.config import Config
+from village.errors import EXIT_BLOCKED
 from village.queue import QueuePlan, QueueTask
 
 
@@ -325,7 +326,7 @@ class TestQueueCLIExecution:
             with patch("village.cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1"])
 
-                assert result.exit_code == 1
+                assert result.exit_code == EXIT_BLOCKED
 
     def test_queue_no_tasks_available_json(
         self, runner: click.testing.CliRunner, mock_config: Config
@@ -346,7 +347,7 @@ class TestQueueCLIExecution:
             with patch("village.cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1", "--json"])
 
-                assert result.exit_code == 1
+                assert result.exit_code == EXIT_BLOCKED
                 data = json.loads(result.output)
                 assert data["tasks_started"] == 0
                 assert data["tasks_failed"] == 0
