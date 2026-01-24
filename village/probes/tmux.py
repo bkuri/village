@@ -1,6 +1,8 @@
 """Tmux runtime probes."""
 
 import logging
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass
 
@@ -215,4 +217,155 @@ def send_keys(session_name: str, target: str, keys: str) -> bool:
         return True
     except SubprocessError as e:
         logger.debug(f"Failed to send keys: {e}")
+        return False
+
+
+def _is_terminal_wide_enough(required_length: int) -> bool:
+    """
+    Check if terminal is wide enough for indicator.
+
+    Uses shutil.get_terminal_size() to get current terminal dimensions.
+    Returns True if there's enough space for indicator + base name.
+
+    Heuristic: Assume at least 30 columns are needed for comfortable display.
+    """
+    try:
+        columns, _ = shutil.get_terminal_size()
+        return columns >= required_length
+    except Exception:
+        # Fallback: assume wide enough if we can't detect
+        return True
+
+
+def rename_window(session_name: str, old_name: str, new_name: str) -> bool:
+    """
+    Rename a tmux window.
+
+    Args:
+        session_name: Tmux session name
+        old_name: Current window name (to find it)
+        new_name: New window name
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Get window index by name
+        cmd = ["tmux", "list-windows", "-t", session_name, "-F", "'#{window_index} #{window_name}'"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            return False
+
+        # Find window index
+        window_index = None
+        for line in result.stdout.split("\n"):
+            if old_name in line:
+                window_index = line.split()[0]
+                break
+        else:
+            return False
+
+        # Rename window
+        rename_cmd = ["tmux", "rename-window", "-t", f"{session_name}:{window_index}", new_name]
+        result = subprocess.run(rename_cmd, capture_output=True, text=True, check=False)
+
+        return result.returncode == 0
+
+    except Exception:
+        return False
+
+
+def get_current_window(session_name: str) -> str | None:
+    """
+    Get the current window name for a session.
+
+    Args:
+        session_name: Tmux session name
+
+    Returns:
+        Window name or None if not in session
+    """
+    try:
+        # Get window ID from pane
+        cmd = ["tmux", "display-message", "-p", "-t", session_name, "'#{window_name}'"]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        return result.stdout.strip() if result.returncode == 0 else None
+
+    except Exception:
+        return None
+
+
+def set_window_indicator(
+    session_name: str,
+    base_name: str | None = None,
+    draft_id: str | None = None,
+    task_id: str | None = None,
+) -> bool:
+    """
+    Set window indicator based on active editing.
+
+    Args:
+        session_name: Tmux session name
+        base_name: Original window name (or None to detect current)
+        draft_id: Active draft ID (or None)
+        task_id: Active task ID (or None, for future)
+
+    Returns:
+        True if successful, False otherwise
+
+    Indicator priority:
+      1. [DRAFT <draft-id>] - Active draft editing
+      2. [TASK <task-id>] - Active task editing (future)
+      3. [TC] - Task-Create mode (no active draft)
+      4. <original> - Default (no active editing)
+    """
+    try:
+        # If base_name is None, get current window name
+        if base_name is None:
+            base_name = get_current_window(session_name)
+            if base_name is None:
+                return False
+
+        # Determine indicator
+        indicator = ""
+        if draft_id:
+            # Check if terminal is wide enough
+            indicator = f"[DRAFT {draft_id}]"
+            # Check if terminal is wide enough
+            if not _is_terminal_wide_enough(len(indicator) + len(base_name) + 5):
+                # Not enough space, skip indicator
+                return True
+        elif task_id:
+            indicator = f"[TASK {task_id}]"
+            # Check if terminal is wide enough
+            if not _is_terminal_wide_enough(len(indicator) + len(base_name) + 5):
+                return True
+        else:
+            # No active editing, restore base name
+            if base_name.startswith("[DRAFT ") or base_name.startswith("[TASK "):
+                # Strip old indicator if present
+                base_name = " ".join(base_name.split()[1:])
+
+        # Determine new name
+        if indicator:
+            new_name = f"{indicator} {base_name}" if base_name else indicator
+        else:
+            new_name = base_name
+
+        # Rename window
+        return rename_window(session_name, base_name, new_name)
+
+    except Exception:
         return False

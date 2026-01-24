@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 
+from village.chat.drafts import DraftTask
 from village.ready import ReadyAssessment, SuggestedAction
 from village.resume import ResumeAction, ResumeResult
 from village.runtime import InitializationPlan
@@ -356,12 +357,6 @@ def render_resume_result(result: "ResumeResult") -> str:
 def render_resume_actions(action: "ResumeAction") -> str:
     """
     Render resume action as text.
-
-    Args:
-        action: ResumeAction object
-
-    Returns:
-        Formatted output
     """
     output = [
         f"Action: village {action.action}",
@@ -374,3 +369,30 @@ def render_resume_actions(action: "ResumeAction") -> str:
             output.append(f"Run: {command}")
 
     return "\n".join(output)
+
+
+def render_drafts_table(drafts: list[DraftTask]) -> str:
+    """
+    Render drafts as 2-column table (ID, Title).
+
+    Args:
+        drafts: List of draft tasks
+
+    Returns:
+        Formatted table string
+    """
+
+    if not drafts:
+        return "No drafts found."
+
+    sorted_drafts = sorted(drafts, key=lambda d: d.created_at, reverse=True)
+
+    lines = []
+    lines.append(f"{'ID':<20} {'Title':<60}")
+    lines.append(f"{'-' * 20} {'-' * 60}")
+
+    for draft in sorted_drafts:
+        title = (draft.title[:57] + "...") if len(draft.title) > 60 else draft.title
+        lines.append(f"{draft.id:<20} {title:<60}")
+
+    return "\n".join(lines)

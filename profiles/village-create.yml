@@ -1,0 +1,21 @@
+# Profile: Village Task Creation Mode
+
+# Mode
+mode: task-create
+
+# Modules to include (compose prompt)
+requires:
+  - base
+  - task-create
+  - qa-flow
+  - constraint-check
+  - task-manifest
+
+# Contract
+contract: task-manifest
+
+# Configuration variables (substituted during prompt generation)
+vars:
+  enforce_phases: true
+  validate_constraints: true
+  ask_clarifying_questions: true

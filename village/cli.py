@@ -569,3 +569,163 @@ def queue(
         sys.exit(EXIT_PARTIAL)
     else:
         sys.exit(EXIT_ERROR)
+
+
+@village.command()
+@click.option("--scope", type=str, help="Filter by scope (feature|fix|investigation|refactoring)")
+@click.option("--total", is_flag=True, help="Return draft count (for statusbar)")
+def drafts(scope: str | None, total: bool) -> None:
+    """
+    List or count draft tasks.
+
+    Default: Show 2-column table (ID, Title)
+
+    Examples:
+      village drafts
+      village drafts --scope feature
+      village drafts --total
+
+    Flags:
+      --scope: Filter by scope
+      --total: Return count only (machine-readable)
+    """
+    from village.chat.drafts import list_drafts
+    from village.config import get_config
+    from village.render.text import render_drafts_table
+
+    config = get_config()
+    all_drafts = list_drafts(config)
+
+    if total:
+        click.echo(str(len(all_drafts)))
+        return
+
+    if scope:
+        all_drafts = [d for d in all_drafts if d.scope == scope]
+
+    output = render_drafts_table(all_drafts)
+    click.echo(output)
+
+
+@village.command()
+@click.option("--create", "start_mode", is_flag=True, help="Start in task-create mode")
+@click.option("--force", is_flag=True, help="Skip exit warning on pending changes")
+def chat(start_mode: bool, force: bool) -> None:
+    """
+    Start conversational interface for project knowledge and task creation.
+
+    Non-mutating. Creates context files in `.village/context/` and draft tasks in `.village/drafts/`.
+
+    \b
+    Knowledge-Share Mode (default):
+      Clarify project understanding, document decisions, define goals.
+
+      Example:
+        $ village chat
+        > What are the current blockers?
+        > /tasks
+        > /ready
+        > /exit
+
+    \b
+    Task-Create Mode (--create):
+      Define structured tasks for execution in Beads.
+
+      Example:
+        $ village chat --create
+        > /create "Add Redis caching"
+        > [Answer Q&A about scope, success criteria, etc.]
+        > /create "Fix auth timeout"
+        > /drafts
+        > /enable all
+        > /submit
+        > /exit
+
+    \b
+    Subcommands:
+      Read-only: /tasks, /task <id>, /ready, /status, /help, /queue, /lock, /cleanup
+      Task creation: /create, /enable, /edit, /discard, /submit, /reset, /drafts
+      Exit: /exit, /quit, /bye
+
+    \b
+    Flags:
+      --create: Start in task-create mode (define new tasks)
+      --force: Skip exit warning on pending changes
+
+    \b
+    Type /help or /? for command reference.
+    """
+    import sys
+
+    from village.chat.context import get_context_dir
+    from village.chat.conversation import (
+        ConversationState,
+        process_user_input,
+        should_exit,
+        start_conversation,
+    )
+    from village.chat.errors import ChatExitCode
+    from village.chat.state import count_pending_changes, save_session_state
+    from village.probes.tmux import set_window_indicator
+
+    config = get_config()
+
+    pending_changes = count_pending_changes(config)
+    if pending_changes > 0 and not force:
+        click.echo(f"⚠️  {pending_changes} pending changes.")
+        click.echo("Use --force to skip this warning.")
+        return
+
+    context_dir = get_context_dir(config)
+    click.echo(f"Context directory: {context_dir}")
+    click.echo("Type /help for commands, /exit or /quit to quit\n")
+
+    mode = "task-create" if start_mode else "knowledge-share"
+    state = start_conversation(config, mode=mode)
+
+    def update_window_indicator(state: ConversationState):
+        """Update window indicator based on active draft."""
+        if config.village_dir.exists():
+            return set_window_indicator(
+                session_name=config.tmux_session,
+                base_name=None,
+                draft_id=state.active_draft_id,
+                task_id=None,
+            )
+        return False
+
+    update_window_indicator(state)
+
+    try:
+        while True:
+            user_input = click.prompt("", prompt_suffix="> ")
+
+            if should_exit(user_input):
+                break
+
+            old_active_draft = state.active_draft_id
+            state = process_user_input(state, user_input, config)
+
+            if old_active_draft != state.active_draft_id:
+                update_window_indicator(state)
+
+            if state.errors:
+                for error in state.errors:
+                    if "Critical error:" in error:
+                        click.echo(error)
+                        sys.exit(ChatExitCode.OPERATION_FAILED.value)
+
+            if state.messages and state.messages[-1].role == "assistant":
+                click.echo("\n" + state.messages[-1].content + "\n")
+    except click.exceptions.Abort:
+        click.echo("\nExiting...")
+    finally:
+        if config.village_dir.exists():
+            set_window_indicator(
+                session_name=config.tmux_session,
+                base_name=None,
+                draft_id=None,
+                task_id=None,
+            )
+
+        save_session_state(state, config)

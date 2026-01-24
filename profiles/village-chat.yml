@@ -1,0 +1,17 @@
+# Profile: Village Knowledge Sharing Mode
+
+# Mode
+mode: knowledge-share
+
+# Modules to include (compose the prompt)
+requires:
+  - base
+  - knowledge-share
+
+# Contract
+contract: context-update
+
+# Configuration variables (substituted during prompt generation)
+vars:
+  project_context: true
+  include_subcommands: true
