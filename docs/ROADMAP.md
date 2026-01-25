@@ -197,6 +197,138 @@ No migration required. All features backward compatible.
 
 ---
 
+## v1.3 - Jujutsu (jj) Support
+
+### Goal
+Add Jujutsu (jj) as a second SCM backend, validating the v1.1 SCM abstraction design. Provide early value for jj users without waiting for v2's more complex features.
+
+### Scope
+
+- [ ] **JJSCM Backend Implementation**
+  - New file: `village/scm/jj.py` implements SCM Protocol
+  - Map jj commands to SCM protocol methods:
+    - `ensure_repo()` → `jj git init`
+    - `check_clean()` → `jj status` (no working copy changes)
+    - `ensure_workspace()` → `jj workspace add`
+    - `remove_workspace()` → `jj workspace forget`
+    - `list_workspaces()` → `jj workspace list`
+  - Handle jj-specific error handling (jj binary not found, repo not found)
+
+- [ ] **Workspace Naming Convention**
+  - Keep Village's `.worktrees/bd-a3f8/` pattern (task ID in directory name)
+  - Directory = authoritative identity (Village-specific, not SCM-specific)
+  - JJ workspace names use default basename (equals task ID since directory is named by task ID)
+  - `resolve_task_id()` extracts task ID from workspace path (works for both git and jj)
+
+- [ ] **Configuration Integration**
+  - Add `SCM=jj` opt-in via environment variable or config file
+  - Environment variable: `VILLAGE_SCM=jj`
+  - Config file support:
+    ```ini
+    [DEFAULT]
+    SCM=jj
+    ```
+  - Default remains `SCM=git` (git is established, jj is experimental)
+
+- [ ] **Error Handling**
+  - Fail fast if `jj` binary not found with clear error message
+  - Validate jj repository exists before operations
+  - Handle jj workspace conflicts gracefully
+
+- [ ] **Testing Strategy**
+  - New file: `tests/scm/test_jj_backend.py`
+  - Hybrid approach: reusable fixtures + real jj repos (not mocked)
+  - Test fixtures in `tests/fixtures/jj_repos/` for common scenarios
+  - Unit tests for all SCM protocol methods
+  - Integration tests verifying Village commands work with jj backend
+  - Target test coverage: >80% for jj_backend
+  - Validate protocol compliance (same tests as GitSCM)
+
+- [ ] **Documentation**
+  - Update README.md with jj support notes
+  - Add example config showing `SCM=jj`
+  - Document no migration required for git users
+  - Explain workspace naming strategy
+
+### Design Decisions
+
+1. **Workspace naming**: Use default basename (equals task ID)
+   - Village names directory `.worktrees/bd-a3f8/`
+   - JJ workspace name = basename of destination = task ID
+   - No `--name` flag needed (unnatural for our use case)
+   - Ensures basename always equals task ID (guaranteed by Village)
+
+2. **Config approach**: Keep git as default, jj as opt-in
+   - Rationale: Git is established, jj is in growth phase
+   - No breaking changes for existing git users
+   - Validates jj's experimental status
+
+3. **Testing approach**: Reusable fixtures with real jj repos
+   - Not mocked (brittle) but not E2E (slow)
+   - `tests/fixtures/jj_repos/` for common scenarios
+   - Balance realism and test speed
+
+4. **Error handling**: Fail fast if jj not installed
+   - Clear error message: "jj binary not found in PATH"
+   - No fallback to git (confusing for user intent)
+   - User must install jj or switch to `SCM=git`
+
+### Files to Create/Modify
+
+**New files:**
+- `village/scm/jj.py` (150-200 lines)
+- `tests/scm/test_jj_backend.py` (200-300 lines)
+- `tests/fixtures/jj_repos/` (reusable jj repo fixtures)
+
+**Modified files:**
+- `village/config.py` (add jj config support)
+- `README.md` (update with jj support notes)
+- `AGENTS.md` (maybe add jj-specific testing guidance)
+
+### Success Criteria
+
+- [x] JJ backend passes all SCM protocol compliance tests
+- [x] Village commands work identically with `SCM=jj` vs `SCM=git`
+- [x] Zero git commands outside `village/scm/git.py`
+- [x] Zero jj commands outside `village/scm/jj.py`
+- [x] Test coverage >80% for jj_backend
+- [x] Documentation updated (README, config examples)
+- [x] Backward compatibility verified (git users unaffected)
+- [x] Error handling validated (jj not installed, invalid repos)
+
+### Migration Notes
+
+**For existing git users:**
+- No migration required
+- Git backend remains default
+- All existing functionality preserved
+
+**For new jj users:**
+- Set `SCM=jj` in `.village/config` or environment variable
+- Must have `jj` CLI installed and in PATH
+- Village workspaces use `.worktrees/bd-a3f8/` pattern (independent of jj workspace names)
+
+### Timeline Estimate
+
+- **Total time**: 8-12 hours (spread over 2-3 days)
+- **Phase breakdown**:
+  - Design & API definition: 1-2 hrs
+  - JJSCM implementation: 2-3 hrs
+  - Config integration: 0.5 hrs
+  - Testing: 2-3 hrs
+  - Documentation: 1-2 hrs
+  - Validation: 1 hr
+
+### Technical Notes
+
+- JJ workspace commands: `jj workspace add <dest>`, `jj workspace forget`, `jj workspace list`
+- JJ uses Git backend by default: `jj git init`, `jj git clone`, `jj git export/import`
+- Workspace directory = authoritative identity (Village-specific convention)
+- JJ workspace names are internal to jj (shown in `jj log` as `<name>@`)
+- `resolve_task_id()` logic unchanged (extracts from path, not SCM metadata)
+
+---
+
 ## v2 - Workspace-Native Parallelism
 
 ### Goal
@@ -204,45 +336,37 @@ Expand framework without compromising core principles. Focus on workspace-native
 
 ### Scope
 
-- [ ] **Jujutsu (jj) SCM Backend**
-  - Implemented via existing SCM abstraction (from v1.1)
-  - Workspace == jj workspace
-  - Task == jj change
-  - Abandon == native operation
-  - No migration required
-  - Git backend remains supported
-
 - [ ] **Reconciliation Engine**
-  - New command: `village reconcile [--plan|--apply]`
-  - Detects and repairs inconsistencies:
-    - Tmux panes vs lock files
-    - Lock files vs workspaces
-    - Workspaces vs Beads tasks
-  - Outputs planned actions before execution
+   - New command: `village reconcile [--plan|--apply]`
+   - Detects and repairs inconsistencies:
+     - Tmux panes vs lock files
+     - Lock files vs workspaces
+     - Workspaces vs Beads tasks
+   - Outputs planned actions before execution
 
 - [ ] **Resource-Aware Queueing** (Optional)
-  - Scheduling constraints:
-    - `--max-workers` (already implemented)
-    - `--max-load` (new: system load average)
-    - `--max-mem` (new: available memory)
-  - Implemented as pre-flight checks only
-  - Village does not manage resources — it respects them
+   - Scheduling constraints:
+     - `--max-workers` (already implemented)
+     - `--max-load` (new: system load average)
+     - `--max-mem` (new: available memory)
+   - Implemented as pre-flight checks only
+   - Village does not manage resources — it respects them
 
 - [ ] **Hooks System**
-  - Optional executable hooks in `.village/hooks/`:
-    - `on-claim`: Invoked when task is claimed
-    - `on-release`: Invoked when task is released
-    - `on-fail`: Invoked when task fails
-  - Invoked with structured JSON payloads
-  - Enables: notifications, custom logging, PR automation, metrics export
+   - Optional executable hooks in `.village/hooks/`:
+     - `on-claim`: Invoked when task is claimed
+     - `on-release`: Invoked when task is released
+     - `on-fail`: Invoked when task fails
+   - Invoked with structured JSON payloads
+   - Enables: notifications, custom logging, PR automation, metrics export
 
 - [ ] **Contract Caching**
-  - Deterministic prompt contracts cached at:
-    ```
-    .village/contracts/<task>/<agent>.md
-    ```
-  - Prevents unnecessary LLM regeneration
-  - Cache invalidation strategy TBD
+   - Deterministic prompt contracts cached at:
+     ```
+     .village/contracts/<task>/<agent>.md
+     ```
+   - Prevents unnecessary LLM regeneration
+   - Cache invalidation strategy TBD
 
 ### Explicit Non-Goals
 
@@ -307,8 +431,9 @@ Nothing hidden. Everything inspectable. Flow first.
 |---------|--------|--------|
 | v0.1.0 | Alpha | ✅ Released |
 | v1.0 | Stable beta | 🔄 In progress |
-| v1.1 | SCM abstraction | 📅 Planned |
-| v1.2 | Reliability | 📅 Planned |
+| v1.1 | SCM abstraction | ✅ Complete |
+| v1.2 | Reliability | ✅ Complete |
+| v1.3 | Jujutsu (jj) support | ✅ Complete |
 | v2.0 | Workspace-native | 📅 Future |
 
 ---

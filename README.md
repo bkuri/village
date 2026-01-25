@@ -140,6 +140,7 @@ Village uses an INI-style config file for agent configuration:
 ```ini
 [DEFAULT]
 DEFAULT_AGENT=worker
+SCM=git
 
 [agent.build]
 opencode_args=--mode patch --safe
@@ -154,6 +155,17 @@ contract=contracts/frontend.md
 ppc_mode=explore
 ppc_traits=verbose
 ppc_format=markdown
+```
+
+To use Jujutsu (jj) instead of Git:
+
+```ini
+[DEFAULT]
+DEFAULT_AGENT=worker
+SCM=jj
+
+[agent.build]
+# ... rest of config
 ```
 
 ### PPC Integration (Optional)
@@ -177,6 +189,46 @@ If PPC is unavailable, Village falls back to Markdown templates.
 ---
 
 ## Version History
+
+### v1.3 - Jujutsu (jj) Support (Released)
+
+Jujutsu (jj) backend implementation, leveraging the SCM abstraction from v1.1.
+
+**What's Included:**
+- New `village/scm/jj.py` backend implementing the SCM Protocol
+- Opt-in support via `SCM=jj` in config or environment variable
+- Village workspaces use `.worktrees/bd-a3f8/` pattern (same as Git backend)
+- Identical Village commands for both Git and jj backends
+- No migration required for existing Git users
+
+**Configuration:**
+```bash
+# Default (Git)
+village queue
+
+# Use Jujutsu backend
+SCM=jj village queue
+# or in .village/config:
+# [DEFAULT]
+# SCM=jj
+```
+
+**Benefits:**
+- Validates SCM abstraction design from v1.1
+- Provides early value for jj users without waiting for v2
+- Git backend remains default and fully supported
+- Zero core logic changes (pure SCM backend addition)
+
+**Implementation Details:**
+- JJSCM kind attribute returns "jj"
+- All SCM protocol methods implemented: `ensure_repo`, `check_clean`, `ensure_workspace`, `remove_workspace`, `list_workspaces`
+- Workspace management follows Village's `.worktrees/bd-a3f8/` pattern
+- Configuration validation ensures only valid SCM kinds ("git" or "jj")
+- Error handling fails fast if `jj` binary not found
+
+**Timeline:** Estimated 8-12 hours over 2-3 days
+
+---
 
 ### v1.2 - Reliability & Observability
 
@@ -221,7 +273,7 @@ Village now uses a pluggable SCM (Source Control Management) layer for workspace
 - Git backend (default, fully functional)
 - All existing Village commands work identically
 
-**Planned (v2):**
+**Upcoming (v1.3):**
 - Jujutsu (jj) backend support
 - Zero core logic changes required
 - Enable `SCM=jj` in configuration
@@ -231,13 +283,13 @@ Village now uses a pluggable SCM (Source Control Management) layer for workspace
 # Default (Git)
 village queue
 
-# Future (when v2 ready)
+# Use Jujutsu backend (v1.3)
 SCM=jj village queue
 ```
 
 **Benefits:**
 - Core Village logic remains SCM-agnostic
-- Enables future jj backend without refactoring
+- Enables jj backend without refactoring
 - Supports custom SCM backends (e.g., Mercurial, Bazaar)
 - Isolates all Git-specific commands to `village/scm/git.py`
 
