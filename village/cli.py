@@ -195,19 +195,43 @@ def locks() -> None:
 @village.command()
 @click.option("--dry-run", is_flag=True, help="Show what would be removed")
 @click.option("--plan", is_flag=True, help="Generate cleanup plan")
-def cleanup(dry_run: bool, plan: bool) -> None:
+@click.option("--apply", is_flag=True, help="Include orphan and stale worktrees")
+def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
     """
-    Remove stale locks.
+    Remove stale locks and optionally remove orphan/stale worktrees.
 
-    Default: Execute mode (delete stale locks).
+    Default: Execute mode (remove stale locks only).
     Use --plan or --dry-run to preview.
+    Use --apply to include orphan and stale worktrees for removal.
+
+    Examples:
+      village cleanup                    # Remove stale locks only
+      village cleanup --apply            # Remove stale locks + orphan/stale worktrees
+      village cleanup --plan --apply      # Preview apply plan
+      village cleanup --dry-run --apply   # Preview apply execution
     """
     from village.cleanup import execute_cleanup, plan_cleanup
 
     config = get_config()
 
     # Generate plan
-    cleanup_plan = plan_cleanup(config.tmux_session)
+    cleanup_plan = plan_cleanup(config.tmux_session, apply=apply)
+
+    # Show worktree info if applying
+    if apply:
+        if cleanup_plan.orphan_worktrees:
+            click.echo(f"Found {len(cleanup_plan.orphan_worktrees)} orphan worktrees:")
+            for worktree in cleanup_plan.orphan_worktrees:
+                click.echo(f"  - {worktree}")
+        else:
+            click.echo("No orphan worktrees found")
+
+        if cleanup_plan.stale_worktrees:
+            click.echo(f"Found {len(cleanup_plan.stale_worktrees)} stale worktrees:")
+            for worktree in cleanup_plan.stale_worktrees:
+                click.echo(f"  - {worktree}")
+        else:
+            click.echo("No stale worktrees found")
 
     if cleanup_plan.stale_locks:
         click.echo(f"Found {len(cleanup_plan.stale_locks)} stale locks:")
@@ -219,9 +243,24 @@ def cleanup(dry_run: bool, plan: bool) -> None:
 
     # Preview vs Execute
     if dry_run or plan:
-        click.echo("(preview: nothing removed)")
+        items_to_remove = len(cleanup_plan.stale_locks)
+        if apply:
+            items_to_remove += len(cleanup_plan.orphan_worktrees) + len(
+                cleanup_plan.stale_worktrees
+            )
+        click.echo(f"(preview: would remove {items_to_remove} item(s))")
+        return
+
+    # Execute cleanup
+    execute_cleanup(cleanup_plan, config)
+
+    removed_count = len(cleanup_plan.stale_locks)
+    if apply:
+        removed_count += len(cleanup_plan.orphan_worktrees) + len(cleanup_plan.stale_worktrees)
+
+    if apply:
+        click.echo("Cleanup complete")
     else:
-        execute_cleanup(cleanup_plan, config)
         click.echo("Cleanup complete")
 
 
