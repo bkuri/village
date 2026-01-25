@@ -249,6 +249,14 @@ See [docs/PROPOSALS.md](PROPOSALS.md) for optional feature ideas, including:
   - Remote tmux sessions
   - Custom scheduler policies
 
+- **End-to-End Testing** (NEW)
+  - Installation testing (pip install, verify CLI commands)
+  - Onboarding tests (village init, config setup)
+  - Day-to-day workflow tests (queue, resume, status, cleanup)
+  - Multi-task execution tests (concurrency, deduplication)
+  - Crash recovery tests (event log inspection)
+  - Full user journey tests (new project → complete workflow)
+
 ---
 
 ## Definition of Done
