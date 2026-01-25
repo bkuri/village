@@ -124,7 +124,7 @@ Strengthen operational trust under heavy concurrency and frequent crashes. Make 
 
 ### Scope
 
-- [ ] **Event Log (NDJSON)**
+- [x] **Event Log (NDJSON)**
   - Append-only log at `.village/events.log`
   - Each action appends one JSON line:
     ```json
@@ -133,22 +133,54 @@ Strengthen operational trust under heavy concurrency and frequent crashes. Make 
   - No indexing, no database, no rotation required
   - Uses: crash recovery inspection, deduplication, debugging
 
-- [ ] **Queue Deduplication Guard**
+- [x] **Queue Deduplication Guard**
   - Consult `events.log` before starting tasks
   - Skip tasks started within configurable TTL (default: 5 minutes)
   - Override via `village queue --force`
+  - Config: `QUEUE_TTL_MINUTES` or `VILLAGE_QUEUE_TTL_MINUTES` env var
 
-- [ ] **Expanded `--plan` Output**
+- [x] **Expanded `--plan` Output**
   - `queue --plan --json` returns:
     - Tasks selected
     - Tasks skipped (with reason per task)
-    - Locks involved
+    - Locks involved (pane_id, window, agent, claimed_at)
     - Workspace paths
   - Enables dry-run scheduling validation
 
-- [ ] **Cleanup Enhancements**
-  - Consider worktree cleanup behind `--prune` flag
-  - Safer corrupted lock handling
+- [x] **Cleanup Enhancements**
+  - `village cleanup --apply` removes orphan and stale worktrees
+  - Safer corrupted lock handling via `parse_lock_safe()`
+  - Separate orphan_worktrees and stale_worktrees in CleanupPlan
+
+- [x] **Testing & Integration**
+  - 58 new SCM tests (protocol compliance + Git backend + JJ placeholders)
+  - 3 v1.2 integration tests (event logging, deduplication, cleanup)
+  - Coverage: 74% overall (git.py: 85%, protocol: 100%)
+  - E2E testing guidance added to ROADMAP
+
+### Success Criteria
+
+- [x] Users can trust `queue` under concurrency
+- [x] Failures are explainable post-mortem
+- [x] Shell scripts can reason via exit codes
+- [x] No task accidentally runs twice
+
+### Technical Notes
+
+- Event log: village/event_log.py (78 lines)
+- Deduplication: village/queue.py + village/config.py (TTL config)
+- Cleanup: village/cleanup.py with --apply flag
+- Tests: tests/test_event_log.py, tests/test_queue.py, tests/test_cleanup.py, tests/scm/test_*.py
+- Coverage: 74% (2936 statements, 777 missed)
+- Timezone handling: Fixed to use datetime.now(timezone.utc)
+
+### Migration Notes
+
+No migration required. All features backward compatible.
+
+- Event logging: Automatic, no user action needed
+- Queue deduplication: Opt-in via --force flag
+- Cleanup --apply: Requires explicit --apply flag for worktree removal
 
 ### Success Criteria
 

@@ -178,6 +178,41 @@ If PPC is unavailable, Village falls back to Markdown templates.
 
 ## Version History
 
+### v1.2 - Reliability & Observability
+
+Event logging, queue deduplication, and enhanced cleanup for production reliability.
+
+**Event Logging:**
+- Automatic audit trail in `.village/events.log` (NDJSON)
+- All operations logged with timestamps, task IDs, and results
+- Use for crash recovery, debugging, and audit
+
+**Queue Deduplication:**
+- Prevents tasks from running twice within configurable TTL (default: 5 min)
+- Override with `village queue --force`
+- Configure via `QUEUE_TTL_MINUTES` or `VILLAGE_QUEUE_TTL_MINUTES` env var
+
+**Cleanup Enhancements:**
+- `village cleanup --apply` removes orphan and stale worktrees
+- Safer corrupted lock handling with automatic logging
+
+**JSON Output:**
+- `--plan --json` now includes lock details and workspace paths
+- Full task metadata for dry-run validation
+
+```bash
+# View recent events
+cat .village/events.log | jq .
+
+# Plan queue (skips recent executions)
+village queue --plan --json
+
+# Cleanup with worktree removal
+village cleanup --plan --apply
+```
+
+---
+
 ### v1.1 - SCM Abstraction Edition
 
 Village now uses a pluggable SCM (Source Control Management) layer for workspace operations.
