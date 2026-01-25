@@ -16,7 +16,7 @@ DEFAULT_MAX_WORKERS = 2
 DEFAULT_SCM_KIND = "git"
 DEFAULT_QUEUE_TTL_MINUTES = 5
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)  # type: ignore
 
 
 @dataclass
@@ -222,6 +222,14 @@ def get_config() -> Config:
     logger.debug(f"Max workers: {max_workers}")
     logger.debug(f"Queue TTL minutes: {queue_ttl_minutes}")
     logger.debug(f"SCM kind: {scm_kind}")
+
+    valid_scms = ["git", "jj"]
+    if scm_kind not in valid_scms:
+        raise ValueError(f"Invalid SCM kind: {scm_kind}. Must be one of: {', '.join(valid_scms)}")
+
+    if scm_kind == "jj":
+        logger.debug("Using Jujutsu (jj) SCM backend")
+
     logger.debug(f"Default agent: {default_agent}")
     logger.debug(f"Agent configs: {list(agents.keys())}")
 

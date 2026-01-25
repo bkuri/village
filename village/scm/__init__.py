@@ -1,6 +1,7 @@
 """SCM abstraction layer."""
 
 from village.scm.git import GitSCM
+from village.scm.jj import JJSCM
 from village.scm.protocol import SCM, WorkspaceInfo
 from village.scm.utils import (
     generate_window_name,
@@ -17,4 +18,5 @@ __all__ = [
     "parse_window_name",
     "resolve_task_id",
     "GitSCM",
+    "JJSCM",
 ]
