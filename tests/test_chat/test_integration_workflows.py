@@ -69,7 +69,7 @@ def mock_bd_create(monkeypatch):
 
         return ""
 
-    monkeypatch.setattr("village.chat.conversation.run_command_output", fake_run_command)
+    monkeypatch.setattr("village.probes.tools.run_command_output", fake_run_command)
     return created_calls
 
 

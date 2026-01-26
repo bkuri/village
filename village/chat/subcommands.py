@@ -80,6 +80,11 @@ SUBCOMMANDS = {
         "description": "List all draft tasks",
         "args": [],
     },
+    "/brainstorm": {
+        "handler": "task_brainstorm",
+        "description": "Break down task using Sequential Thinking",
+        "args": ["title"],
+    },
 }
 
 
@@ -136,6 +141,7 @@ def execute_command(command: str, args: list[str], config: _Config) -> Subcomman
         "task_submit": _task_submit,
         "task_reset": _task_reset,
         "task_list_drafts": _task_list_drafts,
+        "task_brainstorm": _task_brainstorm,
     }
 
     handler = handlers.get(command)
@@ -447,3 +453,8 @@ def _task_list_drafts(args: list[str], config: _Config) -> tuple[str, str, int]:
         lines.append(f"      Created: {draft.created_at.strftime('%Y-%m-%d %H:%M')}")
 
     return "\n".join(lines), "", 0
+
+def _task_brainstorm(args: list[str], config: _Config) -> tuple[str, str, int]:
+    """Handle /brainstorm command (runs in conversation, not read-only)."""
+    return "", "Use /brainstorm in conversation mode", 0
+

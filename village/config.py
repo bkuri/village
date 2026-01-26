@@ -16,7 +16,41 @@ DEFAULT_MAX_WORKERS = 2
 DEFAULT_SCM_KIND = "git"
 DEFAULT_QUEUE_TTL_MINUTES = 5
 
-logger = logging.getLogger(__name__)  # type: ignore
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class DebugConfig:
+    """Debug configuration."""
+
+    enabled: bool = False
+
+    @classmethod
+    def from_env(cls) -> "DebugConfig":
+        """Load debug config from environment variable."""
+        debug_env = os.environ.get("VILLAGE_DEBUG", "").lower()
+        enabled = debug_env in ("1", "true", "yes")
+        return cls(enabled=enabled)
+
+
+@dataclass
+class LLMConfig:
+    """LLM provider configuration."""
+
+    provider: str = "openrouter"
+    model: str = "anthropic/claude-3.5-sonnet"
+    api_key_env: str = "OPENROUTER_API_KEY"
+    timeout: int = 300
+    max_tokens: int = 4096
+
+
+@dataclass
+class MCPConfig:
+    """MCP client configuration."""
+
+    enabled: bool = True
+    client_type: str = "mcp-use"
+    mcp_use_path: str = "mcp-use"
 
 
 @dataclass
@@ -28,6 +62,8 @@ class AgentConfig:
     ppc_mode: Optional[str] = None
     ppc_traits: list[str] = field(default_factory=list)
     ppc_format: str = "markdown"
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
 
 
 @dataclass
@@ -45,6 +81,9 @@ class Config:
     agents: dict[str, AgentConfig] = field(default_factory=dict)
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
+    debug: DebugConfig = field(default_factory=DebugConfig.from_env)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -189,6 +228,50 @@ def get_config() -> Config:
         os.environ.get("VILLAGE_DEFAULT_AGENT") or file_config.get("DEFAULT_AGENT") or DEFAULT_AGENT
     )
 
+    # Parse LLM configuration
+    llm_config = LLMConfig()
+    llm_provider = os.environ.get("VILLAGE_LLM_PROVIDER") or file_config.get("LLM_PROVIDER")
+    if llm_provider:
+        llm_config.provider = llm_provider
+
+    llm_model = os.environ.get("VILLAGE_LLM_MODEL") or file_config.get("LLM_MODEL")
+    if llm_model:
+        llm_config.model = llm_model
+
+    llm_api_key_env = file_config.get("LLM_API_KEY_ENV")
+    if llm_api_key_env:
+        llm_config.api_key_env = llm_api_key_env
+
+    llm_timeout_str = os.environ.get("VILLAGE_LLM_TIMEOUT") or file_config.get("LLM_TIMEOUT")
+    if llm_timeout_str:
+        try:
+            llm_config.timeout = int(llm_timeout_str)
+        except ValueError:
+            logger.warning(f"Invalid LLM_TIMEOUT value, using default: {llm_config.timeout}")
+
+    llm_max_tokens_str = os.environ.get("VILLAGE_LLM_MAX_TOKENS") or file_config.get(
+        "LLM_MAX_TOKENS"
+    )
+    if llm_max_tokens_str:
+        try:
+            llm_config.max_tokens = int(llm_max_tokens_str)
+        except ValueError:
+            logger.warning(f"Invalid LLM_MAX_TOKENS value, using default: {llm_config.max_tokens}")
+
+    # Parse MCP configuration
+    mcp_config = MCPConfig()
+    mcp_enabled_str = os.environ.get("VILLAGE_MCP_ENABLED") or file_config.get("MCP_ENABLED")
+    if mcp_enabled_str:
+        mcp_config.enabled = mcp_enabled_str.lower() in ("1", "true", "yes")
+
+    mcp_client_type = os.environ.get("VILLAGE_MCP_CLIENT") or file_config.get("MCP_CLIENT")
+    if mcp_client_type:
+        mcp_config.client_type = mcp_client_type
+
+    mcp_use_path = file_config.get("MCP_USE_PATH")
+    if mcp_use_path:
+        mcp_config.mcp_use_path = mcp_use_path
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -215,6 +298,10 @@ def get_config() -> Config:
                 agents[agent_name].ppc_traits = _parse_ppc_traits(value)
             elif field_name == "ppc_format":
                 agents[agent_name].ppc_format = value.lower() if value else "markdown"
+            elif field_name == "llm_provider":
+                agents[agent_name].llm_provider = value.lower() if value else None
+            elif field_name == "llm_model":
+                agents[agent_name].llm_model = value if value else None
 
     logger.debug(f"Git root: {git_root}")
     logger.debug(f"Village dir: {village_dir}")
@@ -242,4 +329,6 @@ def get_config() -> Config:
         queue_ttl_minutes=queue_ttl_minutes,
         default_agent=default_agent,
         agents=agents,
+        llm=llm_config,
+        mcp=mcp_config,
     )

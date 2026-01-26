@@ -2,9 +2,9 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -26,6 +26,11 @@ class SessionSnapshot:
     current_context_files: dict[str, str]
     pending_enables: list[str]
     created_task_ids: list[str]
+
+    # Brainstorm-specific fields
+    brainstorm_baseline: Optional[dict[str, Any]] = None
+    brainstorm_created_ids: list[str] = field(default_factory=list)
+    brainstorm_batch_id: Optional[str] = None
 
 
 def save_session_state(state: Any, config: _Config) -> None:

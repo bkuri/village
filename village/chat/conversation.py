@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from village.chat.baseline import collect_baseline
 from village.chat.context import (
     ContextFile,
     ContextUpdate,
@@ -23,14 +24,21 @@ from village.chat.drafts import (
     load_draft,
     save_draft,
 )
+from village.chat.initialization import ensure_beads_initialized
 from village.chat.prompts import ChatMode, generate_initial_prompt, generate_mode_prompt
 from village.chat.schema import validate_schema
+from village.chat.sequential_thinking import (
+    generate_task_breakdown,
+    validate_dependencies,
+)
 from village.chat.state import (
     SessionSnapshot,
     save_session_state,
     take_session_snapshot,
 )
 from village.chat.subcommands import execute_command, parse_command
+from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
+from village.llm import get_llm_client
 from village.probes.tools import SubprocessError, run_command_output
 
 if TYPE_CHECKING:
@@ -115,7 +123,7 @@ def start_conversation(config: _Config, mode: str = "knowledge-share") -> Conver
     return state
 
 
-def process_user_input(
+async def process_user_input(
     state: ConversationState, user_input: str, config: _Config
 ) -> ConversationState:
     """
@@ -238,7 +246,7 @@ def _call_llm(
     messages: list[ConversationMessage], config: _Config, mode: str = "knowledge-share"
 ) -> str:
     """
-    Call LLM via backend subprocess.
+    Call LLM via provider-agnostic client.
 
     Args:
         messages: Conversation messages
@@ -251,29 +259,17 @@ def _call_llm(
     conversation = "\n\n".join([f"{m.role}: {m.content}" for m in messages[-10:]])
 
     try:
-        result = subprocess.run(
-            ["opencode", "run"],
-            input=conversation,
-            cwd=config.git_root,
-            capture_output=True,
-            text=True,
-            timeout=300,
+        llm_client = get_llm_client(config)
+        response = llm_client.call(
+            conversation,
+            timeout=config.llm.timeout,
+            max_tokens=config.llm.max_tokens,
         )
 
-        if result.returncode != 0:
-            logger.error(f"OpenCode failed with code {result.returncode}: {result.stderr}")
-            return f"Error: OpenCode execution failed ({result.returncode})"
-
-        return result.stdout
-    except subprocess.TimeoutExpired:
-        logger.error("OpenCode call timed out")
-        return "Error: OpenCode call timed out (30s)"
-    except FileNotFoundError:
-        logger.error("OpenCode not found")
-        return "Error: OpenCode not found in PATH"
+        return response
     except Exception as e:
-        logger.error(f"OpenCode call failed: {e}")
-        return f"Error: Failed to call OpenCode ({e})"
+        logger.error(f"LLM call failed: {e}")
+        return f"Error: Failed to call LLM ({e})"
 
 
 def _handle_task_subcommand(
@@ -692,3 +688,149 @@ def _display_batch_summary(summary: dict[str, Any]) -> str:
 def should_exit(user_input: str) -> bool:
     """Check if user wants to exit."""
     return user_input.strip().lower() in {"/exit", "/quit", "/bye"}
+
+
+async def _handle_brainstorm(
+    args: list[str],
+    state: ConversationState,
+    config: _Config,
+) -> ConversationState:
+    """
+    Break down task using Sequential Thinking.
+
+    Flow:
+    1. Collect baseline (title + reasoning)
+    2. Generate task breakdown using Sequential Thinking
+    3. Create draft tasks in Beads
+    4. Display results
+
+    Args:
+        args: Command arguments (title, optional)
+        state: Current conversation state
+        config: Village config
+
+    Returns:
+        Updated ConversationState
+    """
+
+    try:
+        ensure_beads_initialized(config)
+
+        initial_title = " ".join(args) if args else None
+        baseline = collect_baseline(initial_title)
+
+        snapshot_data = {
+            "baseline_title": baseline.title,
+            "baseline_reasoning": baseline.reasoning,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        state.session_snapshot = SessionSnapshot(
+            start_time=datetime.now(),
+            batch_id=f"batch-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+            initial_context_files={},
+            current_context_files={},
+            pending_enables=[],
+            created_task_ids=[],
+            brainstorm_baseline=snapshot_data,
+            brainstorm_created_ids=[],
+        )
+
+        try:
+            beads_json = run_command_output(["bd", "list", "--json"])
+        except SubprocessError:
+            beads_json = None
+
+        breakdown = generate_task_breakdown(
+            baseline,
+            config,
+            beads_state=beads_json,
+        )
+
+        if not validate_dependencies(breakdown):
+            state.messages.append(
+                ConversationMessage(
+                    role="assistant",
+                    content=(
+                        "Error: Task dependencies are invalid.\n\n"
+                        "Try: /brainstorm with simpler breakdown"
+                    ),
+                )
+            )
+            return state
+
+        specs = extract_beads_specs(
+            baseline,
+            breakdown,
+            config.git_root.name,
+        )
+
+        created_tasks = await create_draft_tasks(specs, config)
+
+        state.session_snapshot.brainstorm_created_ids = list(created_tasks.values())
+
+        state.pending_enables.extend(state.session_snapshot.brainstorm_created_ids)
+
+        for title, task_id in created_tasks.items():
+            truncated = title[:48]
+            state.messages.append(
+                ConversationMessage(role="assistant", content=f"☐ {task_id}: {truncated}")
+            )
+
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=(
+                    f"Created {len(created_tasks)} draft task"
+                    f"{'s' if len(created_tasks) > 1 else ''}. "
+                    "Next:\n"
+                    f"  • /edit <id> to refine a task\n"
+                    f"  • /enable <id> to add to submission batch\n"
+                    f"  • /drafts to see all\n"
+                    f"  • /submit when ready"
+                ),
+            )
+        )
+
+        return state
+
+    except ValueError as e:
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=f"Error: {str(e)}\n\nTry again with more details.",
+            )
+        )
+        return state
+
+    except subprocess.CalledProcessError as e:
+        if config.debug.enabled:
+            logger.debug(f"Sequential Thinking error: {e.stderr}")
+
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=(
+                    "Error: Sequential Thinking couldn't break down task.\n\n"
+                    "Try:\n"
+                    "1. Simplify your description\n"
+                    "2. Be more specific about what needs breaking down\n"
+                    "3. Retry: /brainstorm [title]"
+                ),
+            )
+        )
+        return state
+
+    except Exception as e:
+        if config.debug.enabled:
+            logger.error(f"Brainstorm handler error: {e}")
+        else:
+            logger.error(f"Brainstorm handler error: {str(e)}")
+
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content="Error: Unexpected failure.\n\nTry: /brainstorm again",
+            )
+        )
+        return state

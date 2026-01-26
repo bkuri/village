@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from village.config import Config, get_config
-from village.scm import SCM, GitSCM, JJSCM, resolve_task_id
+from village.scm import JJSCM, SCM, GitSCM, resolve_task_id
 
 logger = logging.getLogger(__name__)  # type: ignore
 
