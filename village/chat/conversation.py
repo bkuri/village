@@ -39,6 +39,7 @@ from village.chat.state import (
 from village.chat.subcommands import execute_command, parse_command
 from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
 from village.llm import get_llm_client
+from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 
 if TYPE_CHECKING:
@@ -46,10 +47,36 @@ if TYPE_CHECKING:
 
     _Config = Config
 else:
-    _Config = object
-    Config = object  # type: ignore[misc]
+    from village.config import Config as _Config  # type: ignore[misc]
 
 logger = logging.getLogger(__name__)
+
+
+def get_beads_workflow_context(config: _Config) -> str:
+    """
+    Get Beads workflow context via bd prime command.
+
+    This provides AI-optimized workflow context (~50 tokens) that
+    helps agents remember Beads workflow details across context compaction.
+
+    Args:
+        config: Village config
+
+    Returns:
+        Workflow context string (empty if Beads not available)
+    """
+    beads_status = beads_available()
+    if not (beads_status.command_available and beads_status.repo_initialized):
+        logger.debug("Beads not available, skipping workflow context")
+        return ""
+
+    try:
+        workflow_context = run_command_output(["bd", "prime"])
+        logger.debug("Injected Beads workflow context (~50 tokens)")
+        return workflow_context
+    except SubprocessError as e:
+        logger.warning(f"Failed to get Beads workflow context: {e}")
+        return ""
 
 
 @dataclass
@@ -98,6 +125,10 @@ def start_conversation(config: _Config, mode: str = "knowledge-share") -> Conver
 
     context_dir = get_context_dir(config)
     context_files = get_current_context(context_dir)
+
+    beads_workflow = get_beads_workflow_context(config)
+    if beads_workflow:
+        prompt += f"\n\n## Beads Workflow Context\n\n{beads_workflow}\n"
 
     context_summary = ""
     if context_files:
