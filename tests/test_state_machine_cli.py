@@ -288,8 +288,7 @@ class TestResumeTaskCommand:
         assert "state_transition" in events_content
         assert 'to_state":"in_progress"' in events_content
 
+        # Setup click runner
+        from click.testing import CliRunner
 
-# Setup click runner
-from click.testing import CliRunner
-
-runner = CliRunner(mix_stderr=False)
+        runner = CliRunner()
