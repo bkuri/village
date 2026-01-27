@@ -80,3 +80,14 @@ class SCM(Protocol):
         Returns:
             List of workspace information
         """
+
+    def reset_workspace(self, workspace_path: Path) -> None:
+        """
+        Reset workspace to clean state (discard all modifications).
+
+        Args:
+            workspace_path: Path to workspace to reset
+
+        Raises:
+            RuntimeError: If workspace reset fails
+        """

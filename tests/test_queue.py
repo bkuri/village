@@ -237,7 +237,7 @@ class TestArbitrateLocks:
             QueueTask(task_id="bd-b7d2", agent="test"),
         ]
 
-        with patch("village.queue.collect_workers") as mock_workers:
+        with patch("village.status.collect_workers") as mock_workers:
             mock_workers.return_value = []
             plan = arbitrate_locks(tasks, "village", 2, mock_config)
 
@@ -258,7 +258,7 @@ class TestArbitrateLocks:
         mock_worker = MagicMock()
         mock_worker.task_id = "bd-b7d2"
 
-        with patch("village.queue.collect_workers") as mock_workers:
+        with patch("village.status.collect_workers") as mock_workers:
             mock_workers.return_value = [mock_worker]
             plan = arbitrate_locks(tasks, "village", 2, mock_config)
 
@@ -282,7 +282,7 @@ class TestArbitrateLocks:
             QueueTask(task_id="bd-c4e1", agent="worker"),
         ]
 
-        with patch("village.queue.collect_workers") as mock_workers:
+        with patch("village.status.collect_workers") as mock_workers:
             mock_workers.return_value = []
             plan = arbitrate_locks(tasks, "village", 2, mock_config)
 
@@ -305,7 +305,7 @@ class TestArbitrateLocks:
         mock_worker2 = MagicMock()
         mock_worker2.task_id = "other-2"
 
-        with patch("village.queue.collect_workers") as mock_workers:
+        with patch("village.status.collect_workers") as mock_workers:
             mock_workers.return_value = [mock_worker1, mock_worker2]
             plan = arbitrate_locks(tasks, "village", 2, mock_config)
 
@@ -328,7 +328,7 @@ class TestArbitrateLocks:
         mock_worker = MagicMock()
         mock_worker.task_id = "bd-a3f8"
 
-        with patch("village.queue.collect_workers") as mock_workers:
+        with patch("village.status.collect_workers") as mock_workers:
             mock_workers.return_value = [mock_worker]
             plan = arbitrate_locks(tasks, "village", 2, mock_config)
 
@@ -365,7 +365,7 @@ class TestGenerateQueuePlan:
                 plan = generate_queue_plan("village", 2, mock_config)
 
                 mock_extract.assert_called_once_with(mock_config)
-                mock_arbitrate.assert_called_once_with(tasks, "village", 2, mock_config)
+                mock_arbitrate.assert_called_once_with(tasks, "village", 2, mock_config, False)
                 assert plan == expected_plan
 
     def test_uses_default_config_when_not_provided(self, tmp_path: Path):

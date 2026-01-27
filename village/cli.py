@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 import click
 
 from village.config import get_config
+from village.dashboard import VillageDashboard
+from village.event_log import Event, append_event
+from village.event_query import EventFilters, query_events
 from village.errors import (
     EXIT_BLOCKED,
     EXIT_ERROR,
@@ -14,7 +17,7 @@ from village.errors import (
     EXIT_SUCCESS,
     InterruptedResume,
 )
-from village.event_log import Event, append_event
+from village.metrics import MetricsCollector
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
     clear_pane_cache,
@@ -828,3 +831,357 @@ def chat(start_mode: bool, force: bool) -> None:
             )
 
         save_session_state(state, config)
+
+
+@village.command()
+@click.option("--watch", is_flag=True, help="Auto-refresh mode")
+@click.option(
+    "--refresh-interval",
+    type=int,
+    default=None,
+    help="Refresh interval in seconds (default: from config)",
+)
+def dashboard(watch: bool, refresh_interval: int | None) -> None:
+    """
+    Show real-time dashboard of Village state.
+
+    Displays active workers, task queue, lock status, and orphans.
+    Auto-refreshes every 2 seconds by default (configurable).
+
+    \b
+    Non-mutating. Probes actual state, doesn't create directories.
+
+    Examples:
+        village dashboard
+        village dashboard --watch
+        village dashboard --watch --refresh-interval 5
+        village dashboard --refresh-interval 10
+    \b
+
+    Flags:
+        --watch: Enable auto-refresh mode
+        --refresh-interval: Set refresh interval in seconds
+
+    Default: Static dashboard view (no auto-refresh)
+    """
+    from village.dashboard import VillageDashboard
+
+    config = get_config()
+
+    interval = refresh_interval or config.dashboard.refresh_interval_seconds
+    enabled = config.dashboard.enabled
+
+    if not enabled:
+        click.echo("Dashboard is disabled. Enable with DASHBOARD_ENABLED=true")
+        sys.exit(EXIT_ERROR.value)
+
+    if watch:
+        dashboard = VillageDashboard(config, interval)
+        dashboard.start_watch_mode()
+    else:
+        from village.dashboard import render_dashboard_static
+
+        output = render_dashboard_static(config)
+        click.echo(output)
+
+
+@village.command()
+@click.option("--task", type=str, help="Filter by task ID")
+@click.option("--status", type=str, help="Filter by status (e.g., success, error)")
+@click.option("--since", type=str, help="Show events since timestamp (ISO 8601)")
+@click.option(
+    "--last",
+    type=str,
+    help="Show events since time duration (e.g., 1h, 30m, 7d)",
+)
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def events(
+    task: str | None,
+    status: str | None,
+    since: str | None,
+    last: str | None,
+    json_output: bool,
+) -> None:
+    """
+    Query and display Village events.
+
+    Filters events from events.log by task, status, or time range.
+    Outputs in human-readable table or JSON format.
+
+    \b
+    Non-mutating. Reads events.log for querying.
+
+    Examples:
+        village events
+        village events --task bd-a3f8
+        village events --status error --last 1h
+        village events --since 2026-01-26T00:00:00Z
+        village events --json
+
+    Filters:
+        --task: Show events for specific task
+        --status: Filter by event status (success, error, etc.)
+        --since: Show events after ISO timestamp
+        --last: Show events within time duration (1h, 30m, 7d)
+        --json: Output as JSON
+
+    Default: All events in human-readable format
+    """
+    from datetime import timedelta
+
+    from village.event_query import EventFilters, query_events
+
+    config = get_config()
+
+    filters = EventFilters(task_id=task, status=status, since=None, last=None)
+
+    if since:
+        from village.event_query import parse_timestamp
+
+        try:
+            filters.since = parse_timestamp(since)
+        except ValueError as e:
+            click.echo(f"Invalid timestamp format: {e}")
+            sys.exit(EXIT_ERROR.value)
+
+    if last:
+        from village.event_query import parse_duration
+
+        try:
+            filters.last = parse_duration(last)
+        except ValueError as e:
+            click.echo(f"Invalid duration format: {e}")
+            sys.exit(EXIT_ERROR.value)
+
+    if json_output:
+        result = query_events(filters, "json", config)
+        click.echo(result)
+    else:
+        result = query_events(filters, "table", config)
+        click.echo(result)
+
+
+@village.command()
+@click.argument("task_id")
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def state(task_id: str, json_output: bool) -> None:
+    """
+    Show task state and history.
+
+    Displays the current state and state transition history for a task.
+
+    \b
+    Non-mutating. Reads state from lock file.
+
+    Examples:
+        village state bd-a3f8
+        village state bd-a3f8 --json
+
+    Options:
+        --json: Output as JSON instead of human-readable table
+
+    Exit codes:
+        0: State found and displayed
+        4: Task not found (no lock file)
+    """
+    from village.state_machine import TaskStateMachine
+
+    config = get_config()
+    state_machine = TaskStateMachine(config)
+
+    current_state = state_machine.get_state(task_id)
+    history = state_machine.get_state_history(task_id)
+
+    if current_state is None and not history:
+        click.echo(f"Task {task_id} not found (no lock file)", err=True)
+        sys.exit(EXIT_BLOCKED.value)
+
+    if json_output:
+        output = {
+            "task_id": task_id,
+            "current_state": current_state.value if current_state else None,
+            "history": [
+                {
+                    "ts": h.ts,
+                    "from_state": h.from_state.value if h.from_state else None,
+                    "to_state": h.to_state.value,
+                    "context": h.context,
+                }
+                for h in history
+            ],
+        }
+        click.echo(json.dumps(output, sort_keys=True, indent=2))
+    else:
+        click.echo(f"Task: {task_id}")
+        click.echo(f"Current State: {current_state.value if current_state else 'None'}")
+
+        if history:
+            click.echo("\nState History:")
+            for h in history:
+                from_str = h.from_state.value if h.from_state else "initial"
+                click.echo(f"  {h.ts}: {from_str} → {h.to_state.value}")
+                if h.context:
+                    for key, value in h.context.items():
+                        click.echo(f"    {key}: {value}")
+        else:
+            click.echo("\nNo state history available")
+
+
+@village.command()
+@click.argument("task_id")
+@click.option("--force", is_flag=True, help="Force pause without validation")
+def pause(task_id: str, force: bool) -> None:
+    """
+    Pause an in-progress task.
+
+    Pauses a task that is currently in progress. Only valid from IN_PROGRESS state.
+
+    \b
+    Mutating. Updates lock file with PAUSED state.
+
+    Examples:
+        village pause bd-a3f8
+        village pause bd-a3f8 --force
+
+    Options:
+        --force: Skip state validation (bypass IN_PROGRESS check)
+
+    Exit codes:
+        0: Task paused successfully
+        4: Task not in IN_PROGRESS state
+        5: Task not found
+    """
+    from village.state_machine import TaskStateMachine, TaskState
+
+    config = get_config()
+    state_machine = TaskStateMachine(config)
+
+    current_state = state_machine.get_state(task_id)
+
+    if current_state is None:
+        click.echo(f"Task {task_id} not found (no lock file)", err=True)
+        sys.exit(EXIT_BLOCKED.value)
+
+    if not force and current_state != TaskState.IN_PROGRESS:
+        click.echo(f"Task {task_id} is not IN_PROGRESS (current: {current_state.value})", err=True)
+        sys.exit(EXIT_BLOCKED.value)
+
+    result = state_machine.transition(
+        task_id,
+        TaskState.PAUSED,
+        context={"reason": "user_paused"},
+    )
+
+    if result.success:
+        click.echo(f"Paused task {task_id}")
+    else:
+        click.echo(f"Failed to pause: {result.message}", err=True)
+        sys.exit(EXIT_ERROR.value)
+
+
+@village.command("resume-task")
+@click.argument("task_id")
+@click.option("--force", is_flag=True, help="Force resume without validation")
+def resume_task(task_id: str, force: bool) -> None:
+    """
+    Resume a paused task.
+
+    Resumes a task that is currently paused. Only valid from PAUSED state.
+
+    \b
+    Mutating. Updates lock file with IN_PROGRESS state.
+
+    Note: This command manages task state only. To execute a task,
+    use the resume module workflow instead.
+
+    Examples:
+        village resume-task bd-a3f8
+        village resume-task bd-a3f8 --force
+
+    Options:
+        --force: Skip state validation (bypass PAUSED check)
+
+    Exit codes:
+        0: Task resumed successfully
+        4: Task not in PAUSED state
+        5: Task not found
+    """
+    from village.state_machine import TaskStateMachine, TaskState
+
+    config = get_config()
+    state_machine = TaskStateMachine(config)
+
+    current_state = state_machine.get_state(task_id)
+
+    if current_state is None:
+        click.echo(f"Task {task_id} not found (no lock file)", err=True)
+        sys.exit(EXIT_BLOCKED.value)
+
+    if not force and current_state != TaskState.PAUSED:
+        click.echo(
+            f"Task {task_id} is not PAUSED (current: {current_state.value})",
+            err=True,
+        )
+        sys.exit(EXIT_BLOCKED.value)
+
+    result = state_machine.transition(
+        task_id,
+        TaskState.IN_PROGRESS,
+        context={"reason": "user_resumed"},
+    )
+
+    if result.success:
+        click.echo(f"Resumed task {task_id}")
+    else:
+        click.echo(f"Failed to resume: {result.message}", err=True)
+        sys.exit(EXIT_ERROR.value)
+
+
+@village.command()
+@click.option("--backend", type=click.Choice(["prometheus", "statsd"]), help="Metrics backend")
+@click.option("--port", type=int, help="Port for metrics export")
+@click.option("--interval", type=int, help="Export interval in seconds")
+def metrics_export(backend: str, port: int | None, interval: int | None) -> None:
+    """
+    Export Village metrics.
+
+    Exports metrics to Prometheus (HTTP) or StatsD (UDP).
+    Metrics include workers, queue length, locks, orphans.
+
+    \b
+    Non-mutating. Collects metrics from Village state.
+
+    Examples:
+        village metrics export --backend prometheus --port 9090
+        village metrics export --backend statsd
+        village metrics export --interval 30
+
+    Backend options:
+        --backend prometheus: Prometheus HTTP endpoint
+        --backend statsd: StatsD UDP socket
+
+    Other options:
+        --port: Port for Prometheus server (default: from config)
+        --interval: Export interval in seconds (default: from config)
+
+    Default: One-time export using configured backend
+    """
+    from village.metrics import MetricsCollector
+
+    config = get_config()
+
+    backend_choice = backend or config.metrics.backend
+    port_choice = port or config.metrics.port
+    interval_choice = interval or config.metrics.export_interval_seconds
+
+    collector = MetricsCollector(config)
+
+    if backend_choice == "prometheus":
+        prometheus_metrics = collector.export_prometheus()
+        click.echo(f"Prometheus metrics:\n{prometheus_metrics}")
+    elif backend_choice == "statsd":
+        statsd_metrics = collector.export_statsd()
+        click.echo(f"StatsD metrics:\n{statsd_metrics}")
+    else:
+        click.echo(f"Unknown backend: {backend_choice}")
+        sys.exit(EXIT_ERROR.value)

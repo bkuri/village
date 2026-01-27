@@ -150,7 +150,7 @@ class TestQueueCLIExecution:
         )
 
         # Mock successful execution
-        def mock_execute(plan, session_name, config):
+        def mock_execute(plan, session_name, config, force):
             return [
                 ResumeResult(
                     success=True,
@@ -193,7 +193,7 @@ class TestQueueCLIExecution:
         )
 
         # Mock mixed results
-        def mock_execute(plan, session_name, config):
+        def mock_execute(plan, session_name, config, force=False):
             return [
                 ResumeResult(
                     success=True,
@@ -239,7 +239,7 @@ class TestQueueCLIExecution:
         )
 
         # Mock all failed
-        def mock_execute(plan, session_name, config):
+        def mock_execute(plan, session_name, config, force=False):
             return [
                 ResumeResult(
                     success=False,
@@ -282,7 +282,7 @@ class TestQueueCLIExecution:
             concurrency_limit=1,
         )
 
-        def mock_execute(plan, session_name, config):
+        def mock_execute(plan, session_name, config, force=False):
             return [
                 ResumeResult(
                     success=True,

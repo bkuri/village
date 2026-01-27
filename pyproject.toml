@@ -1,6 +1,6 @@
 [project]
 name = "village"
-version = "0.2.0"
+version = "0.2.3"
 description = "CLI-native parallel development orchestrator"
 requires-python = ">=3.11"
 dependencies = [
@@ -43,5 +43,7 @@ dev = [
     "mypy>=1.19.1",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
+    "requests>=2.32.5",
     "ruff>=0.14.14",
+    "types-requests>=2.32.4.20260107",
 ]

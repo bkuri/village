@@ -39,6 +39,98 @@ Village is intentionally:
 
 ---
 
+## Village vs OpenCode + PPC: Why Village Exists
+
+### Village's Unique Value Proposition
+
+Village is **coordination infrastructure**, not just "OpenCode with policies".
+
+**What OpenCode + PPC provides:**
+- Static prompt generation via PPC
+- Isolated execution via OpenCode
+- No coordination between sessions
+- No persistent state
+- No recovery model
+
+**What Village provides (and OpenCode cannot):**
+
+| Capability | Village | OpenCode + PPC | Why Village is Essential |
+|------------|---------|----------------|-------------------------|
+| Multi-agent coordination | ✅ Lock system, concurrency limits | ❌ No coordination | Prevents duplicate work, enforces fairness |
+| State management | ✅ Lock files, event logs | ❌ No persistent state | Enables crash recovery, audit trails |
+| Runtime policies | ✅ Deduplication, resource limits | ❌ Static prompts only | Adapts to runtime conditions |
+| Observability | ✅ Status system, event logging | ❌ No visibility | Debugging, monitoring, trust |
+| Recovery model | ✅ Orphan detection, cleanup | ❌ No recovery | Survives crashes, interruptions |
+| Conflict detection | ✅ File overlap detection | ❌ No conflict handling | Prevents resource corruption |
+| Beads integration | ✅ DAG-aware scheduling | ❌ Manual task selection | Optimal task ordering |
+| tmux orchestration | ✅ Session/pane lifecycle | ❌ Manual session mgmt | Consistent runtime behavior |
+
+### The "Local, Auditable" Advantage
+
+**Village runs as a local service with auditable source code:**
+- Source code can be inspected and verified
+- Log files capture exact execution paths
+- Stack traces trace through local code
+- Tests guarantee behavior (deterministic, reproducible)
+- No black-box decisions (every operation is explainable)
+
+**Contrast with LLM-only approaches:**
+- LLMs are black boxes (cannot inspect reasoning)
+- Cannot guarantee what happened vs what should happen
+- No source code to review or audit
+- Behavior may be non-deterministic
+- Cannot trust execution without transparency
+
+**This matters because:**
+- **Security**: Local code can be audited; LLMs cannot
+- **Debugging**: Stack traces point to exact line; LLM outputs do not
+- **Reproducibility**: Same input → same output; LLMs may vary
+- **Trust**: You can verify Village's source code; you cannot verify an LLM
+- **Compliance**: Audit trails require verifiable source code
+
+### Village's Role in the Toolchain
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ Intent Plane (What to do)                               │
+│ • Beads: Task DAG, readiness, dependencies             │
+│ • PPC: Prompt generation (optional)                     │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Coordination Plane (How to coordinate)                 │
+│ • Village: Scheduling, locking, policies, recovery      │
+│   → Multi-agent coordination (impossible without Village)  │
+│   → Stateful orchestration (OpenCode cannot provide)     │
+│   → Safety guarantees (LLMs cannot guarantee)            │
+└─────────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Execution Plane (Do the work)                           │
+│ • tmux: Runtime truth, observability                    │
+│ • git/jj worktrees: Isolation                         │
+│ • OpenCode: Agent execution                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Village is indispensable because:**
+- OpenCode cannot coordinate (runs isolated sessions)
+- PPC cannot execute (generates static prompts)
+- LLMs cannot guarantee safety (black boxes)
+- Village provides the coordination layer that transforms isolated OpenCode sessions into a managed multi-agent workforce
+
+**Without Village, you cannot reliably:**
+1. Run multiple agents in parallel without conflicts
+2. Survive crashes without losing work
+3. Prevent duplicate task execution
+4. Observe what's actually running across all sessions
+5. Clean up orphaned resources
+6. Scale to production workloads with guarantees
+
+**Village's core differentiator**: Not execution (OpenCode does that), not prompts (PPC does that), but **coordination infrastructure** with audit trails, safety guarantees, and production reliability.
+
+---
+
 ## Core Concepts
 
 ### Task
@@ -438,18 +530,179 @@ Village remains a **local-first flow engine**.
 
 ---
 
-## Success Criteria
+## Audit & Trust Guarantees
 
-- `village ready` answers "what now?"
-- `village resume` resumes both tasks and flow
-- No accidental side effects
-- Predictable recovery after crashes
-- Readable codebase under 2k LOC
+### Local, Auditable Source Code
+
+Village runs as a **local service with auditable source code**:
+
+- Source code can be inspected and verified
+- Log files capture exact execution paths
+- Stack traces trace through local code
+- Tests guarantee behavior (deterministic, reproducible)
+- No black-box decisions (every operation is explainable)
+
+### Audit Trail Features
+
+**Event Logging**:
+- All operations logged to `.village/events.log` (NDJSON format)
+- Each entry includes: timestamp, command, task_id, pane_id, result
+- Stack traces captured for errors
+- Source code version included in log entries
+
+**State Inspection**:
+- Lock files provide persistent lease records
+- Worktree status can be queried
+- Tmux pane IDs prove what's actually running
+- Orphan detection identifies incomplete operations
+
+**Deterministic Behavior**:
+- Same inputs → same outputs
+- No hidden randomization or non-determinism
+- Version-controlled contracts and policies
+- Test suite validates expected behavior
+
+### Contrast with LLM-Only Approaches
+
+**LLM Limitations**:
+- Black box reasoning (cannot inspect decision process)
+- No source code to review or audit
+- Behavior may be non-deterministic
+- Cannot verify what happened vs what should happen
+- No stack traces or error context
+
+**Village Advantages**:
+- ✅ Local, auditable source code
+- ✅ Complete audit trails (event logs, stack traces)
+- ✅ Deterministic, reproducible behavior
+- ✅ Test guarantees for all operations
+- ✅ Every operation is explainable
+
+**This matters because**:
+- **Security**: Local code can be audited; LLMs cannot
+- **Debugging**: Stack traces point to exact line; LLM outputs do not
+- **Reproducibility**: Same input → same output; LLMs may vary
+- **Trust**: You can verify Village's source code; you cannot verify an LLM
+- **Compliance**: Audit trails require verifiable source code
+
+### Production Trust Model
+
+Village establishes a **trust model based on verifiability**:
+
+1. **You can verify**: Source code is open and inspectable
+2. **You can audit**: Event logs capture every operation
+3. **You can reproduce**: Deterministic behavior yields consistent results
+4. **You can debug**: Stack traces show exact execution paths
+
+This is fundamentally different from LLM-only approaches where:
+- Reasoning is opaque (black box)
+- Behavior is variable (non-deterministic)
+- No audit trail (just inputs and outputs)
+- Cannot verify correctness (trust without verification)
+
+---
+
+## Success Criteria for v1.0
+
+Village v1.0 is production-ready when:
+
+### Critical Differentiators (v0.3.0)
+
+1. **Coordination Infrastructure**
+   - [ ] Multiple agents run in parallel without conflicts
+   - [ ] Concurrency limits are enforced across all agents
+   - [ ] Priority-based scheduling works correctly (if implemented)
+   - [ ] Resource quotas prevent resource exhaustion (if implemented)
+
+2. **State Management**
+   - [ ] Lock files survive crashes and are recoverable
+   - [ ] Orphan detection identifies incomplete operations
+   - [ ] Event logs provide complete audit trails
+   - [ ] State machine transitions are validated
+   - [ ] Session snapshots enable rollback capability
+
+3. **Safety & Recovery**
+   - [ ] Automatic rollback recovers from failed tasks
+   - [ ] Conflict detection prevents data corruption
+   - [ ] Cleanup automation removes orphaned resources
+   - [ ] Deduplication prevents duplicate work
+
+### Observability (v0.4.0)
+
+4. **System Visibility**
+   - [ ] Real-time dashboard shows system state
+   - [ ] Metrics export integrates with monitoring tools (Prometheus, StatsD)
+   - [ ] Event queries provide historical inspection
+   - [ ] Status commands report complete system state
+
+5. **Audit & Trust**
+
+6. **Audit Trails**
+   - [ ] All operations are logged with stack traces
+   - [ ] Source code is auditable and verifiable
+   - [ ] Tests guarantee deterministic behavior
+   - [ ] No black-box decisions (everything is explainable)
+
+7. **Local, Auditable Guarantee**
+   - [ ] README and PRD emphasize local service advantage
+   - [ ] Documentation explains audit features
+   - [ ] Source code version in log entries
+   - [ ] Deterministic behavior documented
+
+### Production Readiness
+
+8. **Quality & Stability**
+   - [ ] Test coverage >85% overall, >90% for critical modules
+   - [ ] Zero critical bugs (exit code 1 crashes)
+   - [ ] All features documented with examples
+   - [ ] Troubleshooting guide comprehensive
+   - [ ] CHANGELOG.md comprehensive and up-to-date
+
+9. **Integration & Completeness**
+   - [ ] GitHub integration works correctly (if implemented)
+   - [ ] CI/CD triggers execute on task completion (if implemented)
+   - [ ] Notifications sent for configured events (if implemented)
+   - [ ] Beads sync keeps task status updated
+   - [ ] Multi-repo support works (if implemented)
+
+10. **User Experience**
+    - [ ] E2E test suite passes (>30 tests) (v1.1.0 milestone)
+    - [ ] All commands work identically across SCM backends (git, jj)
+    - [ ] Zero breaking changes from v0.2.x to v1.0.0
+    - [ ] Error messages are actionable and specific
+    - [ ] Migration guide provided (v0.2.x → v1.0.0)
+
+### v1.0.0 Release Checklist
+
+**Essential Features (v0.3.0-v0.4.0):**
+- [ ] State machine workflows implemented and working
+- [ ] Automatic rollback functional
+- [ ] Conflict detection operational
+- [ ] Real-time dashboard functional
+- [ ] Metrics export working
+- [ ] Event queries operational
+
+**Production Readiness:**
+- [ ] Test coverage >85% overall
+- [ ] Zero critical bugs in production
+- [ ] Documentation complete (README, PRD, examples, troubleshooting)
+- [ ] CHANGELOG.md up-to-date
+- [ ] Audit trails comprehensive
+
+**Quality Assurance:**
+- [ ] E2E test suite passing (>30 tests, v1.1.0)
+- [ ] All features tested end-to-end
+- [ ] Backward compatibility verified
+- [ ] Performance benchmarks documented
 
 ---
 
 ## Version History
 
-- **v0.1.1** (Current) - Alpha with SCM abstraction layer
-- **v0.1.0** - Alpha release with core functionality
-- **v1.0** - Target release with full PRD implementation
+- **v0.2.3** (Current) - Jujutsu (jj) support
+- **v0.3.0** (Planned) - Safety & coordination (essential)
+- **v0.4.0** (Planned) - Enhanced observability (essential)
+- **v1.0.0** (Target) - Production-ready coordination layer
+- **v1.1.0** (Future) - High-ROI integrations
+- **v1.2.0** (Future) - Medium-ROI optimizations
+- **v1.3.0** (Future) - Low-ROI features

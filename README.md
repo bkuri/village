@@ -56,6 +56,64 @@ No guessing.
 
 ---
 
+## Village vs OpenCode + PPC: Why You Need Both
+
+### What OpenCode + PPC Provides
+
+**OpenCode + PPC** is great for:
+- Generating prompts deterministically
+- Running isolated AI sessions
+- Single-task execution
+
+### What Village Provides (That OpenCode Cannot)
+
+1. **Multi-Agent Coordination**
+   - Lock system prevents duplicate work
+   - Concurrency limits enforce fairness
+   - Priority scheduling optimizes throughput
+
+2. **State Management**
+   - Lock files survive crashes
+   - Event logs capture audit trails
+   - Orphan detection cleans up failures
+
+3. **Observability**
+   - Real-time dashboard shows system state
+   - Metrics export integrates with monitoring
+   - Event queries provide historical inspection
+
+4. **Safety Guarantees**
+   - Conflict detection prevents data corruption
+   - Automatic rollback recovers from failures
+   - Resource quotas prevent exhaustion
+
+### The "Local, Auditable" Advantage
+
+Village runs as a **local service with auditable source code**:
+- ✅ Source code can be inspected and verified
+- ✅ Log files capture exact execution paths
+- ✅ Stack traces trace through local code
+- ✅ Tests guarantee behavior (deterministic, reproducible)
+- ✅ No black-box decisions (everything is explainable)
+
+**Contrast with LLM-only approaches:**
+- ❌ LLMs are black boxes (cannot inspect reasoning)
+- ❌ Cannot guarantee what happened vs what should happen
+- ❌ No source code to review or audit
+- ❌ Behavior may be non-deterministic
+- ❌ Cannot trust execution without transparency
+
+**This matters because:**
+- **Security**: Local code can be audited; LLMs cannot
+- **Debugging**: Stack traces point to exact line; LLM outputs do not
+- **Reproducibility**: Same input → same output; LLMs may vary
+- **Trust**: You can verify Village's source code; you cannot verify an LLM
+- **Compliance**: Audit trails require verifiable source code
+
+**Village's core differentiator**: Not execution (OpenCode does that), not prompts (PPC does that), but **coordination infrastructure** with audit trails, safety guarantees, and production reliability.
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -457,6 +515,50 @@ TASK_ID    STATUS    PANE     AGENT     WINDOW
 bd-a3f8    ACTIVE    %12      worker    worker-1-bd-a3f8
 bd-b7c2    STALE     %13      worker    worker-2-bd-b7c2
 ```
+
+### village state
+
+Show task state and history.
+
+```bash
+village state bd-a3f8           # Display state and history
+village state bd-a3f8 --json   # JSON output
+```
+
+**What it shows:**
+- Current task state (QUEUED, CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, FAILED)
+- State transition history with timestamps
+- Context for each transition (error messages, pane IDs, etc.)
+
+### village pause
+
+Pause an in-progress task.
+
+```bash
+village pause bd-a3f8          # Pause task
+village pause bd-a3f8 --force  # Bypass validation
+```
+
+**When to use:**
+- Task is actively running (IN_PROGRESS state)
+- You need to temporarily stop work on a task
+- Task will remain locked and can be resumed later
+
+### village resume-task
+
+Resume a paused task (state management only).
+
+```bash
+village resume-task bd-a3f8       # Resume paused task
+village resume-task bd-a3f8 --force # Bypass validation
+```
+
+**Note:** This command manages task state only. To execute a task, use `village resume` instead.
+
+**When to use:**
+- Task is paused (PAUSED state)
+- You want to continue work on a task
+- Task transitions back to IN_PROGRESS state
 
 ---
 

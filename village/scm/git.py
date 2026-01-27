@@ -182,3 +182,31 @@ class GitSCM:
             return None
 
         return WorkspaceInfo(path=path, branch=branch, commit=commit)
+
+    def reset_workspace(self, workspace_path: Path) -> None:
+        """
+        Reset Git worktree to clean state (discard all modifications).
+
+        Args:
+            workspace_path: Path to worktree to reset
+
+        Raises:
+            RuntimeError: If workspace reset fails
+        """
+        if not workspace_path.exists():
+            raise RuntimeError(f"Worktree does not exist: {workspace_path}")
+
+        try:
+            cmd = ["git", "reset", "--hard", "HEAD"]
+            result = run_command_output_cwd(cmd, cwd=workspace_path)
+            logger.debug(f"Git worktree reset: {workspace_path}")
+            logger.debug(f"Output: {result}")
+
+            cmd = ["git", "clean", "-fdx"]
+            result = run_command_output_cwd(cmd, cwd=workspace_path)
+            logger.debug(f"Git worktree cleaned: {workspace_path}")
+            logger.debug(f"Output: {result}")
+
+        except SubprocessError as e:
+            logger.error(f"Failed to reset Git worktree {workspace_path}: {e}")
+            raise RuntimeError(f"Failed to reset worktree: {e}") from e

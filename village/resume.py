@@ -1,9 +1,10 @@
 """Resume core logic."""
 
+import json
 import logging
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +20,8 @@ from village.probes.tmux import (
 )
 from village.probes.tools import SubprocessError, run_command
 from village.ready import assess_readiness
-from village.worktrees import create_worktree, get_worktree_info
+from village.state_machine import TaskState, TaskStateMachine
+from village.worktrees import create_worktree, get_worktree_info, reset_worktree
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +272,42 @@ def execute_resume(
             if isinstance(created_resources["window_name"], str)
             else ""
         )
+
+        # Rollback if enabled
+        if config.safety.rollback_on_failure and worktree_path:
+            try:
+                logger.info(f"Rolling back worktree: {worktree_path}")
+                reset_worktree(task_id, config)
+
+                # Log rollback event
+                event = {
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "cmd": "rollback",
+                    "task_id": task_id,
+                    "result": "ok",
+                    "error": str(e),
+                }
+                event_log_path = config.village_dir / "events.log"
+                with open(event_log_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(event, sort_keys=True) + "\n")
+                    f.flush()
+
+                logger.info(f"Worktree rollback complete: {task_id}")
+            except Exception as rollback_error:
+                logger.error(f"Rollback failed for {task_id}: {rollback_error}")
+
+        # Mark task as FAILED in state machine
+        state_machine = TaskStateMachine(config)
+        transition_result = state_machine.transition(
+            task_id=task_id,
+            new_state=TaskState.FAILED,
+            context={"error": str(e), "window": window_name},
+        )
+
+        if not transition_result.success:
+            logger.warning(
+                f"Failed to transition task {task_id} to FAILED: {transition_result.message}"
+            )
 
         # Log task error
         log_task_error(task_id, "resume", str(e), config.village_dir)

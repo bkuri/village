@@ -176,3 +176,25 @@ def get_worktree_info(task_id: str, config: Optional[Config] = None) -> Optional
             return worktree
 
     return None
+
+
+def reset_worktree(task_id: str, config: Optional[Config] = None) -> None:
+    """
+    Reset workspace to clean state (discard all modifications).
+
+    Args:
+        task_id: Beads task ID (e.g., "bd-a3f8")
+        config: Optional config (uses default if not provided)
+
+    Raises:
+        RuntimeError: If workspace reset fails
+    """
+    if config is None:
+        config = get_config()
+
+    scm = get_scm(config)
+    worktree_path = get_worktree_path(task_id, config)
+
+    logger.debug(f"Resetting workspace: {worktree_path}")
+    scm.reset_workspace(worktree_path)
+    logger.debug(f"Workspace reset complete: {worktree_path}")

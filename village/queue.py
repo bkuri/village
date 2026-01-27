@@ -7,12 +7,17 @@ from pathlib import Path
 from typing import Optional
 
 from village.config import Config, get_config
+from village.conflict_detection import (
+    WorkerInfo,
+    detect_file_conflicts,
+    render_conflict_report,
+)
 from village.event_log import is_task_recent, log_task_start, read_events
 from village.locks import Lock, parse_lock
 from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
-from village.status import collect_workers
+from village.state_machine import TaskState, TaskStateMachine
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +144,24 @@ def arbitrate_locks(
     Returns:
         QueuePlan with available and blocked tasks (with lock details)
     """
+    from village.status import collect_workers
+
     # Collect active workers (locks with ACTIVE panes)
     workers = collect_workers(session_name)
     active_workers_count = len(workers)
+
+    # Convert status workers to WorkerInfo for conflict detection
+    active_worker_infos: list[WorkerInfo] = []
+    for worker in workers:
+        worktree_path = config.worktrees_dir / worker.task_id
+        active_worker_infos.append(
+            WorkerInfo(
+                task_id=worker.task_id,
+                worktree_path=worktree_path,
+                pane_id=worker.pane_id,
+                window_id=worker.window,
+            )
+        )
 
     # Calculate available slots
     slots_available = max(0, max_workers - active_workers_count)
@@ -195,6 +215,31 @@ def arbitrate_locks(
             task.skip_reason = "concurrency_limit"
             blocked_tasks.append(task)
             continue
+
+        # Conflict detection (if enabled and not forced)
+        if config.conflict.enabled and not force:
+            worktree_path = config.worktrees_dir / task.task_id
+            if worktree_path.exists():
+                hypothetical_worker = WorkerInfo(
+                    task_id=task.task_id,
+                    worktree_path=worktree_path,
+                    pane_id="hypothetical",
+                    window_id="hypothetical",
+                )
+                workers_with_hypothetical = active_worker_infos + [hypothetical_worker]
+                conflict_report = detect_file_conflicts(workers_with_hypothetical, config)
+
+                if conflict_report.has_conflicts:
+                    if conflict_report.blocked:
+                        task.skip_reason = "conflict_blocked"
+                        blocked_tasks.append(task)
+                        logger.warning(f"Task {task.task_id} blocked due to file conflicts")
+                        continue
+                    else:
+                        logger.warning(
+                            f"Task {task.task_id} has potential conflicts: "
+                            f"{render_conflict_report(conflict_report)}"
+                        )
 
         # Task is available
         available_tasks.append(task)
@@ -358,6 +403,20 @@ def execute_queue_plan(
 
             if result.success:
                 logger.info(f"Task started successfully: {task.task_id}")
+
+                # Transition state to CLAIMED after successful claim
+                state_machine = TaskStateMachine(config)
+                transition_result = state_machine.transition(
+                    task_id=task.task_id,
+                    new_state=TaskState.CLAIMED,
+                    context={"pane_id": result.pane_id, "window": result.window_name},
+                )
+
+                if not transition_result.success:
+                    logger.warning(
+                        f"Failed to transition task {task.task_id} to CLAIMED: "
+                        f"{transition_result.message}"
+                    )
             else:
                 logger.warning(f"Task failed to start: {task.task_id} - {result.error}")
 

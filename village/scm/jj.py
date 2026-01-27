@@ -171,3 +171,26 @@ class JJSCM:
         except SubprocessError as e:
             logger.error(f"Failed to list Jujutsu workspaces: {e}")
             raise RuntimeError(f"Failed to list workspaces: {e}") from e
+
+    def reset_workspace(self, workspace_path: Path) -> None:
+        """
+        Reset Jujutsu workspace to clean state (discard all modifications).
+
+        Args:
+            workspace_path: Path to workspace to reset
+
+        Raises:
+            RuntimeError: If workspace reset fails
+        """
+        if not workspace_path.exists():
+            raise RuntimeError(f"Workspace does not exist: {workspace_path}")
+
+        try:
+            cmd = ["jj", "restore"]
+            result = run_command_output_cwd(cmd, cwd=workspace_path)
+            logger.debug(f"Jujutsu workspace reset: {workspace_path}")
+            logger.debug(f"Output: {result}")
+
+        except SubprocessError as e:
+            logger.error(f"Failed to reset Jujutsu workspace {workspace_path}: {e}")
+            raise RuntimeError(f"Failed to reset workspace: {e}") from e

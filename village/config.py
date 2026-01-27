@@ -43,6 +43,40 @@ class LLMConfig:
     timeout: int = 300
     max_tokens: int = 4096
 
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "LLMConfig":
+        """Load LLM config from environment variables and config file."""
+        provider_env = os.environ.get("VILLAGE_LLM_PROVIDER")
+        provider_config = config.get("LLM_PROVIDER")
+        provider = provider_env or provider_config or "openrouter"
+
+        model_env = os.environ.get("VILLAGE_LLM_MODEL")
+        model_config = config.get("LLM_MODEL")
+        model = model_env or model_config or "anthropic/claude-3.5-sonnet"
+
+        api_key_env = os.environ.get("VILLAGE_LLM_API_KEY")
+        api_key_config = config.get("LLM_API_KEY")
+        api_key = api_key_env or api_key_config
+
+        timeout_env = os.environ.get("VILLAGE_LLM_TIMEOUT")
+        timeout_str = os.environ.get("VILLAGE_LLM_TIMEOUT") or config.get("LLM_TIMEOUT")
+        timeout = int(timeout_str) if timeout_str else 300
+
+        max_tokens_env = os.environ.get("VILLAGE_LLM_MAX_TOKENS")
+        max_tokens_str = os.environ.get("VILLAGE_LLM_MAX_TOKENS") or config.get("LLM_MAX_TOKENS")
+        max_tokens = int(max_tokens_str) if max_tokens_str else 4096
+
+        llm_config = LLMConfig(
+            provider=provider,
+            model=model,
+            timeout=timeout,
+            max_tokens=max_tokens,
+        )
+        if api_key:
+            llm_config.api_key_env = api_key
+
+        return llm_config
+
 
 @dataclass
 class MCPConfig:
@@ -51,6 +85,202 @@ class MCPConfig:
     enabled: bool = True
     client_type: str = "mcp-use"
     mcp_use_path: str = "mcp-use"
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "MCPConfig":
+        """Load MCP config from environment variable and config file."""
+        enabled_env = os.environ.get("VILLAGE_MCP_ENABLED")
+        enabled_config = config.get("MCP_ENABLED")
+        enabled = enabled_env or enabled_config
+        enabled = enabled in ("1", "true", "yes")
+
+        client_type_env = os.environ.get("VILLAGE_MCP_CLIENT")
+        client_type_config = config.get("MCP_CLIENT")
+        client_type = client_type_env or client_type_config or "mcp-use"
+
+        mcp_use_path = config.get("MCP_USE_PATH")
+        mcp_use_path_value = mcp_use_path if mcp_use_path is not None else "mcp-use"
+
+        return cls(
+            enabled=enabled,
+            client_type=client_type,
+            mcp_use_path=mcp_use_path_value,
+        )
+
+
+@dataclass
+class SafetyConfig:
+    """Safety configuration for rollback behavior."""
+
+    rollback_on_failure: bool = True
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "SafetyConfig":
+        """Load safety config from environment variable and config file."""
+        rollback_env = os.environ.get("VILLAGE_ROLLBACK_ON_FAILURE", "").lower()
+        rollback_config = config.get("ROLLBACK_ON_FAILURE", "").lower()
+        rollback_on_failure = rollback_env or rollback_config
+        enabled = rollback_on_failure in ("1", "true", "yes")
+
+        return cls(rollback_on_failure=enabled)
+
+
+@dataclass
+class ConflictConfig:
+    """Conflict detection configuration."""
+
+    enabled: bool = True
+    block_on_conflict: bool = False
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "ConflictConfig":
+        """Load conflict config from environment variables and config file."""
+        enabled_env = os.environ.get("VILLAGE_CONFLICT_DETECTION_ENABLED", "").lower()
+        enabled_config = config.get("CONFLICT_DETECTION_ENABLED", "").lower()
+        enabled = enabled_env or enabled_config
+        conflict_detection_enabled = enabled in ("1", "true", "yes")
+
+        block_env = os.environ.get("VILLAGE_BLOCK_ON_CONFLICT", "").lower()
+        block_config = config.get("BLOCK_ON_CONFLICT", "").lower()
+        block = block_env or block_config
+        block_on_conflict = block in ("1", "true", "yes")
+
+        return cls(
+            enabled=conflict_detection_enabled,
+            block_on_conflict=block_on_conflict,
+        )
+
+
+@dataclass
+class MetricsConfig:
+    """Metrics configuration."""
+
+    backend: str = "prometheus"
+    port: int = 9090
+    export_interval_seconds: int = 60
+    statsd_host: str = "localhost"
+    statsd_port: int = 8125
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "MetricsConfig":
+        """Load metrics config from environment variables and config file."""
+        backend_env = os.environ.get("VILLAGE_METRICS_BACKEND")
+        backend_config = config.get("METRICS_BACKEND")
+        backend = backend_env or backend_config or "prometheus"
+
+        port_str = os.environ.get("VILLAGE_METRICS_PORT") or config.get("METRICS_PORT")
+        port = int(port_str) if port_str else 9090
+
+        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get(
+            "METRICS_EXPORT_INTERVAL"
+        )
+        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get(
+            "METRICS_EXPORT_INTERVAL"
+        )
+        export_interval_seconds = int(interval_str) if interval_str else 60
+
+        statsd_host_env = os.environ.get("VILLAGE_STATSD_HOST")
+        statsd_host_config = config.get("STATSD_HOST")
+        statsd_host = statsd_host_env or statsd_host_config or "localhost"
+
+        statsd_port_str = os.environ.get("VILLAGE_STATSD_PORT") or config.get("STATSD_PORT")
+        statsd_port = int(statsd_port_str) if statsd_port_str else 8125
+
+        return cls(
+            backend=backend,
+            port=port,
+            export_interval_seconds=export_interval_seconds,
+            statsd_host=statsd_host,
+            statsd_port=statsd_port,
+        )
+
+
+@dataclass
+class DashboardConfig:
+    """Dashboard configuration."""
+
+    refresh_interval_seconds: int = 2
+    enabled: bool = True
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "DashboardConfig":
+        """Load dashboard config from environment variables and config file."""
+        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get(
+            "DASHBOARD_REFRESH_INTERVAL"
+        )
+        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get(
+            "DASHBOARD_REFRESH_INTERVAL"
+        )
+        refresh_interval_seconds = int(interval_str) if interval_str else 2
+
+        enabled_env = os.environ.get("VILLAGE_DASHBOARD_ENABLED", "").lower()
+        enabled_config = config.get("DASHBOARD_ENABLED", "").lower()
+        enabled = enabled_env or enabled_config
+        dashboard_enabled = enabled in ("1", "true", "yes")
+
+        return cls(
+            refresh_interval_seconds=refresh_interval_seconds,
+            enabled=dashboard_enabled,
+        )
+
+
+@dataclass
+class CIConfig:
+    """CI/CD configuration."""
+
+    github_token: str | None = None
+    gitlab_token: str | None = None
+    jenkins_token: str | None = None
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "CIConfig":
+        """Load CI/CD config from environment variables."""
+        github_token = os.environ.get("GITHUB_TOKEN")
+        gitlab_token = os.environ.get("GITLAB_TOKEN")
+        jenkins_token = os.environ.get("JENKINS_TOKEN")
+
+        return cls(
+            github_token=github_token,
+            gitlab_token=gitlab_token,
+            jenkins_token=jenkins_token,
+        )
+
+
+@dataclass
+class NotificationConfig:
+    """Notification configuration."""
+
+    slack_webhook_url: str | None = None
+    discord_webhook_url: str | None = None
+    email_smtp_server: str | None = None
+    task_failed_enabled: bool = False
+    orphan_detected_enabled: bool = False
+    high_priority_task_enabled: bool = False
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "NotificationConfig":
+        """Load notification config from environment variables."""
+        slack_webhook_url = os.environ.get("VILLAGE_SLACK_WEBHOOK_URL")
+        discord_webhook_url = os.environ.get("VILLAGE_DISCORD_WEBHOOK_URL")
+        email_smtp_server = os.environ.get("VILLAGE_EMAIL_SMTP_SERVER")
+
+        task_failed_env = os.environ.get("VILLAGE_NOTIFY_TASK_FAILED", "false")
+        task_failed = task_failed_env in ("1", "true", "yes")
+
+        orphan_detected_env = os.environ.get("VILLAGE_NOTIFY_ORPHAN_DETECTED", "false")
+        orphan_detected = orphan_detected_env in ("1", "true", "yes")
+
+        high_priority_task_env = os.environ.get("VILLAGE_NOTIFY_HIGH_PRIORITY_TASK", "false")
+        high_priority_task = high_priority_task_env in ("1", "true", "yes")
+
+        return cls(
+            slack_webhook_url=slack_webhook_url,
+            discord_webhook_url=discord_webhook_url,
+            email_smtp_server=email_smtp_server,
+            task_failed_enabled=task_failed,
+            orphan_detected_enabled=orphan_detected,
+            high_priority_task_enabled=high_priority_task,
+        )
 
 
 @dataclass
@@ -84,6 +314,12 @@ class Config:
     debug: DebugConfig = field(default_factory=DebugConfig.from_env)
     llm: LLMConfig = field(default_factory=LLMConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
+    conflict: ConflictConfig = field(default_factory=ConflictConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    dashboard: DashboardConfig = field(default_factory=DashboardConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
+    notifications: NotificationConfig = field(default_factory=NotificationConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -229,48 +465,28 @@ def get_config() -> Config:
     )
 
     # Parse LLM configuration
-    llm_config = LLMConfig()
-    llm_provider = os.environ.get("VILLAGE_LLM_PROVIDER") or file_config.get("LLM_PROVIDER")
-    if llm_provider:
-        llm_config.provider = llm_provider
-
-    llm_model = os.environ.get("VILLAGE_LLM_MODEL") or file_config.get("LLM_MODEL")
-    if llm_model:
-        llm_config.model = llm_model
-
-    llm_api_key_env = file_config.get("LLM_API_KEY_ENV")
-    if llm_api_key_env:
-        llm_config.api_key_env = llm_api_key_env
-
-    llm_timeout_str = os.environ.get("VILLAGE_LLM_TIMEOUT") or file_config.get("LLM_TIMEOUT")
-    if llm_timeout_str:
-        try:
-            llm_config.timeout = int(llm_timeout_str)
-        except ValueError:
-            logger.warning(f"Invalid LLM_TIMEOUT value, using default: {llm_config.timeout}")
-
-    llm_max_tokens_str = os.environ.get("VILLAGE_LLM_MAX_TOKENS") or file_config.get(
-        "LLM_MAX_TOKENS"
-    )
-    if llm_max_tokens_str:
-        try:
-            llm_config.max_tokens = int(llm_max_tokens_str)
-        except ValueError:
-            logger.warning(f"Invalid LLM_MAX_TOKENS value, using default: {llm_config.max_tokens}")
+    llm_config = LLMConfig.from_env_and_config(file_config)
 
     # Parse MCP configuration
-    mcp_config = MCPConfig()
-    mcp_enabled_str = os.environ.get("VILLAGE_MCP_ENABLED") or file_config.get("MCP_ENABLED")
-    if mcp_enabled_str:
-        mcp_config.enabled = mcp_enabled_str.lower() in ("1", "true", "yes")
+    mcp_config = MCPConfig.from_env_and_config(file_config)
 
-    mcp_client_type = os.environ.get("VILLAGE_MCP_CLIENT") or file_config.get("MCP_CLIENT")
-    if mcp_client_type:
-        mcp_config.client_type = mcp_client_type
+    # Parse safety configuration
+    safety_config = SafetyConfig.from_env_and_config(file_config)
 
-    mcp_use_path = file_config.get("MCP_USE_PATH")
-    if mcp_use_path:
-        mcp_config.mcp_use_path = mcp_use_path
+    # Parse conflict configuration
+    conflict_config = ConflictConfig.from_env_and_config(file_config)
+
+    # Parse metrics configuration
+    metrics_config = MetricsConfig.from_env_and_config(file_config)
+
+    # Parse dashboard configuration
+    dashboard_config = DashboardConfig.from_env_and_config(file_config)
+
+    # Parse CI configuration
+    ci_config = CIConfig.from_env_and_config(file_config)
+
+    # Parse notifications configuration
+    notifications_config = NotificationConfig.from_env_and_config(file_config)
 
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
@@ -309,6 +525,8 @@ def get_config() -> Config:
     logger.debug(f"Max workers: {max_workers}")
     logger.debug(f"Queue TTL minutes: {queue_ttl_minutes}")
     logger.debug(f"SCM kind: {scm_kind}")
+    logger.debug(f"Default agent: {default_agent}")
+    logger.debug(f"Agent configs: {list(agents.keys())}")
 
     valid_scms = ["git", "jj"]
     if scm_kind not in valid_scms:
@@ -331,4 +549,10 @@ def get_config() -> Config:
         agents=agents,
         llm=llm_config,
         mcp=mcp_config,
+        safety=safety_config,
+        conflict=conflict_config,
+        metrics=metrics_config,
+        dashboard=dashboard_config,
+        ci=ci_config,
+        notifications=notifications_config,
     )

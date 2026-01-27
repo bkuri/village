@@ -20,6 +20,7 @@ class Event:
     pane: Optional[str] = None  # Pane ID (if applicable)
     result: Optional[Literal["ok", "error"]] = None  # Execution result
     error: Optional[str] = None  # Error details (if result="error")
+    backend: Optional[str] = None  # Metrics backend (for metrics_export events)
 
 
 def get_event_log_path(config_path: Path) -> Path:
@@ -238,3 +239,60 @@ def log_task_error(
         error=error,
     )
     append_event(event, config_path)
+
+
+def log_metrics_exported(
+    backend: str,
+    config_path: Path,
+) -> None:
+    """
+    Log metrics export event.
+
+    Args:
+        backend: Metrics backend (prometheus or statsd)
+        config_path: Path to village directory
+    """
+    event_dict = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "cmd": "metrics_export",
+        "backend": backend,
+        "result": "ok",
+    }
+    event_json = json.dumps(event_dict, sort_keys=True)
+    event_log_path = get_event_log_path(config_path)
+
+    try:
+        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(event_log_path, "a", encoding="utf-8") as f:
+            f.write(event_json + "\n")
+            f.flush()
+        logger.debug(f"Logged metrics export event: {backend}")
+    except IOError as e:
+        logger.error(f"Failed to write metrics export event: {e}")
+        raise
+
+
+def log_dashboard_refresh(config_path: Path) -> None:
+    """
+    Log dashboard refresh event.
+
+    Args:
+        config_path: Path to village directory
+    """
+    event_dict = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "cmd": "dashboard_refresh",
+        "result": "ok",
+    }
+    event_json = json.dumps(event_dict, sort_keys=True)
+    event_log_path = get_event_log_path(config_path)
+
+    try:
+        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(event_log_path, "a", encoding="utf-8") as f:
+            f.write(event_json + "\n")
+            f.flush()
+        logger.debug("Logged dashboard refresh event")
+    except IOError as e:
+        logger.error(f"Failed to write dashboard refresh event: {e}")
+        raise
