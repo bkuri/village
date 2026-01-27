@@ -1,6 +1,6 @@
 # Village Roadmap
 
-## Current Status: v0.2.3
+## Current Status: v0.3.0
 
 ### Implemented Core Features
 
@@ -38,7 +38,7 @@
   - [x] Shell completion (bash, zsh)
   - [x] Comprehensive README
   - [x] Examples and troubleshooting
-  - [ ] Migration notes from bash version
+  - [x] Migration notes from bash version
 
 - [x] **Phase 12**: Chat interface
   - [x] Knowledge-share mode
@@ -51,11 +51,214 @@
 
 - **Total Python LOC**: ~4,000 (exceeds 2k target due to chat feature)
 - **Test Coverage**: >85% core commands, >90% resume flow
-- **Commands Implemented**: 11 (up, down, status, ready, resume, queue, cleanup, unlock, locks, drafts, chat)
+- **Commands Implemented**: 14 (up, down, status, ready, resume, queue, cleanup, unlock, locks, drafts, chat, state, pause, resume-task)
 
 ---
 
-## v0.2.1 - SCM-Abstraction Edition ✅
+---
+
+## v0.3.0 - Safety & Coordination (Essential) ✅
+
+### Goal
+Strengthen Village's core value as coordination layer - features OpenCode cannot provide.
+
+### Scope
+
+- [x] **State Machine Workflows**
+  - **Task lifecycle states**: QUEUED → CLAIMED → IN_PROGRESS → PAUSED → COMPLETED → FAILED
+  - **State transitions**: Validate and log all transitions
+  - **New file**: `village/state_machine.py` (~200 lines)
+  - **Commands**:
+    ```bash
+    village state bd-a3f8         # Show task state history
+    village pause bd-a3f8         # Pause in-progress task
+    village resume-task bd-a3f8   # Resume paused task
+    ```
+
+- [x] **Automatic Rollback on Failure**
+  - **Worktree reset**: If task fails, revert worktree to clean state
+  - **Lock update**: Mark task as FAILED in lock file
+  - **Event logging**: Log rollback events to events.log
+  - **Configuration**: `ROLLBACK_ON_FAILURE=true|false` (default: true)
+  - **Integration**: Modify `resume.py` to wrap OpenCode execution in try/except
+
+- [x] **Conflict Detection**
+  - **File overlap detection**: Detect when agents modify same files
+  - **Integration**: Check conflicts in `arbitrate_locks()` before claiming
+  - **Warning**: `village queue --conflicts` shows potential conflicts
+  - **Block on conflict**: Configurable `BLOCK_ON_CONFLICT=true|false`
+
+### Design Decisions
+
+1. **State machine as core coordination primitive**
+   - Enables tracking task lifecycle
+   - Validates state transitions (prevents invalid operations)
+   - Supports pause/resume workflows
+
+2. **Automatic rollback on failure**
+   - Ensures clean recovery from errors
+   - Prevents partial state corruption
+   - User-controllable via config
+
+3. **Conflict detection prevents data corruption**
+   - Detects when agents modify same files
+   - Blocks task execution if conflict detected
+   - Configurable blocking (warn-only vs block)
+
+### Files to Create/Modify
+
+**New files:**
+- `village/state_machine.py` (~200 lines)
+- `village/conflict_detection.py` (~150 lines)
+
+**Modified files:**
+- `village/queue.py` (integrate conflict detection)
+- `village/resume.py` (add rollback logic)
+- `village/config.py` (add new config options)
+
+**Test files to create:**
+- `tests/test_state_machine.py`
+- `tests/test_conflicts.py`
+
+### Success Criteria
+
+- [x] State machine transitions are validated and logged
+- [x] Automatic rollback recovers from failed tasks
+- [x] File conflicts detected before task execution
+- [x] Test coverage >85% for new modules
+- [x] Documentation updated (README, examples)
+
+### Timeline Estimate
+
+- **Total time**: 16-20 hours (spread over 2-3 weeks)
+- **Phase breakdown**:
+  - State machine design & implementation: 4-5 hrs
+  - Rollback design & implementation: 3-4 hrs
+  - Conflict detection design & implementation: 3-4 hrs
+  - Config integration: 1 hr
+  - Testing: 3-4 hrs
+  - Documentation: 1-2 hrs
+
+### Technical Notes
+
+- State machine: Validate transitions, log all state changes to events.log
+- Rollback: Use SCM commands to reset worktree (git reset, jj abandon)
+- Conflict detection: Parse git/jj status, compare file sets across workers
+- Event logging: All state changes and rollback attempts logged
+
+---
+
+## v0.4.0 - Enhanced Observability (Essential)
+
+### Goal
+Provide system-wide visibility that OpenCode cannot offer.
+
+### Scope
+
+- [x] **Real-Time Dashboard**
+  - **New command**: `village dashboard --watch`
+  - **Live display** (refresh every 2s):
+    ```
+    Active Workers (2/4)
+    TASK_ID    STATUS    AGENT      PANE     WINDOW
+    bd-a3f8    ACTIVE    build      %12      build-1-bd-a3f8
+    bd-b7c2    ACTIVE    frontend   %13      frontend-1-bd-b7c2
+    
+    Task Queue (3 ready, 2 blocked)
+    bd-c9d1 [READY]    high-priority
+    bd-e4f2 [READY]    feature
+    bd-f5g3 [READY]    fix
+    
+    Lock Status: 2 ACTIVE, 1 STALE, 0 orphans
+    System Load: 2.3 / 8.0 (max workers: 4)
+    ```
+  - **Terminal UI**: Use rich.console or similar
+  - **Interactive**: Press 'q' to quit, 'r' to refresh
+
+- [x] **Metrics Export**
+  - **Backends**: Prometheus, StatsD, Custom
+  - **New command**: `village metrics export --backend prometheus`
+  - **Metrics exposed**:
+    - `village_active_workers` (gauge)
+    - `village_queue_length` (gauge)
+    - `village_stale_locks` (gauge)
+    - `village_orphans_count` (gauge)
+    - `village_task_completion_rate` (histogram)
+    - `village_average_task_duration_seconds` (histogram)
+  - **New file**: `village/metrics.py` (~200 lines)
+  - **Configuration**:
+    ```ini
+    [metrics]
+    backend=prometheus
+    port=9090
+    export_interval_seconds=60
+    ```
+
+- [x] **Structured Event Queries**
+  - **New command**: `village events --task bd-a3f8 --last 1h --json`
+  - **Filters**: `--task <id>`, `--status <STATUS>`, `--since <datetime>`, `--last <duration>`
+  - **Output**: JSON or table format
+  - **Integration**: Query `.village/events.log` with filtering
+  - **New file**: `village/event_query.py` (~150 lines)
+
+### Design Decisions
+
+1. **Real-time dashboard for production monitoring**
+   - Live visibility into system state
+   - Refresh interval configurable (default: 2s)
+   - Minimal dependencies (rich.console or similar)
+
+2. **Metrics export integrates with existing monitoring stacks**
+   - Prometheus and StatsD support for production environments
+   - Custom backend option for other systems
+   - Export interval configurable (default: 60s)
+
+3. **Event queries enable historical analysis**
+   - Filter by task, status, time range
+   - JSON output for tooling integration
+   - Table output for human readability
+
+### Files to Create/Modify
+
+**New files:**
+- `village/dashboard.py` (~300 lines)
+- `village/metrics.py` (~200 lines)
+- `village/event_query.py` (~150 lines)
+
+**Modified files:**
+- `village/config.py` (add metrics/dashbard config)
+
+**Test files to create:**
+- `tests/test_dashboard.py`
+- `tests/test_metrics.py`
+- `tests/test_event_query.py`
+
+### Success Criteria
+
+- [x] Real-time dashboard displays live system state
+- [x] Metrics export works for Prometheus and StatsD
+- [x] Event queries filter and format correctly
+- [x] Test coverage >80% for new modules
+- [x] Documentation updated
+
+### Timeline Estimate
+
+- **Total time**: 12-16 hours (spread over 1-2 weeks)
+- **Phase breakdown**:
+  - Dashboard design & implementation: 4-5 hrs
+  - Metrics design & implementation: 3-4 hrs
+  - Event queries design & implementation: 2-3 hrs
+  - Config integration: 1 hr
+  - Testing: 2-3 hrs
+  - Documentation: 1-2 hrs
+
+### Technical Notes
+
+- Dashboard: Use rich.console or similar terminal UI library
+- Metrics: HTTP server for Prometheus scrape endpoint, UDP socket for StatsD
+- Event queries: Parse NDJSON events.log, apply filters, output formatted results
+
+
 
 ### Goal
 Formalize a critical architectural boundary: Village must not depend directly on Git semantics. Enable painless Jujutsu (jj) support without core logic refactoring.
@@ -115,9 +318,7 @@ Formalize a critical architectural boundary: Village must not depend directly on
 - Git backend behavior is preserved
 - All existing Village commands work identically
 
----
 
-## v0.2.2 - Reliability & Observability ✅
 
 ### Goal
 Strengthen operational trust under heavy concurrency and frequent crashes. Make Village feel reliable even in production use.
@@ -182,9 +383,139 @@ No migration required. All features backward compatible.
 - Queue deduplication: Opt-in via --force flag
 - Cleanup --apply: Requires explicit --apply flag for worktree removal
 
----
 
 ## v0.2.3 - Jujutsu (jj) Support ✅
+
+---
+
+---
+
+
+### Goal
+Formalize a critical architectural boundary: Village must not depend directly on Git semantics. Enable painless Jujutsu (jj) support without core logic refactoring.
+
+### Scope
+
+- [x] **SCM Interface Protocol**
+  \`\`\`python
+  class SCM(Protocol):
+      kind: Literal["git", "jj"]
+
+      def ensure_repo(repo_root: Path) -> None
+      def check_clean(repo_root: Path) -> bool
+      def ensure_workspace(repo_root: Path, workspace_path: Path, base_ref: str = "HEAD") -> None
+      def remove_workspace(workspace_path: Path) -> bool
+      def list_workspaces(repo_root: Path) -> list[WorkspaceInfo]
+  \`\`\`
+
+- [x] **Git Backend Implementation**
+  - \`village/scm/git.py\`: GitSCM implements SCM Protocol
+  - All Git commands isolated within GitSCM class
+  - Maintains 100% backward compatibility
+  - Uses Git porcelain format (\`git worktree list --porcelain\`)
+
+- [x] **Workspace Model Refactoring**
+  - Directory name encodes task ID (\`.worktrees/bd-a3f8/\`)
+  - Directory is authoritative identity
+  - SCM metadata irrelevant to Village core
+  - \`resolve_task_id()\` extracts task ID from workspace path (Village-specific)
+
+- [x] **Configuration Updates**
+  \`\`\`ini
+  [DEFAULT]
+  SCM=git
+  WORKTREES_DIR=.worktrees
+  SESSION=village
+  \`\`\`
+
+  Environment variable: \`VILLAGE_SCM=git|jj\`
+
+- [x] **Testing**
+  - Unit tests for SCM Protocol interface
+  - Unit tests for GitSCM backend
+  - Integration tests verify backward compatibility
+  - 294 tests passing (16 worktrees + 278 others)
+  - Coverage: 64% overall, 100% for scm modules
+
+### Success Criteria
+- [x] Zero git commands outside \`village/scm/git.py\`
+- [x] Core logic is SCM-agnostic
+- [x] jj backend possible without core refactor
+- [x] Codebase maintained (294 tests passing, full backward compatibility)
+
+### Migration Notes
+- No user-visible changes expected
+- Existing worktrees and lock files remain compatible
+- Git backend behavior is preserved
+- All existing Village commands work identically
+
+---
+
+
+### Goal
+Strengthen operational trust under heavy concurrency and frequent crashes. Make Village feel reliable even in production use.
+
+### Scope
+
+- [x] **Event Log (NDJSON)**
+  - Append-only log at \`.village/events.log\`
+  - Each action appends one JSON line:
+    \`\`\`json
+    {"ts":"2026-01-22T10:41:12","cmd":"queue","task":"bd-a3f8","pane":"%12","result":"ok"}
+    \`\`\`
+  - No indexing, no database, no rotation required
+  - Uses: crash recovery inspection, deduplication, debugging
+
+- [x] **Queue Deduplication Guard**
+  - Consult \`events.log\` before starting tasks
+  - Skip tasks started within configurable TTL (default: 5 minutes)
+  - Override via \`village queue --force\`
+  - Config: \`QUEUE_TTL_MINUTES\` or \`VILLAGE_QUEUE_TTL_MINUTES\` env var
+
+- [x] **Expanded \`--plan\` Output**
+  - \`queue --plan --json\` returns:
+    - Tasks selected
+    - Tasks skipped (with reason per task)
+    - Locks involved (pane_id, window, agent, claimed_at)
+    - Workspace paths
+  - Enables dry-run scheduling validation
+
+- [x] **Cleanup Enhancements**
+  - \`village cleanup --apply\` removes orphan and stale worktrees
+  - Safer corrupted lock handling via \`parse_lock_safe()\`
+  - Separate orphan_worktrees and stale_worktrees in CleanupPlan
+
+- [x] **Testing & Integration**
+  - 58 new SCM tests (protocol compliance + Git backend + JJ placeholders)
+  - 3 v1.2 integration tests (event logging, deduplication, cleanup)
+  - Coverage: 74% overall (git.py: 85%, protocol: 100%)
+
+### Success Criteria
+
+- [x] Users can trust \`queue\` under concurrency
+- [x] Failures are explainable post-mortem
+- [x] Shell scripts can reason via exit codes
+- [x] No task accidentally runs twice
+
+### Technical Notes
+
+- Event log: village/event_log.py (78 lines)
+- Deduplication: village/queue.py + village/config.py (TTL config)
+- Cleanup: village/cleanup.py with --apply flag
+- Tests: tests/test_event_log.py, tests/test_queue.py, tests/test_cleanup.py, tests/scm/test_*.py
+- Coverage: 74% (2936 statements, 777 missed)
+- Timezone handling: Fixed to use datetime.now(timezone.utc)
+
+### Migration Notes
+
+No migration required. All features backward compatible.
+
+- Event logging: Automatic, no user action needed
+- Queue deduplication: Opt-in via --force flag
+- Cleanup --apply: Requires explicit --apply flag for worktree removal
+
+---
+
 
 ### Goal
 Add Jujutsu (jj) as a second SCM backend, validating v1.1 SCM abstraction design. Provide early value for jj users without waiting for v2's more complex features.
@@ -415,7 +746,6 @@ Strengthen Village's core value as coordination layer - features OpenCode cannot
 
 ---
 
-## v0.4.0 - Enhanced Observability (Essential)
 
 ### Goal
 Provide system-wide visibility that OpenCode cannot offer.
