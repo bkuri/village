@@ -55,14 +55,16 @@ class StatsDMetrics:
 class MetricsCollector:
     """Collect and export Village metrics."""
 
-    def __init__(self, session_name: str) -> None:
+    def __init__(self, config: Config, session_name: str | None = None) -> None:
         """
         Initialize metrics collector.
 
         Args:
-            session_name: Tmux session name
+            config: Village config
+            session_name: Tmux session name (optional for reset mode)
         """
-        self.session_name = session_name
+        self.config = config
+        self.session_name = session_name or config.tmux_session
         self._lock = threading.Lock()
 
     def collect_metrics(self) -> MetricsReport:
@@ -72,19 +74,18 @@ class MetricsCollector:
         Returns:
             MetricsReport with current metrics
         """
-        from village.config import get_config
-
-        config = get_config()
+        if not self.session_name:
+            raise RuntimeError("Session name required to collect metrics")
 
         with self._lock:
             full_status = collect_full_status(self.session_name)
 
             active_workers = sum(1 for w in full_status.workers if w.status == "ACTIVE")
-            queue_length = len(extract_ready_tasks(config))
+            queue_length = len(extract_ready_tasks(self.config))
             stale_locks = len(find_stale_locks(self.session_name))
             orphans_count = len(full_status.orphans)
 
-            task_completion_rate, avg_duration = self._compute_completion_metrics(config)
+            task_completion_rate, avg_duration = self._compute_completion_metrics(self.config)
 
             report = MetricsReport(
                 active_workers=active_workers,
@@ -231,3 +232,14 @@ class MetricsCollector:
             logger.debug(f"Sent {len(metrics.metrics)} metrics to {host}:{port}")
         except OSError as e:
             logger.error(f"Failed to send StatsD metrics to {host}:{port}: {e}")
+
+    def reset_all(self) -> None:
+        """
+        Reset all metrics counters to 0.
+
+        Note: Current implementation uses real-time probes,
+        so there are no internal counters to reset.
+        This method is a stub for future counter-based metrics.
+        """
+        logger.info("Metrics reset requested (no-op - metrics are real-time probes)")
+        # Future: Reset persistent counters if we implement cumulative metrics

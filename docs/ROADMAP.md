@@ -175,24 +175,24 @@ Provide system-wide visibility that OpenCode cannot offer.
   - **Terminal UI**: Use rich.console or similar
   - **Interactive**: Press 'q' to quit, 'r' to refresh
 
-- [x] **Metrics Export**
-  - **Backends**: Prometheus, StatsD, Custom
-  - **New command**: `village metrics export --backend prometheus`
-  - **Metrics exposed**:
-    - `village_active_workers` (gauge)
-    - `village_queue_length` (gauge)
-    - `village_stale_locks` (gauge)
-    - `village_orphans_count` (gauge)
-    - `village_task_completion_rate` (histogram)
-    - `village_average_task_duration_seconds` (histogram)
-  - **New file**: `village/metrics.py` (~200 lines)
-  - **Configuration**:
-    ```ini
-    [metrics]
-    backend=prometheus
-    port=9090
-    export_interval_seconds=60
-    ```
+ - [x] **Metrics Export**
+   - **Backends**: Prometheus, StatsD, Custom
+   - **New command**: `village metrics --backend prometheus`
+   - **Metrics exposed**:
+     - `village_active_workers` (gauge)
+     - `village_queue_length` (gauge)
+     - `village_stale_locks` (gauge)
+     - `village_orphans_count` (gauge)
+     - `village_task_completion_rate` (histogram)
+     - `village_average_task_duration_seconds` (histogram)
+   - **New file**: `village/metrics.py` (~200 lines)
+   - **Configuration**:
+     ```ini
+     [metrics]
+     backend=prometheus
+     port=9090
+     export_interval_seconds=60
+     ```
 
 - [x] **Structured Event Queries**
   - **New command**: `village events --task bd-a3f8 --last 1h --json`

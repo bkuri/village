@@ -1137,40 +1137,12 @@ def resume_task(task_id: str, force: bool) -> None:
         sys.exit(EXIT_ERROR.value)
 
 
-@village.group()
-def metrics() -> None:
-    """
-    Export Village metrics.
-
-    Exports metrics to Prometheus (HTTP) or StatsD (UDP).
-    Metrics include workers, queue length, locks, orphans.
-
-    \b
-    Non-mutating. Collects metrics from Village state.
-
-    Examples:
-        village metrics export --backend prometheus --port 9090
-        village metrics export --backend statsd
-        village metrics export --interval 30
-
-    Backend options:
-        --backend prometheus: Prometheus HTTP endpoint
-        --backend statsd: StatsD UDP socket
-
-    Other options:
-        --port: Port for Prometheus server (default: from config)
-        --interval: Export interval in seconds (default: from config)
-
-    Default: One-time export using configured backend
-    """
-    pass
-
-
-@metrics.command()
+@village.command()
 @click.option("--backend", type=click.Choice(["prometheus", "statsd"]), help="Metrics backend")
 @click.option("--port", type=int, help="Port for metrics export")
 @click.option("--interval", type=int, help="Export interval in seconds")
-def export(backend: str, port: int | None, interval: int | None) -> None:
+@click.option("--reset", is_flag=True, help="Reset all metrics counters to 0")
+def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -> None:
     """
     Export Village metrics.
 
@@ -1181,9 +1153,10 @@ def export(backend: str, port: int | None, interval: int | None) -> None:
     Non-mutating. Collects metrics from Village state.
 
     Examples:
-        village metrics export --backend prometheus --port 9090
-        village metrics export --backend statsd
-        village metrics export --interval 30
+        village metrics                           # Export with config defaults
+        village metrics --backend prometheus --port 9090
+        village metrics --backend statsd
+        village metrics --reset                      # Reset counters (future)
 
     Backend options:
         --backend prometheus: Prometheus HTTP endpoint
@@ -1192,12 +1165,28 @@ def export(backend: str, port: int | None, interval: int | None) -> None:
     Other options:
         --port: Port for Prometheus server (default: from config)
         --interval: Export interval in seconds (default: from config)
+        --reset: Reset all metrics counters to 0 (for testing)
 
     Default: One-time export using configured backend
     """
+    if reset and backend:
+        click.echo(
+            "Error: --reset and --backend are mutually exclusive. "
+            "Use --reset to clear counters, or --backend to export metrics.",
+            err=True,
+        )
+        sys.exit(EXIT_ERROR.value)
+
     from village.metrics import MetricsCollector
 
     config = get_config()
+
+    if reset:
+        collector = MetricsCollector(config, session_name=None)
+        collector.reset_all()
+
+        click.echo("Metrics counters reset to 0")
+        return
 
     backend_choice = backend or config.metrics.backend
     port_choice = port or config.metrics.port
