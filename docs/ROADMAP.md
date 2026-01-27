@@ -1,6 +1,6 @@
 # Village Roadmap
 
-## Current Status: v0.3.0
+## Current Status: v1.0.0
 
 ### Implemented Core Features
 
@@ -47,11 +47,21 @@
   - [x] Read-only subcommands
   - [x] Session state persistence
 
+- [x] **Phase 13**: Safety & Coordination (v0.3.0)
+  - [x] State machine workflows
+  - [x] Automatic rollback on failure
+  - [x] Conflict detection
+
+- [x] **Phase 14**: Enhanced Observability (v0.4.0)
+  - [x] Real-time dashboard
+  - [x] Metrics export (Prometheus, StatsD)
+  - [x] Structured event queries
+
 ### Current Statistics
 
-- **Total Python LOC**: ~4,000 (exceeds 2k target due to chat feature)
-- **Test Coverage**: >85% core commands, >90% resume flow
-- **Commands Implemented**: 14 (up, down, status, ready, resume, queue, cleanup, unlock, locks, drafts, chat, state, pause, resume-task)
+- **Total Python LOC**: ~6,000
+- **Test Coverage**: >85% overall
+- **Commands Implemented**: 18 (up, down, status, ready, resume, queue, cleanup, unlock, locks, drafts, chat, state, pause, resume-task, dashboard, metrics, events)
 
 ---
 

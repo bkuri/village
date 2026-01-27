@@ -20,6 +20,11 @@ def test_metrics_collector_collect_no_data(tmp_path: Path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     os.chdir(tmp_path)
 
+    from village.config import get_config
+
+    config = get_config()
+    config.village_dir.mkdir(parents=True, exist_ok=True)
+
     with patch("village.status.session_exists") as mock_exists:
         mock_exists.return_value = False
 
@@ -27,7 +32,7 @@ def test_metrics_collector_collect_no_data(tmp_path: Path):
             with patch("village.probes.tmux.panes") as mock_panes:
                 mock_panes.return_value = set()
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 report = collector.collect_metrics()
 
                 assert isinstance(report, MetricsReport)
@@ -86,7 +91,7 @@ def test_metrics_collector_collect_with_workers(tmp_path: Path):
                 )
                 write_lock(lock2)
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 report = collector.collect_metrics()
 
                 assert report.active_workers == 2
@@ -122,7 +127,7 @@ def test_metrics_collector_export_prometheus(tmp_path: Path):
             with patch("village.probes.tmux.panes") as mock_panes:
                 mock_panes.return_value = set()
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 prometheus = collector.export_prometheus()
 
                 assert isinstance(prometheus, PrometheusMetrics)
@@ -164,7 +169,7 @@ def test_metrics_collector_export_statsd(tmp_path: Path):
             with patch("village.probes.tmux.panes") as mock_panes:
                 mock_panes.return_value = set()
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 statsd = collector.export_statsd()
 
                 assert isinstance(statsd, StatsDMetrics)
@@ -216,7 +221,7 @@ def test_metrics_collector_stale_locks(tmp_path: Path):
                 )
                 write_lock(stale_lock)
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 report = collector.collect_metrics()
 
                 assert report.active_workers == 0
@@ -256,7 +261,7 @@ def test_metrics_collector_orphans(tmp_path: Path):
                 orphan_worktree = config.worktrees_dir / "bd-orphan"
                 orphan_worktree.mkdir()
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
                 report = collector.collect_metrics()
 
                 assert report.orphans_count == 1
@@ -291,7 +296,7 @@ def test_metrics_collector_send_statsd(tmp_path: Path):
             with patch("village.probes.tmux.panes") as mock_panes:
                 mock_panes.return_value = set()
 
-                collector = MetricsCollector("village")
+                collector = MetricsCollector(config, "village")
 
                 with patch("village.metrics.socket.socket"):
                     collector.send_statsd("localhost", 8125)
@@ -299,7 +304,10 @@ def test_metrics_collector_send_statsd(tmp_path: Path):
 
 def test_metrics_collector_prometheus_server_not_implemented():
     """Test that Prometheus server raises NotImplementedError."""
-    collector = MetricsCollector("village")
+    from village.config import get_config
+
+    config = get_config()
+    collector = MetricsCollector(config, "village")
 
     try:
         collector.start_prometheus_server(9090)
@@ -310,7 +318,10 @@ def test_metrics_collector_prometheus_server_not_implemented():
 
 def test_metrics_collector_statsd_client_not_implemented():
     """Test that StatsD client raises NotImplementedError."""
-    collector = MetricsCollector("village")
+    from village.config import get_config
+
+    config = get_config()
+    collector = MetricsCollector(config, "village")
 
     try:
         collector.start_statsd_client("localhost", 8125)

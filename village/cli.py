@@ -1,15 +1,13 @@
 """Village CLI entrypoint."""
 
+import json
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import click
 
 from village.config import get_config
-from village.dashboard import VillageDashboard
-from village.event_log import Event, append_event
-from village.event_query import EventFilters, query_events
 from village.errors import (
     EXIT_BLOCKED,
     EXIT_ERROR,
@@ -17,7 +15,7 @@ from village.errors import (
     EXIT_SUCCESS,
     InterruptedResume,
 )
-from village.metrics import MetricsCollector
+from village.event_log import Event, append_event
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
     clear_pane_cache,
@@ -873,91 +871,147 @@ def dashboard(watch: bool, refresh_interval: int | None) -> None:
 
     if not enabled:
         click.echo("Dashboard is disabled. Enable with DASHBOARD_ENABLED=true")
-        sys.exit(EXIT_ERROR.value)
+        sys.exit(EXIT_ERROR)
 
     if watch:
-        dashboard = VillageDashboard(config, interval)
-        dashboard.start_watch_mode()
+        dashboard = VillageDashboard(config.tmux_session)
+        dashboard.start_watch_mode(interval)
     else:
         from village.dashboard import render_dashboard_static
 
-        output = render_dashboard_static(config)
+        output = render_dashboard_static(config.tmux_session)
         click.echo(output)
 
 
+def parse_duration(duration: str) -> timedelta:
+    """
+    Parse duration string to timedelta.
+
+    Supports formats:
+    - 1h, 2h30m
+    - 30m, 45m
+    - 1d, 2d12h
+    - 1h30m, 2d
+
+    Args:
+        duration: Duration string (e.g., "1h", "30m", "1d12h30m")
+
+    Returns:
+        timedelta object
+
+    Raises:
+        ValueError: If duration format is invalid
+    """
+    total_seconds = 0
+    i = 0
+    while i < len(duration):
+        num_str = ""
+        while i < len(duration) and duration[i].isdigit():
+            num_str += duration[i]
+            i += 1
+
+        if not num_str:
+            raise ValueError(f"Invalid duration format: {duration}")
+
+        if i >= len(duration):
+            raise ValueError(f"Invalid duration format: {duration} (missing unit)")
+
+        unit = duration[i]
+        i += 1
+
+        num = int(num_str)
+
+        if unit == "s":
+            total_seconds += num
+        elif unit == "m":
+            total_seconds += num * 60
+        elif unit == "h":
+            total_seconds += num * 3600
+        elif unit == "d":
+            total_seconds += num * 86400
+        else:
+            raise ValueError(f"Invalid duration unit: {unit} (use s, m, h, or d)")
+
+    return timedelta(seconds=total_seconds)
+
+
 @village.command()
-@click.option("--task", type=str, help="Filter by task ID")
-@click.option("--status", type=str, help="Filter by status (e.g., success, error)")
-@click.option("--since", type=str, help="Show events since timestamp (ISO 8601)")
-@click.option(
-    "--last",
-    type=str,
-    help="Show events since time duration (e.g., 1h, 30m, 7d)",
-)
+@click.option("--task", "task_id", help="Filter by task ID")
+@click.option("--status", "status", help="Filter by result status (ok, error, etc.)")
+@click.option("--since", "since", help="Filter events since ISO datetime (YYYY-MM-DDTHH:MM:SS)")
+@click.option("--last", "last", help="Filter events from last duration (e.g., 1h, 30m, 2d)")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
 def events(
-    task: str | None,
+    task_id: str | None,
     status: str | None,
     since: str | None,
     last: str | None,
     json_output: bool,
 ) -> None:
     """
-    Query and display Village events.
+    Query and display events from the event log.
 
-    Filters events from events.log by task, status, or time range.
-    Outputs in human-readable table or JSON format.
+    Filters events from the village event log. Can filter by task ID,
+    status, time range, or show all events.
 
     \b
-    Non-mutating. Reads events.log for querying.
+    Non-mutating. Reads from events.log.
 
     Examples:
         village events
         village events --task bd-a3f8
-        village events --status error --last 1h
-        village events --since 2026-01-26T00:00:00Z
+        village events --status ok
+        village events --last 1h
+        village events --since "2026-01-01T00:00:00"
         village events --json
 
-    Filters:
-        --task: Show events for specific task
-        --status: Filter by event status (success, error, etc.)
-        --since: Show events after ISO timestamp
-        --last: Show events within time duration (1h, 30m, 7d)
-        --json: Output as JSON
+    Options:
+        --task: Filter by task ID
+        --status: Filter by result status
+        --since: Show events since this ISO datetime
+        --last: Show events from last duration (1h, 30m, 2d)
+        --json: Output as JSON instead of table
 
-    Default: All events in human-readable format
+    Exit codes:
+        0: Events displayed successfully
+        2: Invalid filter values
     """
-    from datetime import timedelta
+    from datetime import datetime, timezone
 
-    from village.event_query import EventFilters, query_events
+    from village.event_query import EventFilters, query_events, query_result_to_json
 
     config = get_config()
 
-    filters = EventFilters(task_id=task, status=status, since=None, last=None)
+    filters = EventFilters(
+        task_id=task_id,
+        status=status,
+    )
 
     if since:
-        from village.event_query import parse_timestamp
-
         try:
-            filters.since = parse_timestamp(since)
-        except ValueError as e:
-            click.echo(f"Invalid timestamp format: {e}")
-            sys.exit(EXIT_ERROR.value)
+            filters.since = datetime.fromisoformat(since)
+            if filters.since.tzinfo is None:
+                filters.since = filters.since.replace(tzinfo=timezone.utc)
+        except ValueError:
+            click.echo(f"Invalid datetime format: {since}", err=True)
+            click.echo("Expected ISO format: YYYY-MM-DDTHH:MM:SS", err=True)
+            sys.exit(EXIT_ERROR)
 
     if last:
-        from village.event_query import parse_duration
-
         try:
             filters.last = parse_duration(last)
         except ValueError as e:
-            click.echo(f"Invalid duration format: {e}")
-            sys.exit(EXIT_ERROR.value)
+            click.echo(f"Invalid duration format: {e}", err=True)
+            sys.exit(EXIT_ERROR)
 
     if json_output:
-        result = query_events(filters, "json", config)
-        click.echo(result)
+        result = query_events(filters, "json", config.village_dir)
+        if isinstance(result, str):
+            click.echo(result)
+        else:
+            click.echo(query_result_to_json(result))
     else:
-        result = query_events(filters, "table", config)
+        result = query_events(filters, "table", config.village_dir)
         click.echo(result)
 
 
@@ -994,7 +1048,7 @@ def state(task_id: str, json_output: bool) -> None:
 
     if current_state is None and not history:
         click.echo(f"Task {task_id} not found (no lock file)", err=True)
-        sys.exit(EXIT_BLOCKED.value)
+        sys.exit(EXIT_BLOCKED)
 
     if json_output:
         output = {
@@ -1051,7 +1105,7 @@ def pause(task_id: str, force: bool) -> None:
         4: Task not in IN_PROGRESS state
         5: Task not found
     """
-    from village.state_machine import TaskStateMachine, TaskState
+    from village.state_machine import TaskState, TaskStateMachine
 
     config = get_config()
     state_machine = TaskStateMachine(config)
@@ -1060,11 +1114,11 @@ def pause(task_id: str, force: bool) -> None:
 
     if current_state is None:
         click.echo(f"Task {task_id} not found (no lock file)", err=True)
-        sys.exit(EXIT_BLOCKED.value)
+        sys.exit(EXIT_BLOCKED)
 
     if not force and current_state != TaskState.IN_PROGRESS:
         click.echo(f"Task {task_id} is not IN_PROGRESS (current: {current_state.value})", err=True)
-        sys.exit(EXIT_BLOCKED.value)
+        sys.exit(EXIT_BLOCKED)
 
     result = state_machine.transition(
         task_id,
@@ -1076,7 +1130,7 @@ def pause(task_id: str, force: bool) -> None:
         click.echo(f"Paused task {task_id}")
     else:
         click.echo(f"Failed to pause: {result.message}", err=True)
-        sys.exit(EXIT_ERROR.value)
+        sys.exit(EXIT_ERROR)
 
 
 @village.command("resume-task")
@@ -1106,7 +1160,7 @@ def resume_task(task_id: str, force: bool) -> None:
         4: Task not in PAUSED state
         5: Task not found
     """
-    from village.state_machine import TaskStateMachine, TaskState
+    from village.state_machine import TaskState, TaskStateMachine
 
     config = get_config()
     state_machine = TaskStateMachine(config)
@@ -1115,14 +1169,14 @@ def resume_task(task_id: str, force: bool) -> None:
 
     if current_state is None:
         click.echo(f"Task {task_id} not found (no lock file)", err=True)
-        sys.exit(EXIT_BLOCKED.value)
+        sys.exit(EXIT_BLOCKED)
 
     if not force and current_state != TaskState.PAUSED:
         click.echo(
             f"Task {task_id} is not PAUSED (current: {current_state.value})",
             err=True,
         )
-        sys.exit(EXIT_BLOCKED.value)
+        sys.exit(EXIT_BLOCKED)
 
     result = state_machine.transition(
         task_id,
@@ -1134,7 +1188,7 @@ def resume_task(task_id: str, force: bool) -> None:
         click.echo(f"Resumed task {task_id}")
     else:
         click.echo(f"Failed to resume: {result.message}", err=True)
-        sys.exit(EXIT_ERROR.value)
+        sys.exit(EXIT_ERROR)
 
 
 @village.command()
@@ -1175,7 +1229,7 @@ def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -
             "Use --reset to clear counters, or --backend to export metrics.",
             err=True,
         )
-        sys.exit(EXIT_ERROR.value)
+        sys.exit(EXIT_ERROR)
 
     from village.metrics import MetricsCollector
 
@@ -1189,8 +1243,6 @@ def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -
         return
 
     backend_choice = backend or config.metrics.backend
-    port_choice = port or config.metrics.port
-    interval_choice = interval or config.metrics.export_interval_seconds
 
     collector = MetricsCollector(config)
 
@@ -1202,4 +1254,4 @@ def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -
         click.echo(f"StatsD metrics:\n{statsd_metrics}")
     else:
         click.echo(f"Unknown backend: {backend_choice}")
-        sys.exit(EXIT_ERROR.value)
+        sys.exit(EXIT_ERROR)
