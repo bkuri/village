@@ -1137,11 +1137,40 @@ def resume_task(task_id: str, force: bool) -> None:
         sys.exit(EXIT_ERROR.value)
 
 
-@village.command()
+@village.group()
+def metrics() -> None:
+    """
+    Export Village metrics.
+
+    Exports metrics to Prometheus (HTTP) or StatsD (UDP).
+    Metrics include workers, queue length, locks, orphans.
+
+    \b
+    Non-mutating. Collects metrics from Village state.
+
+    Examples:
+        village metrics export --backend prometheus --port 9090
+        village metrics export --backend statsd
+        village metrics export --interval 30
+
+    Backend options:
+        --backend prometheus: Prometheus HTTP endpoint
+        --backend statsd: StatsD UDP socket
+
+    Other options:
+        --port: Port for Prometheus server (default: from config)
+        --interval: Export interval in seconds (default: from config)
+
+    Default: One-time export using configured backend
+    """
+    pass
+
+
+@metrics.command()
 @click.option("--backend", type=click.Choice(["prometheus", "statsd"]), help="Metrics backend")
 @click.option("--port", type=int, help="Port for metrics export")
 @click.option("--interval", type=int, help="Export interval in seconds")
-def metrics_export(backend: str, port: int | None, interval: int | None) -> None:
+def export(backend: str, port: int | None, interval: int | None) -> None:
     """
     Export Village metrics.
 
