@@ -75,11 +75,6 @@ SUBCOMMANDS = {
         "description": "Confirm and create Beads tasks from enabled drafts",
         "args": [],
     },
-    "/confirm": {
-        "handler": "task_confirm",
-        "description": "Confirm and create Beads tasks from enabled drafts",
-        "args": [],
-    },
     "/reset": {
         "handler": "task_reset",
         "description": "Rollback session: delete created tasks, restore context",
@@ -94,6 +89,16 @@ SUBCOMMANDS = {
         "handler": "task_brainstorm",
         "description": "Break down task using Sequential Thinking",
         "args": ["title"],
+    },
+    "/refine": {
+        "handler": "task_refine",
+        "description": "Revise current task specification",
+        "args": ["clarification"],
+    },
+    "/revise": {
+        "handler": "task_refine",
+        "description": "Alias for /refine",
+        "args": ["clarification"],
     },
 }
 
@@ -152,6 +157,7 @@ def execute_command(command: str, args: list[str], config: _Config) -> Subcomman
         "task_reset": _task_reset,
         "task_list_drafts": _task_list_drafts,
         "task_brainstorm": _task_brainstorm,
+        "task_refine": _task_refine,
     }
 
     handler = handlers.get(command)
@@ -504,3 +510,9 @@ def _task_list_drafts(args: list[str], config: _Config) -> tuple[str, str, int]:
 def _task_brainstorm(args: list[str], config: _Config) -> tuple[str, str, int]:
     """Handle /brainstorm command (runs in conversation, not read-only)."""
     return "", "Use /brainstorm in conversation mode", 0
+
+
+def _task_refine(args: list[str], config: _Config) -> tuple[str, str, int]:
+    """Handle /refine and /revise commands (runs in conversation, not read-only)."""
+    clarification = " ".join(args) if args else "no clarification provided"
+    return "", f"Use /refine or /revise in conversation mode with: {clarification}", 0
