@@ -7,6 +7,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import Optional
 
+from village.chat.task_spec import TaskSpec
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,22 +19,28 @@ class BeadsError(Exception):
 
 
 @dataclass
-class TaskSpec:
-    """Task specification for Beads creation."""
-
-    title: str
-    description: str
-    estimate: int
-    dependencies: dict[str, list[str]]
-
-
-@dataclass
 class BeadsClient:
     """Wrapper for Beads CLI commands."""
 
     def __init__(self) -> None:
         """Initialize BeadsClient."""
         self._bd_cmd = "bd"
+
+    def _to_beads_spec(self, spec: TaskSpec) -> dict[str, object]:
+        """
+        Convert TaskSpec to dict format for Beads CLI.
+
+        Args:
+            spec: TaskSpec instance
+
+        Returns:
+            Dictionary with fields for Beads create command
+        """
+        return {
+            "title": spec.title,
+            "description": spec.description,
+            "estimate": spec.estimate,
+        }
 
     async def search_tasks(
         self, query: str, limit: int = 5, status: str = "open"
@@ -92,14 +100,13 @@ class BeadsClient:
             spec.title,
             "--description",
             spec.description,
-            "--estimate",
-            str(spec.estimate),
         ]
 
         deps_parts = []
-        for dep_type, task_ids in spec.dependencies.items():
-            if task_ids:
-                deps_parts.append(f"{dep_type}:{','.join(task_ids)}")
+        if spec.blocks:
+            deps_parts.append(f"blocks:{','.join(spec.blocks)}")
+        if spec.blocked_by:
+            deps_parts.append(f"blocked_by:{','.join(spec.blocked_by)}")
 
         if deps_parts:
             deps_str = ",".join(deps_parts)
@@ -216,6 +223,27 @@ class BeadsClient:
             raise BeadsError(f"Unknown estimate unit: {unit}")
 
         return int(value * multipliers[unit])
+
+    def parse_estimate_to_minutes(self, estimate: str) -> int:
+        """
+        Parse estimate string to minutes.
+
+        Supports formats:
+        - "2-3 hours" → 120-180 (returns average)
+        - "2 hours" → 120
+        - "30 min" → 30
+        - "1.5 days" → 720
+
+        Args:
+            estimate: Estimate string (e.g., "2-3 hours", "30 min")
+
+        Returns:
+            Estimate in minutes
+
+        Raises:
+            BeadsError: If estimate string is invalid
+        """
+        return self.parse_estimate(estimate)
 
     def _extract_task_id(self, output: str) -> Optional[str]:
         """

@@ -70,7 +70,7 @@ class AnthropicClient(LLMClient):
             ]
 
         try:
-            response = self.client.messages.create(**kwargs)
+            response = self.client.messages.create(**kwargs)  # type: ignore[call-overload]
 
             content_blocks = response.content
             text_parts = [block.text for block in content_blocks if hasattr(block, "text")]

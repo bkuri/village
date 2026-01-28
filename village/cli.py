@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 
 import click
 
+from village.chat.beads_client import BeadsClient, BeadsError
+from village.chat.llm_chat import LLMChat
 from village.config import get_config
 from village.errors import (
     EXIT_BLOCKED,
@@ -16,6 +18,7 @@ from village.errors import (
     InterruptedResume,
 )
 from village.event_log import Event, append_event
+from village.llm.factory import get_llm_client
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
     clear_pane_cache,
@@ -829,6 +832,77 @@ def chat(start_mode: bool, force: bool) -> None:
             )
 
         save_session_state(state, config)
+
+
+@village.command("llm-chat")
+@click.option("--force", is_flag=True, help="Skip exit warning on pending changes")
+def llm_chat(force: bool) -> None:
+    """
+    Start LLM-native conversational interface for task creation.
+
+    LLM-based chat with simple slash commands:
+      - /create <title>: Create new task specification
+      - /refine <clarification>: Revise current task
+      - /revise <clarification>: Alias for /refine
+      - /undo: Undo last refinement
+      - /confirm: Create task in Beads
+      - /discard: Discard current task
+      - /tasks, /task <id>, /ready, /status, /history, /help
+
+    Non-mutating by default. Creates tasks only on /confirm.
+
+    Type /help for command reference.
+    """
+    import asyncio
+    from pathlib import Path
+
+    config = get_config()
+
+    try:
+        beads_client = BeadsClient()
+    except Exception:
+        beads_client = None
+
+    llm_client = get_llm_client(config)
+
+    prompt_path = Path(__file__).parent.parent / "prompts" / "chat" / "ppc_task_spec.md"
+    try:
+        with open(prompt_path, encoding="utf-8") as f:
+            system_prompt = f.read()
+    except FileNotFoundError:
+        system_prompt = None
+
+    chat = LLMChat(llm_client, system_prompt=system_prompt)
+
+    async def setup_beads_client() -> None:
+        if beads_client:
+            await chat.set_beads_client(beads_client)
+
+    try:
+        asyncio.run(setup_beads_client())
+    except Exception:
+        pass
+
+    click.echo("LLM Chat - Type /help for commands, /exit or /quit to quit\n")
+
+    try:
+        while True:
+            user_input = click.prompt("", prompt_suffix="> ")
+
+            if user_input.lower() in ["/exit", "/quit", "/bye"]:
+                break
+
+            try:
+                response = asyncio.run(chat.handle_message(user_input))
+                click.echo("\n" + response + "\n")
+            except BeadsError as e:
+                click.echo(f"\n❌ Beads error: {e}\n")
+            except Exception as e:
+                click.echo(f"\n❌ Error: {e}\n")
+    except click.exceptions.Abort:
+        click.echo("\nExiting...")
+    except KeyboardInterrupt:
+        click.echo("\nExiting...")
 
 
 @village.command()

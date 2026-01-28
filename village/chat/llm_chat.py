@@ -3,10 +3,13 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, cast
 
-from village.chat.task_spec import TaskSpec
 from village.chat.beads_client import BeadsClient, BeadsError
+from village.chat.task_spec import TaskSpec
+
+ScopeType = Literal["fix", "feature", "config", "docs", "test", "refactor"]
+ConfidenceType = Literal["high", "medium", "low"]
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -42,7 +45,7 @@ class ChatSession:
     """Chat session state."""
 
     current_task: TaskSpec | None = None
-    refinements: list[dict] = field(default_factory=list)
+    refinements: list[dict[str, object]] = field(default_factory=list)
     current_iteration: int = 0  # 0 = original, 1+ = refinements
 
     def get_current_spec(self) -> TaskSpec | None:
@@ -50,7 +53,19 @@ class ChatSession:
         if self.current_iteration == 0:
             return self.current_task
         elif self.refinements:
-            return TaskSpec(**self.refinements[-1]["task_spec"])
+            task_spec_dict = cast(dict[str, object], self.refinements[-1]["task_spec"])
+            return TaskSpec(
+                title=cast(str, task_spec_dict.get("title")),
+                description=cast(str, task_spec_dict.get("description")),
+                scope=cast(ScopeType, cast(str, task_spec_dict.get("scope"))),
+                blocks=cast(list[str], task_spec_dict.get("blocks") or []),
+                blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
+                success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
+                estimate=cast(str, task_spec_dict.get("estimate")),
+                confidence=cast(
+                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
+                ),
+            )
         return self.current_task
 
     def add_refinement(self, task_spec: TaskSpec, user_input: str) -> None:
@@ -74,7 +89,19 @@ class ChatSession:
         self.refinements.pop()
         self.current_iteration -= 1
         if self.refinements:
-            self.current_task = TaskSpec(**self.refinements[-1]["task_spec"])
+            task_spec_dict = cast(dict[str, object], self.refinements[-1]["task_spec"])
+            self.current_task = TaskSpec(
+                title=cast(str, task_spec_dict.get("title")),
+                description=cast(str, task_spec_dict.get("description")),
+                scope=cast(ScopeType, cast(str, task_spec_dict.get("scope"))),
+                blocks=cast(list[str], task_spec_dict.get("blocks") or []),
+                blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
+                success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
+                estimate=cast(str, task_spec_dict.get("estimate")),
+                confidence=cast(
+                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
+                ),
+            )
         return True
 
 
@@ -85,12 +112,14 @@ class LLMChat:
     session: ChatSession
     llm_client: _LLMClient
     beads_client: BeadsClient | None = None
+    system_prompt: str | None = None
 
-    def __init__(self, llm_client: _LLMClient) -> None:
+    def __init__(self, llm_client: _LLMClient, system_prompt: str | None = None) -> None:
         """Initialize LLM chat."""
         self.session = ChatSession()
         self.llm_client = llm_client
         self.beads_client = None
+        self.system_prompt = system_prompt
 
     async def set_beads_client(self, beads_client: BeadsClient) -> None:
         """Set Beads client for task creation."""
@@ -130,25 +159,25 @@ class LLMChat:
             return f"Unknown command: {cmd}\nUse /help for available commands"
 
         handler = getattr(self, handler_name)
-        return await handler(args) if asyncio.iscoroutinefunction(handler) else handler(args)
+        result = await handler(args) if asyncio.iscoroutinefunction(handler) else handler(args)
+        return cast(str, result)
 
     async def handle_create(self, user_input: str) -> str:
         """Handle /create or natural language task creation."""
         logger.info(f"Creating task from input: {user_input[:50]}...")
 
-        # Parse task specification with LLM
-        response = await self.llm_client.call(
+        # Parse JSON response (type: ignore for Any return)
+        response: str = self.llm_client.call(
             prompt=f"{user_input}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only.",
-            system_prompt=self._get_prompt(),
+            system_prompt=self.system_prompt or self._get_prompt(),
         )
 
-        # Parse JSON response
         import json
 
         try:
             task_spec_dict = json.loads(response)
-        except json.JSONDecodeError as e:
-            return f"Failed to parse LLM response: {e}\nGot: {response[:100]}"
+        except json.JSONDecodeError:
+            return f"Failed to parse LLM response. Got: {response[:100]}"
 
         # Validate required fields
         required_fields = ["title", "description", "scope"]
@@ -198,7 +227,7 @@ class LLMChat:
 
         response = self.llm_client.call(
             prompt=f"Current task:\n{self._task_spec_to_text(current_spec)}\n\nUser refinement: {user_input}\n\nUpdate the task specification based on this feedback. Preserve as much as possible, only change what the refinement explicitly addresses. Extract any new dependencies. Return JSON only.",
-            system_prompt=self._get_prompt(),
+            system_prompt=self.system_prompt or self._get_prompt(),
         )
 
         # Parse JSON response
@@ -315,7 +344,12 @@ class LLMChat:
 
             lines = [f"\n📋 TASK: {task_id}\n", "DEPENDENCIES:\n"]
             for dep_type, task_list in deps.items():
-                lines.append(f"  {dep_type}: {', '.join(task_list) if task_list else '(none)'}")
+                if isinstance(task_list, list):
+                    lines.append(
+                        f"  {dep_type}: {', '.join(cast(list[str], task_list)) if task_list else '(none)'}"
+                    )
+                else:
+                    lines.append(f"  {dep_type}: {task_list}")
 
             return "\n".join(lines)
         except BeadsError as e:
@@ -345,13 +379,15 @@ class LLMChat:
         """Handle /status command - show chat session status."""
         if self.session.current_task:
             spec = self.session.get_current_spec()
+            if spec is None:
+                return "\n📋 CURRENT SESSION:\n  No active task\n"
             lines = [
-                f"\n📋 CURRENT SESSION:\n",
+                "\n📋 CURRENT SESSION:\n",
                 f"  Task: {spec.title}\n",
                 f"  Refinements: {self.session.current_iteration}\n",
                 f"  Scope: {spec.scope}\n",
                 f"  Dependencies: {spec.dependency_summary()}\n",
-                f"  Status: Pending /confirm\n",
+                "  Status: Pending /confirm\n",
             ]
             return "\n".join(lines)
         else:
@@ -364,7 +400,19 @@ class LLMChat:
 
         lines = ["\n📝 REFINEMENT HISTORY:\n"]
         for ref in self.session.refinements:
-            task_spec = TaskSpec(**ref["task_spec"])
+            task_spec_dict = cast(dict[str, object], ref["task_spec"])
+            task_spec = TaskSpec(
+                title=cast(str, task_spec_dict.get("title")),
+                description=cast(str, task_spec_dict.get("description")),
+                scope=cast(ScopeType, cast(str, task_spec_dict.get("scope"))),
+                blocks=cast(list[str], task_spec_dict.get("blocks") or []),
+                blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
+                success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
+                estimate=cast(str, task_spec_dict.get("estimate")),
+                confidence=cast(
+                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
+                ),
+            )
             lines.append(f"  #{ref['iteration']}: {task_spec.title}")
             lines.append(f"     User: {ref['user_input']}")
             lines.append(f"     {task_spec.scope} - {task_spec.estimate}")

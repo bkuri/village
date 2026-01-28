@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from village.chat.beads_client import BeadsClient, BeadsError, TaskSpec
+from village.chat.beads_client import BeadsClient, BeadsError
+from village.chat.task_spec import TaskSpec
 
 
 @pytest.fixture
@@ -75,8 +76,11 @@ class TestBeadsClient:
         spec = TaskSpec(
             title="Add new feature",
             description="Implement new feature with proper testing",
-            estimate=120,
-            dependencies={"blocks": ["bd-a1b2"]},
+            scope="feature",
+            blocks=["bd-a1b2"],
+            blocked_by=[],
+            success_criteria=["Tests pass"],
+            estimate="2h",
         )
 
         with patch.object(beads_client, "_run_command", new_callable=AsyncMock) as mock_run:
@@ -95,8 +99,6 @@ class TestBeadsClient:
             assert "Add new feature" in cmd
             assert "--description" in cmd
             assert "Implement new feature with proper testing" in cmd
-            assert "--estimate" in cmd
-            assert "120" in cmd
             assert "--deps" in cmd
             assert "blocks:bd-a1b2" in cmd
 
@@ -106,11 +108,11 @@ class TestBeadsClient:
         spec = TaskSpec(
             title="Integration test",
             description="Add integration tests",
-            estimate=60,
-            dependencies={
-                "blocks": ["bd-a1b2", "bd-c3d4"],
-                "blocked": ["bd-e5f6"],
-            },
+            scope="test",
+            blocks=["bd-a1b2", "bd-c3d4"],
+            blocked_by=["bd-e5f6"],
+            success_criteria=["Integration tests pass"],
+            estimate="1h",
         )
 
         with patch.object(beads_client, "_run_command", new_callable=AsyncMock) as mock_run:
@@ -125,7 +127,7 @@ class TestBeadsClient:
             cmd = mock_run.call_args[0][0]
             deps_arg = cmd[cmd.index("--deps") + 1]
             assert "blocks:bd-a1b2,bd-c3d4" in deps_arg
-            assert "blocked:bd-e5f6" in deps_arg
+            assert "blocked_by:bd-e5f6" in deps_arg
 
     @pytest.mark.asyncio
     async def test_create_task_no_deps(self, beads_client):
@@ -133,8 +135,11 @@ class TestBeadsClient:
         spec = TaskSpec(
             title="Simple task",
             description="Just a simple task",
-            estimate=30,
-            dependencies={},
+            scope="feature",
+            blocks=[],
+            blocked_by=[],
+            success_criteria=["Task completes"],
+            estimate="30m",
         )
 
         with patch.object(beads_client, "_run_command", new_callable=AsyncMock) as mock_run:
@@ -155,8 +160,11 @@ class TestBeadsClient:
         spec = TaskSpec(
             title="Test task",
             description="Test",
-            estimate=60,
-            dependencies={},
+            scope="test",
+            blocks=[],
+            blocked_by=[],
+            success_criteria=["Test passes"],
+            estimate="1h",
         )
 
         with patch.object(beads_client, "_run_command", new_callable=AsyncMock) as mock_run:
