@@ -709,3 +709,172 @@ def test_write_state_history_no_existing_history_line(tmp_path: Path):
     # Verify state_history line was appended
     content = lock_path.read_text(encoding="utf-8")
     assert "state_history=" in content
+def test_read_state_from_lock_io_error(tmp_path: Path):
+    """Test reading lock file with IOError."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=queued\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+
+    # Mock read_text to raise IOError
+    with patch.object(Path, "read_text", side_effect=IOError("Permission denied")):
+        state = machine.get_state("bd-a3f8")
+        # Should return None on IOError
+        assert state is None
+
+
+def test_write_state_to_lock_io_error(tmp_path: Path):
+    """Test writing state to lock file with IOError."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    machine = TaskStateMachine(config)
+    machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+
+    # Mock write_text to raise IOError
+    with patch.object(Path, "write_text", side_effect=IOError("Disk full")):
+        result = machine.transition("bd-a3f8", TaskState.CLAIMED)
+        # Should return failure on write error
+        assert result.success is False
+        assert "Failed to persist state transition" in result.message
+
+
+def test_read_state_history_io_error(tmp_path: Path):
+    """Test reading state history from lock file with IOError."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=queued\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+
+    # Mock read_text to raise IOError
+    with patch.object(Path, "read_text", side_effect=IOError("Permission denied")):
+        history = machine.get_state_history("bd-a3f8")
+        # Should return empty list on IOError
+        assert history == []
+
+
+def test_write_state_history_io_error(tmp_path: Path):
+    """Test writing state history to lock file with IOError."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    machine = TaskStateMachine(config)
+    machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+
+    # Mock write_text to raise OSError
+    with patch.object(Path, "write_text", side_effect=OSError("No space left")):
+        result = machine.transition("bd-a3f8", TaskState.CLAIMED)
+        # Should return failure on write error
+        assert result.success is False
+        assert "Failed to persist state transition" in result.message
+
+
+def test_log_transition_event_io_error(tmp_path: Path):
+    """Test logging transition event with IOError."""
+    from unittest.mock import patch, mock_open
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    machine = TaskStateMachine(config)
+
+    # Mock file open to raise IOError
+    with patch("builtins.open", mock_open()) as mock_file:
+        mock_file.side_effect = IOError("Cannot write to event log")
+
+        # Transition should succeed despite logging error
+        result = machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+        # Should still succeed even if event logging fails
+        assert result.success is True
+
+
+def test_transition_write_error(tmp_path: Path):
+    """Test transition when write operations fail."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    machine = TaskStateMachine(config)
+    machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+
+    # Mock replace to raise OSError
+    with patch.object(Path, "replace", side_effect=OSError("No space left")):
+        result = machine.transition("bd-a3f8", TaskState.CLAIMED)
+        # Should return failure
+        assert result.success is False
+        assert "Failed to persist state transition" in result.message
+        # State should not have changed
+        state = machine.get_state("bd-a3f8")
+        assert state == TaskState.QUEUED
+
+
+def test_initialize_state_write_error(tmp_path: Path):
+    """Test initialize_state when write operations fail."""
+    from unittest.mock import patch
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    machine = TaskStateMachine(config)
+
+    # Mock replace to raise OSError
+    with patch.object(Path, "replace", side_effect=OSError("Disk full")):
+        result = machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+        # Should return failure
+        assert result.success is False
+        assert "Failed to initialize state" in result.message
+        # State should not have been initialized
+        state = machine.get_state("bd-a3f8")
+        assert state is None
