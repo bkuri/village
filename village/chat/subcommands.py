@@ -433,64 +433,34 @@ def _task_submit(args: list[str], config: _Config) -> tuple[str, str, int]:
 
 
 def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
-    # type: ignore  # Complex async/sync type handling for session state
-
     """Confirm batch submission to create Beads tasks."""
     from village.chat.state import load_session_state, save_session_state
     from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
-    import asyncio
 
     state_dict = load_session_state(config)
-
-    # Get baseline and breakdown safely
-    snapshot = state_dict.get("session_snapshot")
-    baseline = {}
-    breakdown = {}
-    if isinstance(snapshot, dict):
-        baseline = snapshot.get("brainstorm_baseline", {})
-        breakdown = snapshot.get("task_breakdown", {})
-
-    pending = snapshot.get("pending_enables", []) if snapshot else []
+    pending = state_dict.get("pending_enables", [])
 
     if not pending:
         return "", "Error: No drafts enabled. Use `/enable <draft-id>` first.", 1
 
     try:
+        baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
+        breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
         config_git_root_name = config.git_root.name
 
         specs = extract_beads_specs(
-            baseline=baseline,
-            breakdown=breakdown,
-            session_id="",  # type: ignore
-        )
-
-    if not pending:
-        return "", "Error: No drafts enabled. Use `/enable <draft-id>` first.", 1
-
-    try:
-        config_git_root_name = config.git_root.name
-
-        # Get baseline and breakdown safely
-        baseline = {}
-        breakdown = {}
-        if isinstance(snapshot_dict, dict):
-            baseline = snapshot_dict.get("brainstorm_baseline", {})
-            breakdown = snapshot_dict.get("task_breakdown", {})
-
-        specs = extract_beads_specs(
-            baseline=baseline,
-            breakdown=breakdown,
-            session_id="",
+            baseline,
+            breakdown,
+            config_git_root_name,
         )
 
         created_tasks = create_draft_tasks(specs, config)
         created_ids = list(created_tasks.values())
 
-        # Update session state
+        # Update session state with created task IDs
+        snapshot = state_dict.get("session_snapshot", {})
+        snapshot["brainstorm_created_ids"] = created_ids
         state_dict["created_task_ids"] = created_ids
-        if isinstance(snapshot_dict, dict):
-            snapshot_dict["brainstorm_created_ids"] = created_ids
-            state_dict["session_snapshot"] = snapshot_dict
         save_session_state(config, state_dict)
 
         return f"Created {len(created_tasks)} task(s) in Beads", "", 0
