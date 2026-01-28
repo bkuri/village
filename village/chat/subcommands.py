@@ -72,7 +72,7 @@ SUBCOMMANDS = {
     },
     "/confirm": {
         "handler": "task_confirm",
-        "description": "Confirm batch submission to create Beads tasks",
+        "description": "Confirm and create Beads tasks from enabled drafts",
         "args": [],
     },
     "/reset": {

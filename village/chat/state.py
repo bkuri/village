@@ -45,6 +45,11 @@ def save_session_state(state: Any, config: _Config) -> None:
         "updated_at": datetime.now().isoformat(),
     }
 
+    if hasattr(state, "created_task_ids"):
+        session_data["created_task_ids"] = state.created_task_ids
+    if hasattr(state, "session_snapshot"):
+        session_data["session_snapshot"] = state.session_snapshot
+
     session_file.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
     logger.debug(f"Saved session state: {session_file}")
 

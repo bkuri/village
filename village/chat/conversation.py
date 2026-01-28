@@ -538,18 +538,52 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         )
         return state
 
-    summary = _prepare_batch_summary(state, config)
-    summary_text = _display_batch_summary(summary)
+    # Actually create tasks in Beads by calling create_draft_tasks
+    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
+    from village.chat.state import load_session_state, save_session_state
 
-    state.messages.append(
-        ConversationMessage(
-            role="assistant",
-            content=f"{summary_text}\n\nConfirm submission? (confirm/reset)",
+    state_dict = load_session_state(config)
+
+    try:
+        baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
+        breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
+        config_git_root_name = config.git_root.name
+
+        specs = extract_beads_specs(
+            baseline,
+            breakdown,
+            config_git_root_name,
         )
-    )
 
-    state.active_draft_id = None
-    return state
+        created_tasks = create_draft_tasks(specs, config)
+        created_ids = list(created_tasks.values())
+
+        # Update session state
+        state_dict["created_task_ids"] = created_ids
+        snapshot = state_dict.get("session_snapshot", {})
+        snapshot["brainstorm_created_ids"] = created_ids
+        state_dict["session_snapshot"] = snapshot
+        save_session_state(config, state_dict)
+
+        summary_text = f"Created {len(created_tasks)} task(s) in Beads"
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=summary_text,
+            )
+        )
+        state.active_draft_id = None
+        return state
+    except Exception as e:
+        logger.error(f"Failed to create tasks: {e}")
+        state.errors.append(str(e))
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=f"Error creating tasks: {e}",
+            )
+        )
+        return state
 
 
 def _handle_reset(state: ConversationState, config: _Config) -> ConversationState:
