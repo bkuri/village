@@ -151,7 +151,7 @@ def up(dry_run: bool, plan: bool, dashboard: bool) -> None:
         plan_mode = True
         if not dashboard:
             click.echo("Note: Dashboard creation disabled (--no-dashboard)")
-        click.echo(render_initialization_plan(init_plan, plan_mode=plan_mode))
+        click.echo(render_initialization_plan(init_plan, config.tmux_session, plan_mode=plan_mode))
         return
 
     # Execute initialization

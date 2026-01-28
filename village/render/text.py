@@ -291,7 +291,9 @@ def render_ready_text(assessment: ReadyAssessment) -> str:
     return "\n".join(lines)
 
 
-def render_initialization_plan(plan: "InitializationPlan", *, plan_mode: bool = False) -> str:
+def render_initialization_plan(
+    plan: "InitializationPlan", session_name: str, *, plan_mode: bool = False
+) -> str:
     """Render initialization plan as concise one-screen summary.
 
     Example output:
@@ -303,6 +305,7 @@ def render_initialization_plan(plan: "InitializationPlan", *, plan_mode: bool = 
 
     Args:
         plan: InitializationPlan to render
+        session_name: Tmux session name
         plan_mode: If True, show "DRY RUN" prefix
     """
     prefix = "DRY RUN: " if plan_mode else ""
@@ -310,9 +313,9 @@ def render_initialization_plan(plan: "InitializationPlan", *, plan_mode: bool = 
     lines = [f"{prefix} Would initialize village runtime", ""]
 
     if plan.session_exists:
-        lines.append(f"  Session: {plan.session_name} (exists)")
+        lines.append(f"  Session: {session_name} (exists)")
     else:
-        lines.append(f"  Session: {plan.session_name} (new)")
+        lines.append(f"  Session: {session_name} (new)")
 
     if plan.directories_exist:
         lines.append("  Directories: .village/ (exists)")
