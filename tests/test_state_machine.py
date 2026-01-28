@@ -589,3 +589,123 @@ def test_can_transition_from_terminal_states():
 
     assert len(machine.VALID_TRANSITIONS[TaskState.COMPLETED]) == 0
     assert len(machine.VALID_TRANSITIONS[TaskState.FAILED]) == 0
+
+
+def test_read_state_from_lock_corrupted_state(tmp_path: Path):
+    """Test reading lock file with invalid state value."""
+    from village.state_machine import TaskStateMachine
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file with invalid state
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=invalid_state\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+    state = machine.get_state("bd-a3f8")
+
+    # Should return None for corrupted state
+    assert state is None
+
+
+def test_write_state_no_existing_state_line(tmp_path: Path):
+    """Test writing state when lock file has no state line."""
+    from village.state_machine import TaskStateMachine
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file with other data but no state line
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("pane=%12\nwindow=build\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+    result = machine.initialize_state("bd-a3f8", TaskState.QUEUED)
+
+    assert result.success is True
+
+    # Verify state line was appended
+    content = lock_path.read_text(encoding="utf-8")
+    assert "pane=%12" in content
+    assert "state=queued" in content
+
+
+def test_read_state_history_empty_json(tmp_path: Path):
+    """Test reading lock file with empty state_history JSON."""
+    from village.state_machine import TaskStateMachine
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file with empty state_history
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=queued\nstate_history=\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+    history = machine.get_state_history("bd-a3f8")
+
+    # Should return empty list for empty JSON
+    assert history == []
+
+
+def test_read_state_history_corrupted_json(tmp_path: Path):
+    """Test reading lock file with invalid state_history JSON."""
+    from village.state_machine import TaskStateMachine
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file with invalid JSON
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=queued\nstate_history={invalid json}\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+    history = machine.get_state_history("bd-a3f8")
+
+    # Should return empty list for corrupted JSON
+    assert history == []
+
+
+def test_write_state_history_no_existing_history_line(tmp_path: Path):
+    """Test writing state history when lock file has no history line."""
+    from village.state_machine import TaskStateMachine
+
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+    config.ensure_exists()
+
+    # Create lock file with state but no history
+    lock_path = config.locks_dir / "bd-a3f8.lock"
+    lock_path.write_text("state=queued\n", encoding="utf-8")
+
+    machine = TaskStateMachine(config)
+    machine.transition("bd-a3f8", TaskState.CLAIMED)
+
+    # Verify state_history line was appended
+    content = lock_path.read_text(encoding="utf-8")
+    assert "state_history=" in content
