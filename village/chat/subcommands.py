@@ -67,7 +67,12 @@ SUBCOMMANDS = {
     "/discard": {"handler": "task_discard", "description": "Delete draft", "args": ["id"]},
     "/submit": {
         "handler": "task_submit",
-        "description": "Review and submit batch of enabled drafts",
+        "description": "Review and confirm batch of enabled drafts",
+        "args": [],
+    },
+    "/confirm": {
+        "handler": "task_confirm",
+        "description": "Confirm batch submission to create Beads tasks",
         "args": [],
     },
     "/reset": {
@@ -427,6 +432,42 @@ def _task_submit(args: list[str], config: _Config) -> tuple[str, str, int]:
     return f"Submitting {len(pending)} draft(s)", "", 0
 
 
+def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
+    """Confirm batch submission to create Beads tasks."""
+    from village.chat.state import load_session_state, save_session_state
+    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
+
+    state_dict = load_session_state(config)
+    pending = state_dict.get("pending_enables", [])
+
+    if not pending:
+        return "", "Error: No drafts enabled. Use `/enable <draft-id>` first.", 1
+
+    try:
+        baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
+        breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
+        config_git_root_name = config.git_root.name
+
+        specs = extract_beads_specs(
+            baseline,
+            breakdown,
+            config_git_root_name,
+        )
+
+        created_tasks = create_draft_tasks(specs, config)
+        created_ids = list(created_tasks.values())
+
+        # Update session state with created task IDs
+        snapshot = state_dict.get("session_snapshot", {})
+        snapshot["brainstorm_created_ids"] = created_ids
+        state_dict["created_task_ids"] = created_ids
+        save_session_state(config, state_dict)
+
+        return f"Created {len(created_tasks)} task(s) in Beads", "", 0
+    except Exception as e:
+        return "", f"Error creating tasks: {e}", 1
+
+
 def _task_reset(args: list[str], config: _Config) -> tuple[str, str, int]:
     """Rollback session."""
     from village.chat.state import load_session_state
@@ -454,7 +495,7 @@ def _task_list_drafts(args: list[str], config: _Config) -> tuple[str, str, int]:
 
     return "\n".join(lines), "", 0
 
+
 def _task_brainstorm(args: list[str], config: _Config) -> tuple[str, str, int]:
     """Handle /brainstorm command (runs in conversation, not read-only)."""
     return "", "Use /brainstorm in conversation mode", 0
-
