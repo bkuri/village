@@ -6,11 +6,11 @@ pkgver=1.0.0
 pkgrel=1
 pkgdesc="CLI-native parallel development orchestrator"
 url="https://github.com/bkuri/village"
-license=("MIT")  # Check actual license in pyproject.toml
-arch=("any")  # Pure Python package, architecture-independent
+license=("MIT")
+arch=("any")
 depends=("python" "python-hatchling")
 makedepends=("python-build" "python-installer" "python-wheel")
-source=("https://files.pythonhosted.org/packages/source/${pkgname}/${pkgname//-/_}/${pkgver}.tar.gz")
+source=("${pkgname}-${pkgver}.tar.gz")
 
 build() {
     cd "$srcdir/$_name-$pkgver"
