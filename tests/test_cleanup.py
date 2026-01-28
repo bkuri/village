@@ -127,27 +127,38 @@ def test_execute_cleanup_logs_events(mock_config: Config):
     """Test execute_cleanup logs cleanup events."""
     from village.event_log import read_events
 
-    mock_config.git_root.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
-    mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+    with patch("village.locks.get_config") as mock_locks_config:
+        mock_locks_config.return_value = mock_config
 
-    stale_lock = Lock(
-        task_id="bd-stale",
-        pane_id="%99",
-        window="test-window-stale",
-        agent="test",
-        claimed_at=datetime.now(timezone.utc),
-    )
-    write_lock(stale_lock)
+        with patch("village.cleanup.get_config") as mock_cleanup_config:
+            mock_cleanup_config.return_value = mock_config
 
-    plan = plan_cleanup("village")
-    execute_cleanup(plan, mock_config)
+            with patch("village.probes.tmux.refresh_panes"):
+                with patch("village.probes.tmux.panes") as mock_panes:
+                    mock_panes.return_value = set()
 
-    events = read_events(mock_config.village_dir)
-    cleanup_events = [e for e in events if e.cmd == "cleanup"]
-    assert len(cleanup_events) >= 1
-    assert cleanup_events[0].task_id == "bd-stale"
-    assert cleanup_events[0].pane == "%99"
-    assert cleanup_events[0].result == "ok"
+                    mock_config.git_root.mkdir(parents=True, exist_ok=True)
+                    subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+                    mock_config.village_dir.mkdir(parents=True, exist_ok=True)
 
-    stale_lock.path.unlink(missing_ok=True)
+                    stale_lock = Lock(
+                        task_id="bd-stale",
+                        pane_id="%99",
+                        window="test-window-stale",
+                        agent="test",
+                        claimed_at=datetime.now(timezone.utc),
+                    )
+                    stale_lock._config = mock_config
+                    write_lock(stale_lock)
+
+                    plan = plan_cleanup("village")
+                    execute_cleanup(plan, mock_config)
+
+                    events = read_events(mock_config.village_dir)
+                    cleanup_events = [e for e in events if e.cmd == "cleanup"]
+                    assert len(cleanup_events) >= 1
+                    assert cleanup_events[0].task_id == "bd-stale"
+                    assert cleanup_events[0].pane == "%99"
+                    assert cleanup_events[0].result == "ok"
+
+                    stale_lock.path.unlink(missing_ok=True)
