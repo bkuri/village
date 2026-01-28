@@ -721,7 +721,7 @@ def chat() -> None:
     except FileNotFoundError:
         system_prompt = None
 
-    chat = LLMChat(llm_client, system_prompt=system_prompt)
+    chat = LLMChat(llm_client, system_prompt=system_prompt, config=config)
 
     async def setup_beads_client() -> None:
         if beads_client:
