@@ -75,6 +75,11 @@ SUBCOMMANDS = {
         "description": "Confirm and create Beads tasks from enabled drafts",
         "args": [],
     },
+    "/confirm": {
+        "handler": "task_confirm",
+        "description": "Confirm and create Beads tasks from enabled drafts",
+        "args": [],
+    },
     "/reset": {
         "handler": "task_reset",
         "description": "Rollback session: delete created tasks, restore context",
