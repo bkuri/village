@@ -963,6 +963,7 @@ class TestQueueJsonOutput:
             agent="build",
             claimed_at=datetime.now(timezone.utc),
         )
+        lock._config = mock_config
         write_lock(lock)
 
         # Plan queue with the lock present
