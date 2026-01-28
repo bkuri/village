@@ -57,6 +57,14 @@ class TestColorOutput:
 
                 mock_secho.assert_called_once_with("Error message", fg="red", err=True)
 
+    def test_echo_error_fallback_to_echo(self):
+        """echo_error() should use click.echo for non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            with patch("click.echo") as mock_echo:
+                echo_error("Error message")
+
+                mock_echo.assert_called_once_with("Error message", err=True)
+
     def test_echo_warning_uses_click_secho(self):
         """echo_warning() should use click.secho with err=True."""
         with patch("village.render.colors.should_color", return_value=True):
@@ -64,6 +72,14 @@ class TestColorOutput:
                 echo_warning("Warning message")
 
                 mock_secho.assert_called_once_with("Warning message", fg="yellow", err=True)
+
+    def test_echo_warning_fallback_to_echo(self):
+        """echo_warning() should use click.echo for non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            with patch("click.echo") as mock_echo:
+                echo_warning("Warning message")
+
+                mock_echo.assert_called_once_with("Warning message", err=True)
 
     def test_echo_info_uses_click_secho(self):
         """echo_info() should use click.secho for TTY."""
@@ -73,6 +89,14 @@ class TestColorOutput:
 
                 mock_secho.assert_called_once_with("Info message", fg="blue")
 
+    def test_echo_info_fallback_to_echo(self):
+        """echo_info() should use click.echo for non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            with patch("click.echo") as mock_echo:
+                echo_info("Info message")
+
+                mock_echo.assert_called_once_with("Info message")
+
     def test_echo_header_uses_bold(self):
         """echo_header() should use click.secho with bold=True."""
         with patch("village.render.colors.should_color", return_value=True):
@@ -80,6 +104,14 @@ class TestColorOutput:
                 echo_header("Header")
 
                 mock_secho.assert_called_once_with("Header", bold=True)
+
+    def test_echo_header_fallback_to_echo(self):
+        """echo_header() should use click.echo for non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            with patch("click.echo") as mock_echo:
+                echo_header("Header")
+
+                mock_echo.assert_called_once_with("Header")
 
 
 class TestStyleFunctions:
@@ -133,3 +165,24 @@ class TestStyleFunctions:
             styled = style_status("UNKNOWN")
 
             assert styled == click.style("UNKNOWN", fg="blue")
+
+    def test_style_status_unknown_on_tty(self):
+        """style_status() should return plain for unknown status on TTY."""
+        with patch("village.render.colors.should_color", return_value=True):
+            styled = style_status("UNKNOWN_STATUS")
+
+            assert styled == "UNKNOWN_STATUS"
+
+    def test_style_status_known_on_non_tty(self):
+        """style_status() should return plain for known status on non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            styled = style_status("ACTIVE")
+
+            assert styled == "ACTIVE"
+
+    def test_style_status_unknown_on_non_tty(self):
+        """style_status() should return plain for unknown status on non-TTY."""
+        with patch("village.render.colors.should_color", return_value=False):
+            styled = style_status("UNKNOWN_STATUS")
+
+            assert styled == "UNKNOWN_STATUS"
