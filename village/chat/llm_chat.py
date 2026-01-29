@@ -3,10 +3,14 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Literal, cast, Optional
 
 from village.chat.beads_client import BeadsClient, BeadsError
+from village.chat.sequential_thinking import (
+    TaskBreakdown,
+)
 from village.chat.task_spec import TaskSpec
+from village.extensibility import ExtensionRegistry
 
 ScopeType = Literal["fix", "feature", "config", "docs", "test", "refactor"]
 ConfidenceType = Literal["high", "medium", "low"]
@@ -47,6 +51,7 @@ class ChatSession:
     current_task: TaskSpec | None = None
     refinements: list[dict[str, object]] = field(default_factory=list)
     current_iteration: int = 0  # 0 = original, 1+ = refinements
+    current_breakdown: TaskBreakdown | None = None
 
     def get_current_spec(self) -> TaskSpec | None:
         """Get latest task spec."""
@@ -107,19 +112,44 @@ class ChatSession:
 
 @dataclass
 class LLMChat:
-    """LLM chat session with task rendering and Beads API integration."""
+    """LLM chat session with task rendering and Beads API integration.
+    
+    Supports domain-specific customization through ExtensionRegistry hooks:
+    - ChatProcessor: Pre/post message processing
+    - ToolInvoker: Customize MCP tool invocation
+    - ThinkingRefiner: Domain-specific query refinement
+    - ChatContext: Session state/context management
+    - BeadsIntegrator: Customize bead creation/updates
+    """
 
     session: ChatSession
     llm_client: _LLMClient
+    extensions: ExtensionRegistry
     beads_client: BeadsClient | None = None
     system_prompt: str | None = None
+    config: _Config | None = None
 
-    def __init__(self, llm_client: _LLMClient, system_prompt: str | None = None) -> None:
-        """Initialize LLM chat."""
+    def __init__(
+        self,
+        llm_client: _LLMClient,
+        system_prompt: str | None = None,
+        config: _Config | None = None,
+        extensions: Optional[ExtensionRegistry] = None,
+    ) -> None:
+        """Initialize LLM chat.
+        
+        Args:
+            llm_client: LLM client for API calls
+            system_prompt: System prompt for LLM
+            config: Village configuration
+            extensions: Extension registry for domain-specific customization
+        """
         self.session = ChatSession()
         self.llm_client = llm_client
         self.beads_client = None
         self.system_prompt = system_prompt
+        self.config = config
+        self.extensions = extensions or ExtensionRegistry()
 
     async def set_beads_client(self, beads_client: BeadsClient) -> None:
         """Set Beads client for task creation."""
@@ -137,16 +167,23 @@ class LLMChat:
         """
         user_input = user_input.strip()
 
+        # Apply pre-processing hook (domain-specific input normalization)
+        processor = self.extensions.get_processor()
+        user_input = await processor.pre_process(user_input)
+
         # Handle slash commands
         if user_input.startswith("/"):
-            return await self.handle_slash_command(user_input)
-
+            response = await self.handle_slash_command(user_input)
         # Check if we have a current task or creating new one
-        if self.session.current_task is None:
-            return await self.handle_create(user_input)
-
+        elif self.session.current_task is None:
+            response = await self.handle_create(user_input)
         # If we have a task, user is refining/confirming/discard
-        return await self.handle_refine(user_input)
+        else:
+            response = await self.handle_refine(user_input)
+
+        # Apply post-processing hook (domain-specific output formatting)
+        response = await processor.post_process(response)
+        return response
 
     async def handle_slash_command(self, command: str) -> str:
         """Handle slash commands."""
@@ -213,20 +250,100 @@ class LLMChat:
 
         return self.render_task_spec(task_spec)
 
+    def _render_breakdown(self, breakdown: TaskBreakdown) -> str:
+        """Render TaskBreakdown as ASCII table."""
+        box_width = 46
+        lines = []
+
+        title_display = breakdown.title_original or "Untitled"
+        if breakdown.title_suggested:
+            title_display += f" → {breakdown.title_suggested}"
+
+        lines.append("┌" + "─" * box_width + "┐")
+        lines.append("│" + f" BREAKDOWN: {title_display[:40]} " + " " * (box_width - 49) + "│")
+        lines.append("├" + "─" * box_width + "┤")
+
+        # Build index → title map
+        index_to_title = {i: item.title for i, item in enumerate(breakdown.items)}
+
+        for i, item in enumerate(breakdown.items, 1):
+            # Map dependency indices to titles
+            if item.dependencies:
+                deps_str = ", ".join(index_to_title.get(d, f"#{d}") for d in item.dependencies)
+            else:
+                deps_str = "none"
+
+            # Title truncated
+            title_short = item.title[:35]
+
+            lines.append("│" + f" {i}. {title_short}" + " " * (box_width - 40) + "│")
+
+            # Description (2 lines max)
+            desc_words = item.description.split()[:8]
+            desc_short = " ".join(desc_words)
+            lines.append("│" + f"    {desc_short}" + " " * (box_width - 45) + "│")
+
+            # Dependencies and effort
+            lines.append("│" + f"    [depends: {deps_str}]" + " " * (box_width - 22) + "│")
+            lines.append(
+                "│" + f"    [effort: {item.estimated_effort}]" + " " * (box_width - 20) + "│"
+            )
+
+            if i < len(breakdown.items):
+                lines.append("│" + " " * box_width + "│")
+
+        lines.append("└" + "─" * box_width + "┘")
+
+        # Action hints
+        lines.append("")
+        lines.append("Actions:")
+        lines.append("  /confirm   Create all subtasks in Beads")
+        lines.append("  /edit      Refine entire breakdown")
+        lines.append("  /discard    Cancel this breakdown")
+
+        return "\n".join(lines)
+
+    def _breakdown_to_text(self, breakdown: TaskBreakdown) -> str:
+        """Convert TaskBreakdown to text for LLM prompt."""
+        lines = [f"Title: {breakdown.title_original or 'Untitled'}"]
+
+        if breakdown.summary:
+            lines.append(f"Summary: {breakdown.summary}")
+
+        lines.append("Subtasks:")
+        for i, item in enumerate(breakdown.items, 1):
+            deps_str = ", ".join(str(d) for d in item.dependencies) if item.dependencies else "none"
+            lines.append(f"  {i}. {item.title}")
+            lines.append(f"     {item.description}")
+            lines.append(f"     [depends: {deps_str}] [effort: {item.estimated_effort}]")
+
+        return "\n".join(lines)
+
     async def handle_refine(self, user_input: str) -> str:
-        """Handle /refine or /revise command."""
+        """
+        Handle /refine or /edit command.
+
+        Works for BOTH:
+        - Single task (existing behavior)
+        - Breakdown (new: modifies entire breakdown)
+        """
+        # Case 1: Refine breakdown
+        if self.session.current_breakdown:
+            return await self._refine_breakdown(user_input)
+
+        # Case 2: Refine single task (existing behavior)
         if not self.session.current_task:
-            return "No current task to refine. Use /create to start a new task."
+            return "❌ No current task or breakdown to refine. Use /create to start a new task."
 
         logger.info(f"Refining task with input: {user_input[:50]}...")
 
-        # Parse refinement with LLM
+        # Parse refinement with LLM (existing code)
         current_spec = self.session.get_current_spec()
         if not current_spec:
-            return "No current task specification."
+            return "❌ No current task specification."
 
         response = self.llm_client.call(
-            prompt=f"Current task:\n{self._task_spec_to_text(current_spec)}\n\nUser refinement: {user_input}\n\nUpdate the task specification based on this feedback. Preserve as much as possible, only change what the refinement explicitly addresses. Extract any new dependencies. Return JSON only.",
+            prompt=f"Current task:\n{self._task_spec_to_text(current_spec)}\n\nUser refinement: {user_input}\n\nUpdate task specification based on this feedback. Preserve as much as possible, only change what refinement explicitly addresses. Extract any new dependencies. Return JSON only.",
             system_prompt=self.system_prompt or self._get_prompt(),
         )
 
@@ -236,9 +353,9 @@ class LLMChat:
         try:
             refined_dict = json.loads(response)
         except json.JSONDecodeError as e:
-            return f"Failed to parse refinement. Got: {e}\nGot: {response[:100]}"
+            return f"❌ Failed to parse refinement. Got: {e}\nGot: {response[:100]}"
 
-        # Set defaults
+        # Set defaults (existing code)
         refined_dict.setdefault("blocks", current_spec.blocks)
         refined_dict.setdefault("blocked_by", current_spec.blocked_by)
         refined_dict.setdefault("success_criteria", current_spec.success_criteria)
@@ -279,13 +396,24 @@ class LLMChat:
         return "↩️ Reverted to original task"
 
     async def handle_confirm(self, args: str) -> str:
-        """Handle /confirm command."""
-        if not self.beads_client:
-            return "Beads client not configured. Cannot create task."
+        """
+        Handle /confirm command.
 
+        Works for BOTH:
+        - Single task (existing behavior)
+        - Breakdown (new: creates all subtasks)
+        """
+        if not self.beads_client:
+            return "❌ Beads client not configured. Cannot create tasks."
+
+        # Case 1: Confirm breakdown (create all subtasks)
+        if self.session.current_breakdown:
+            return await self._confirm_breakdown()
+
+        # Case 2: Confirm single task (existing behavior)
         spec = self.session.get_current_spec()
         if not spec:
-            return "No current task to confirm. Use /create to start a new task."
+            return "❌ No current task to confirm. Use /create to start a new task."
 
         logger.info(f"Confirming task: {spec.title}")
 
@@ -297,9 +425,23 @@ class LLMChat:
             return f"❌ Failed to create task: {e}"
 
     async def handle_discard(self, args: str) -> str:
-        """Handle /discard command."""
+        """
+        Handle /discard command.
+
+        Works for BOTH:
+        - Single task (existing behavior)
+        - Breakdown (new: clears breakdown)
+        """
+        # Case 1: Discard breakdown
+        if self.session.current_breakdown:
+            task_count = len(self.session.current_breakdown.items)
+            self.session.current_breakdown = None
+            logger.info(f"Discarded breakdown with {task_count} tasks")
+            return f"🗑️ Discarded breakdown ({task_count} subtasks).\n\nUse /create to start a new task."
+
+        # Case 2: Discard single task (existing behavior)
         if not self.session.current_task:
-            return "No current task to discard."
+            return "❌ No current task or breakdown to discard."
 
         task_title = self.session.current_task.title if self.session.current_task else "task"
         self.session.current_task = None
@@ -308,6 +450,142 @@ class LLMChat:
 
         logger.info(f"Discarded task: {task_title}")
         return f"🗑️ Task '{task_title}' discarded. Use /create to start a new task."
+
+    async def _confirm_breakdown(self) -> str:
+        """Create all subtasks from TaskBreakdown in Beads."""
+        from village.chat.sequential_thinking import validate_dependencies
+
+        if not self.beads_client:
+            return "❌ Beads client not configured. Cannot create tasks."
+
+        breakdown = self.session.current_breakdown
+        if not breakdown:
+            return "❌ No breakdown to confirm."
+
+        items = breakdown.items
+
+        # Validate dependencies
+        if not validate_dependencies(breakdown):
+            return "❌ Task dependencies are invalid. Use /refine or /edit to fix."
+
+        # Create tasks and map indices to task IDs
+        task_id_map: dict[int, str] = {}
+        created_tasks: dict[str, str] = {}
+
+        for i, item in enumerate(items):
+            # Map dependency indices to actual task IDs
+            blocks = [task_id_map[dep] for dep in item.dependencies if dep in task_id_map]
+
+            # Create TaskSpec from TaskBreakdownItem
+            spec = TaskSpec(
+                title=item.title,
+                description=item.description,
+                scope="feature",
+                blocks=blocks,
+                blocked_by=[],
+                success_criteria=item.success_criteria or ["Task completed"],
+                estimate=item.estimated_effort,
+                confidence="medium",
+            )
+
+            # Create in Beads
+            try:
+                task_id = await self.beads_client.create_task(spec)
+                task_id_map[i] = task_id
+                created_tasks[item.title] = task_id
+                logger.info(f"Created subtask {task_id}: {item.title}")
+            except BeadsError as e:
+                logger.error(f"Failed to create task '{item.title}': {e}")
+                return self._render_decomposition_error(
+                    f"Failed to create task '{item.title}': {e}",
+                    task_info=f"Stopped at task {i + 1}/{len(items)}",
+                    offer_retry=True,
+                )
+
+        # Clear breakdown from session
+        self.session.current_breakdown = None
+
+        # Return results
+        lines = [f"✓ Created {len(created_tasks)} subtasks:", ""]
+        for title, task_id in created_tasks.items():
+            lines.append(f"  {task_id}: {title}")
+
+        if breakdown.summary:
+            lines.append("")
+            lines.append(breakdown.summary)
+
+        return "\n".join(lines)
+
+    async def _refine_breakdown(self, user_input: str) -> str:
+        """Refine entire TaskBreakdown based on user feedback."""
+        from village.chat.sequential_thinking import validate_dependencies
+
+        breakdown = self.session.current_breakdown
+        if not breakdown:
+            return "❌ No breakdown to refine."
+
+        # Ask LLM to refine breakdown (Option C: ST analyzes feedback)
+        prompt = f"""Current task breakdown:
+{self._breakdown_to_text(breakdown)}
+
+User refinement: {user_input}
+
+Analyze this feedback and update ENTIRE breakdown accordingly. Consider:
+- Should this be a new subtask?
+- Should it modify an existing subtask?
+- Does it affect dependencies or ordering?
+- Are there conflicts or ambiguities?
+
+Return JSON in same breakdown format:
+{{
+  "title_original": "...",
+  "title_suggested": "...",
+  "items": [
+    {{
+      "title": "...",
+      "description": "...",
+      "estimated_effort": "...",
+      "success_criteria": ["..."],
+      "blockers": ["..."],
+      "dependencies": [0, 1],
+      "tags": ["..."]
+    }}
+  ],
+  "summary": "..."
+}}
+"""
+
+        import json
+
+        try:
+            response = self.llm_client.call(prompt)
+
+            # Parse refined breakdown
+            refined_data = json.loads(response)
+
+            # Parse using _parse_task_breakdown from sequential_thinking
+            from village.chat.sequential_thinking import _parse_task_breakdown
+
+            refined_breakdown = _parse_task_breakdown(json.dumps(refined_data))
+
+            # Validate dependencies
+            if not validate_dependencies(refined_breakdown):
+                return "❌ Refined breakdown has invalid dependencies. Try different refinement."
+
+            # Update session
+            self.session.current_breakdown = refined_breakdown
+
+            logger.info(f"Refined breakdown: {refined_breakdown.title_original}")
+
+            return self._render_breakdown(refined_breakdown)
+
+        except (json.JSONDecodeError, Exception) as e:
+            logger.error(f"Failed to refine breakdown: {e}")
+            return self._render_decomposition_error(
+                f"Failed to refine breakdown: {e}",
+                task_info=f"Refinement: {user_input}",
+                offer_retry=True,
+            )
 
     async def handle_tasks(self, args: str) -> str:
         """Handle /tasks command - list Beads tasks."""
@@ -552,6 +830,40 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
             + "│"
         )
         lines.append("└" + "─" * box_width + "┘")
+
+        return "\n".join(lines)
+
+    def _render_decomposition_error(
+        self,
+        error_message: str,
+        task_info: str | None = None,
+        breakdown: str | None = None,
+        offer_retry: bool = True,
+    ) -> str:
+        """Render decomposition error with full context."""
+        lines = ["❌ ERROR: Decomposition Failed", ""]
+        lines.append(error_message)
+        lines.append("")
+
+        if task_info:
+            lines.append("Task Information:")
+            lines.append(task_info)
+            lines.append("")
+
+        if breakdown:
+            lines.append("Generated Breakdown (partial or invalid):")
+            # Truncate if very long
+            breakdown_display = breakdown[:500] if len(breakdown) > 500 else breakdown
+            lines.append(breakdown_display)
+            if len(breakdown) > 500:
+                lines.append(f"[... {len(breakdown) - 500} more characters truncated]")
+            lines.append("")
+
+        if offer_retry:
+            lines.append("Actions:")
+            lines.append("  /retry      Try decomposition again")
+            lines.append("  /discard    Cancel and try simpler task")
+            lines.append("  /confirm-simple  Create as single task (without breakdown)")
 
         return "\n".join(lines)
 

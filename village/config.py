@@ -297,6 +297,61 @@ class AgentConfig:
 
 
 @dataclass
+class ExtensionConfig:
+    """Extension system configuration."""
+
+    enabled: bool = True
+    processor_module: Optional[str] = None
+    tool_invoker_module: Optional[str] = None
+    thinking_refiner_module: Optional[str] = None
+    chat_context_module: Optional[str] = None
+    beads_integrator_module: Optional[str] = None
+    server_discovery_module: Optional[str] = None
+    llm_adapter_module: Optional[str] = None
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "ExtensionConfig":
+        """Load extension config from environment variables and config file."""
+        enabled_env = os.environ.get("VILLAGE_EXTENSIONS_ENABLED", "").lower()
+        enabled_config = config.get("EXTENSIONS.ENABLED", "").lower()
+        enabled = enabled_env or enabled_config
+        extensions_enabled = enabled in ("1", "true", "yes") or not (enabled_env or enabled_config)
+
+        processor_module = os.environ.get("VILLAGE_EXTENSION_PROCESSOR") or config.get(
+            "EXTENSIONS.PROCESSOR_MODULE"
+        )
+        tool_invoker_module = os.environ.get("VILLAGE_EXTENSION_TOOL_INVOKER") or config.get(
+            "EXTENSIONS.TOOL_INVOKER_MODULE"
+        )
+        thinking_refiner_module = os.environ.get("VILLAGE_EXTENSION_THINKING_REFINER") or config.get(
+            "EXTENSIONS.THINKING_REFINER_MODULE"
+        )
+        chat_context_module = os.environ.get("VILLAGE_EXTENSION_CHAT_CONTEXT") or config.get(
+            "EXTENSIONS.CHAT_CONTEXT_MODULE"
+        )
+        beads_integrator_module = os.environ.get("VILLAGE_EXTENSION_BEADS_INTEGRATOR") or config.get(
+            "EXTENSIONS.BEADS_INTEGRATOR_MODULE"
+        )
+        server_discovery_module = os.environ.get("VILLAGE_EXTENSION_SERVER_DISCOVERY") or config.get(
+            "EXTENSIONS.SERVER_DISCOVERY_MODULE"
+        )
+        llm_adapter_module = os.environ.get("VILLAGE_EXTENSION_LLM_ADAPTER") or config.get(
+            "EXTENSIONS.LLM_ADAPTER_MODULE"
+        )
+
+        return cls(
+            enabled=extensions_enabled,
+            processor_module=processor_module,
+            tool_invoker_module=tool_invoker_module,
+            thinking_refiner_module=thinking_refiner_module,
+            chat_context_module=chat_context_module,
+            beads_integrator_module=beads_integrator_module,
+            server_discovery_module=server_discovery_module,
+            llm_adapter_module=llm_adapter_module,
+        )
+
+
+@dataclass
 class Config:
     """Village configuration."""
 
@@ -320,6 +375,7 @@ class Config:
     dashboard: DashboardConfig = field(default_factory=DashboardConfig)
     ci: CIConfig = field(default_factory=CIConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
+    extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -488,6 +544,9 @@ def get_config() -> Config:
     # Parse notifications configuration
     notifications_config = NotificationConfig.from_env_and_config(file_config)
 
+    # Parse extension configuration
+    extensions_config = ExtensionConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -555,4 +614,5 @@ def get_config() -> Config:
         dashboard=dashboard_config,
         ci=ci_config,
         notifications=notifications_config,
+        extensions=extensions_config,
     )
