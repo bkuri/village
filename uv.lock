@@ -845,7 +845,7 @@ wheels = [
 ]
 
 [[package]]
-name = "village"
+name = "village-ai"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
