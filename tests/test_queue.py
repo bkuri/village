@@ -803,7 +803,6 @@ class TestQueueDeduplication:
 class TestQueueJsonOutput:
     """Tests for enhanced JSON output with lock/workspace details."""
 
-    @pytest.mark.skip(reason="Task state mutation issue needs debugging")
     def test_json_includes_lock_details(self, mock_config: Config):
         """Test JSON output includes lock details."""
         from village.queue import QueuePlan, render_queue_plan_json

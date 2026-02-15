@@ -391,8 +391,6 @@ class TestSessionPersistence:
 
         save_session_state(state, integration_config)
 
-        loaded = load_session_state(integration_config)
-
     def test_context_diffs_preserved(self, integration_config, mock_bd_create, fresh_conversation):
         """Track context changes, save, load, verify."""
         state = fresh_conversation
@@ -447,7 +445,6 @@ class TestErrorHandling:
         state = fresh_conversation
 
         state = _switch_to_create_mode(["Task 1"], state, integration_config)
-        first_draft = state.pending_enables[0]
 
         state = _switch_to_create_mode(["Task 2"], state, integration_config)
 
@@ -495,32 +492,10 @@ class TestBeadsIntegration:
         assert len(tasks) > 0
         assert any(t.get("title") == "Test Feature" for t in tasks)
 
-    @pytest.mark.skip(reason="Beads enforces ID prefix validation - cannot create bd-* IDs in test db")
-    def test_real_bd_draft_id_mapping(self, test_beads_db):
-        """Create with df-a1b2c3 -> bd-a1b2c3 ID mapping."""
-        draft_id = "df-a1b2c3"
-        task_id = draft_id_to_task_id(draft_id)
-
-        assert task_id == "bd-a1b2c3"
-
-        result = subprocess.run(
-            ["bd", "create", "--force", "--id", task_id, "Test Mapped ID"],
-            cwd=test_beads_db,
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode == 0
-
-        result = subprocess.run(
-            ["bd", "show", task_id],
-            cwd=test_beads_db,
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode == 0
-        assert "Test Mapped ID" in result.stdout
+    def test_draft_id_to_task_id_mapping(self):
+        """Test pure ID mapping function: df-* -> bd-*."""
+        assert draft_id_to_task_id("df-a1b2c3") == "bd-a1b2c3"
+        assert draft_id_to_task_id("df-xyz789") == "bd-xyz789"
 
     def test_real_bd_delete_recovery(self, test_beads_db, fresh_conversation):
         """Create real task, then delete via reset."""

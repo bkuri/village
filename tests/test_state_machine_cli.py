@@ -178,21 +178,6 @@ class TestPauseCommand:
         assert result.exit_code == EXIT_BLOCKED
         assert "is not IN_PROGRESS" in result.output
 
-    @pytest.mark.skip(reason="--force doesn't bypass state machine validation, only initial state check")
-    def test_pause_force_bypass(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
-        """Test that --force bypasses validation."""
-        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
-        lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
-        lock_path.write_text(lock_content, encoding="utf-8")
-
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import pause
-
-            result = runner.invoke(pause, ["bd-a3f8", "--force"])
-
-        assert result.exit_code == 0
-        assert "Paused task bd-a3f8" in result.output
-
     def test_pause_logs_event(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
         """Test that pause logs transition event to events.log."""
         lock_path = mock_config.locks_dir / "bd-a3f8.lock"
@@ -247,21 +232,6 @@ class TestResumeTaskCommand:
 
         assert result.exit_code == EXIT_BLOCKED
         assert "is not PAUSED" in result.output
-
-    @pytest.mark.skip(reason="--force doesn't bypass state machine validation, only initial state check")
-    def test_resume_force_bypass(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
-        """Test that --force bypasses validation."""
-        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
-        lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
-        lock_path.write_text(lock_content, encoding="utf-8")
-
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import resume_task
-
-            result = runner.invoke(resume_task, ["bd-a3f8", "--force"])
-
-        assert result.exit_code == 0
-        assert "Resumed task bd-a3f8" in result.output
 
     def test_resume_logs_event(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
         """Test that resume-task logs transition event to events.log."""

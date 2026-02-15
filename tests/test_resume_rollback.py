@@ -68,9 +68,7 @@ class TestResumeWithRollback:
             assert mock_reset.called
             mock_reset.assert_called_once_with(worktree_path)
 
-    def test_resume_failure_without_rollback(
-        self, mock_config: Config, rollback_test_setup
-    ) -> None:
+    def test_resume_failure_without_rollback(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that rollback is skipped when config disables it."""
         # Mock config with rollback disabled
         mock_config_no_rollback = Config(
@@ -107,9 +105,7 @@ class TestResumeWithRollback:
             assert result.success is False
             assert not mock_reset.called
 
-    def test_resume_rollback_fails_gracefully(
-        self, mock_config: Config, rollback_test_setup
-    ) -> None:
+    def test_resume_rollback_fails_gracefully(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that rollback errors don't cause cascading failures."""
         # Create worktree
         worktree_path = mock_config.worktrees_dir / "bd-a3f8"
@@ -133,63 +129,53 @@ class TestResumeWithRollback:
             assert result.success is False
             assert result.error is not None
 
-    @pytest.mark.skip(
-        reason="execute_opencode not available - needs refactor to mock execute_resume internals"
-    )
     def test_resume_success_no_rollback(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that successful task execution doesn't trigger rollback."""
-        # Create worktree
         worktree_path = mock_config.worktrees_dir / "bd-a3f8"
         worktree_path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=worktree_path, check=True, capture_output=True)
 
-        # Mock execute_opencode to return success
-        with patch("village.resume.execute_opencode") as mock_execute:
-            mock_execute.return_value = MagicMock(
-                success=True,
-                pane_id="%12",
-                window_name="worker-1-bd-a3f8",
-            )
-            with patch("village.scm.git.GitSCM.reset_workspace") as mock_reset:
-                result = execute_resume(
-                    task_id="bd-a3f8",
-                    agent="worker",
-                    detached=True,
-                    dry_run=False,
-                    config=mock_config,
-                )
+        with patch("village.resume._create_resume_window") as mock_window:
+            with patch("village.resume._inject_contract") as mock_inject:
+                with patch("village.scm.git.GitSCM.reset_workspace") as mock_reset:
+                    mock_window.return_value = "%12"
+                    mock_inject.return_value = None
 
-                assert result.success is True
-                assert not mock_reset.called
+                    result = execute_resume(
+                        task_id="bd-a3f8",
+                        agent="worker",
+                        detached=True,
+                        dry_run=False,
+                        config=mock_config,
+                    )
+
+                    assert result.success is True
+                    assert not mock_reset.called
 
 
 class TestRollbackEventLogging:
     """Tests for rollback event logging."""
 
-    @pytest.mark.skip(
-        reason="execute_opencode not available - needs refactor to mock execute_resume internals"
-    )
     def test_rollback_event_logged(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that rollback attempts are logged to events.log."""
-        # Create worktree
         worktree_path = mock_config.worktrees_dir / "bd-a3f8"
         worktree_path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=worktree_path, check=True, capture_output=True)
 
-        # Mock execute_opencode to raise error
-        with patch("village.resume.execute_opencode") as mock_execute:
-            mock_execute.side_effect = Exception("Task failed")
+        with patch("village.resume._create_resume_window") as mock_window:
+            with patch("village.resume._inject_contract") as mock_inject:
+                with patch("village.scm.git.GitSCM.reset_workspace"):
+                    mock_window.return_value = "%12"
+                    mock_inject.side_effect = RuntimeError("Task failed")
 
-            with patch("village.scm.git.GitSCM.reset_workspace"):
-                execute_resume(
-                    task_id="bd-a3f8",
-                    agent="worker",
-                    detached=True,
-                    dry_run=False,
-                    config=mock_config,
-                )
+                    execute_resume(
+                        task_id="bd-a3f8",
+                        agent="worker",
+                        detached=True,
+                        dry_run=False,
+                        config=mock_config,
+                    )
 
-        # Check events.log for rollback entry
         events_log_path = mock_config.village_dir / "events.log"
         assert events_log_path.exists()
 
@@ -204,30 +190,30 @@ class TestRollbackEventLogging:
 class TestStateMachineIntegration:
     """Tests for state machine integration with resume."""
 
-    @pytest.mark.skip(
-        reason="execute_opencode not available - needs refactor to mock execute_resume internals"
-    )
-    def test_resume_failure_marks_task_as_failed(
-        self, mock_config: Config, rollback_test_setup
-    ) -> None:
+    def test_resume_failure_marks_task_as_failed(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that failed task transitions to FAILED state."""
-        # Create worktree
         worktree_path = mock_config.worktrees_dir / "bd-a3f8"
         worktree_path.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=worktree_path, check=True, capture_output=True)
 
-        # Mock execute_opencode to raise error
-        with patch("village.resume.execute_opencode") as mock_execute:
-            mock_execute.side_effect = Exception("Task failed")
-            with patch("village.scm.git.GitSCM.reset_workspace"):
-                execute_resume(
-                    task_id="bd-a3f8",
-                    agent="worker",
-                    detached=True,
-                    dry_run=False,
-                    config=mock_config,
-                )
+        mock_config.locks_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
+        lock_path.write_text("id=bd-a3f8\npane=%12\nstate=in_progress\n", encoding="utf-8")
 
-        # Check state machine
+        with patch("village.resume._create_resume_window") as mock_window:
+            with patch("village.resume._inject_contract") as mock_inject:
+                with patch("village.scm.git.GitSCM.reset_workspace"):
+                    mock_window.return_value = "%12"
+                    mock_inject.side_effect = RuntimeError("Task failed")
+
+                    execute_resume(
+                        task_id="bd-a3f8",
+                        agent="worker",
+                        detached=True,
+                        dry_run=False,
+                        config=mock_config,
+                    )
+
         state_machine = TaskStateMachine(mock_config)
         final_state = state_machine.get_state("bd-a3f8")
 
