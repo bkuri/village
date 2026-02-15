@@ -59,9 +59,7 @@ def refined_task_spec_json():
     return json.dumps(
         {
             "title": "Fix login authentication bug",
-            "description": (
-                "Users cannot login when password contains special characters like !@#$%"
-            ),
+            "description": ("Users cannot login when password contains special characters like !@#$%"),
             "scope": "fix",
             "blocks": ["user-dashboard", "profile-page", "settings-page"],
             "blocked_by": [],
@@ -88,9 +86,7 @@ class TestFullChatFlowWithLLM:
     """Test full chat flow from creation to task confirmation."""
 
     @pytest.mark.asyncio
-    async def test_create_task_from_natural_language(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_create_task_from_natural_language(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test creating a task from natural language input."""
         mock_llm_client.call.return_value = sample_task_spec_json
 
@@ -104,22 +100,22 @@ class TestFullChatFlowWithLLM:
         assert llm_chat.session.current_iteration == 0
 
     @pytest.mark.asyncio
-    async def test_create_task_via_slash_command(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_create_task_via_slash_command(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test creating a task using /create command."""
-        mock_llm_client.call.return_value = sample_task_spec_json
+        # First call returns task spec, second call returns complexity detection (don't decompose)
+        mock_llm_client.call.side_effect = [
+            sample_task_spec_json,
+            '{"should_decompose": false, "reasoning": "Simple fix"}',
+        ]
 
         response = await llm_chat.handle_slash_command("/create Fix the login authentication bug")
 
         assert "Fix login authentication bug" in response
         assert llm_chat.session.current_task is not None
-        mock_llm_client.call.assert_called_once()
+        assert mock_llm_client.call.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_refine_existing_task(
-        self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json
-    ):
+    async def test_refine_existing_task(self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json):
         """Test refining an existing task."""
         # First create a task
         mock_llm_client.call.return_value = sample_task_spec_json
@@ -151,9 +147,7 @@ class TestFullChatFlowWithLLM:
         assert "Refineme" in response or "Refinement" in response
 
     @pytest.mark.asyncio
-    async def test_undo_refinement(
-        self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json
-    ):
+    async def test_undo_refinement(self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json):
         """Test undoing a refinement."""
         # Create and refine
         mock_llm_client.call.return_value = sample_task_spec_json
@@ -194,9 +188,7 @@ class TestFullChatFlowWithLLM:
         assert call_args.title == "Fix login authentication bug"
 
     @pytest.mark.asyncio
-    async def test_discard_clears_current_task(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_discard_clears_current_task(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test /discard clears current task."""
         # Create task
         mock_llm_client.call.return_value = sample_task_spec_json
@@ -323,9 +315,7 @@ class TestSlashCommands:
         assert "bd-a3b4 - Ready task 2" in response
 
     @pytest.mark.asyncio
-    async def test_status_command_with_active_task(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_status_command_with_active_task(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test /status shows current session state."""
         mock_llm_client.call.return_value = sample_task_spec_json
         await llm_chat.handle_message("Fix login bug")
@@ -347,9 +337,7 @@ class TestSlashCommands:
         assert "No active task" in response
 
     @pytest.mark.asyncio
-    async def test_history_command(
-        self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json
-    ):
+    async def test_history_command(self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json):
         """Test /history shows refinement history."""
         # Create and refine
         mock_llm_client.call.return_value = sample_task_spec_json
@@ -389,9 +377,7 @@ class TestSlashCommands:
         assert "/help" in response
 
     @pytest.mark.asyncio
-    async def test_revise_alias(
-        self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json
-    ):
+    async def test_revise_alias(self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json):
         """Test /revise is an alias for /refine."""
         mock_llm_client.call.return_value = sample_task_spec_json
         await llm_chat.handle_message("Fix login bug")
@@ -459,9 +445,7 @@ class TestErrorHandling:
         assert "at original task" in response
 
     @pytest.mark.asyncio
-    async def test_confirm_without_beads_client(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_confirm_without_beads_client(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test /confirm without Beads client configured."""
         mock_llm_client.call.return_value = sample_task_spec_json
         await llm_chat.handle_message("Fix login bug")
@@ -478,9 +462,7 @@ class TestErrorHandling:
         assert "No current task to confirm" in response
 
     @pytest.mark.asyncio
-    async def test_confirm_beads_error(
-        self, llm_chat, mock_llm_client, mock_beads_client, sample_task_spec_json
-    ):
+    async def test_confirm_beads_error(self, llm_chat, mock_llm_client, mock_beads_client, sample_task_spec_json):
         """Test /confirm when Beads client raises an error."""
         mock_llm_client.call.return_value = sample_task_spec_json
         await llm_chat.handle_message("Fix login bug")
@@ -578,9 +560,7 @@ class TestRefinementHistory:
         assert len(llm_chat.session.refinements) == 2
 
     @pytest.mark.asyncio
-    async def test_undo_multiple_times(
-        self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json
-    ):
+    async def test_undo_multiple_times(self, llm_chat, mock_llm_client, sample_task_spec_json, refined_task_spec_json):
         """Test undoing multiple times."""
         # Create task
         mock_llm_client.call.return_value = sample_task_spec_json
@@ -693,9 +673,7 @@ class TestTaskSpecRendering:
         assert "DEPENDENCIES: (none)" in response
 
     @pytest.mark.asyncio
-    async def test_render_with_success_criteria(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_render_with_success_criteria(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test rendering with success criteria listed."""
         mock_llm_client.call.return_value = sample_task_spec_json
         response = await llm_chat.handle_message("Fix login bug")
@@ -706,9 +684,7 @@ class TestTaskSpecRendering:
         assert "3. No security vulnerabilities introduced" in response
 
     @pytest.mark.asyncio
-    async def test_render_with_confidence_indicator(
-        self, llm_chat, mock_llm_client, sample_task_spec_json
-    ):
+    async def test_render_with_confidence_indicator(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test rendering with confidence emoji."""
         mock_llm_client.call.return_value = sample_task_spec_json
         response = await llm_chat.handle_message("Fix login bug")
@@ -1022,9 +998,7 @@ class TestTaskDecomposition:
         )
 
     @pytest.mark.asyncio
-    async def test_complex_task_creates_breakdown(
-        self, llm_chat, mock_llm_client, sample_breakdown
-    ):
+    async def test_complex_task_creates_breakdown(self, llm_chat, mock_llm_client, sample_breakdown):
         """Test that complex task triggers breakdown (not single task)."""
         # Mock LLM to return a complex task spec
         complex_spec_json = json.dumps(
@@ -1055,10 +1029,7 @@ class TestTaskDecomposition:
         # Verify breakdown is set (not just single task)
         assert llm_chat.session.current_breakdown is not None
         assert len(llm_chat.session.current_breakdown.items) == 3
-        assert (
-            llm_chat.session.current_breakdown.summary
-            == "Complete authentication system implementation"
-        )
+        assert llm_chat.session.current_breakdown.summary == "Complete authentication system implementation"
 
     @pytest.mark.asyncio
     async def test_simple_task_no_breakdown(self, llm_chat, mock_llm_client, sample_task_spec_json):
@@ -1087,10 +1058,7 @@ class TestTaskDecomposition:
         # Verify breakdown is rendered
         assert "BREAKDOWN:" in rendered
         # Title is truncated to 40 chars in rendering
-        assert (
-            "Add login feature → Implement complete a" in rendered
-            or "Add login feature →" in rendered
-        )
+        assert "Add login feature → Implement complete a" in rendered or "Add login feature →" in rendered
 
         # Verify dependency indices are mapped to titles (not just numbers)
         # Task 1 shows dependency on "Design authentication flow" (title from index 0)
@@ -1136,9 +1104,7 @@ class TestTaskDecomposition:
         assert llm_chat.session.current_breakdown is None
 
     @pytest.mark.asyncio
-    async def test_edit_refines_breakdown_with_st_analysis(
-        self, llm_chat, mock_llm_client, sample_breakdown
-    ):
+    async def test_edit_refines_breakdown_with_st_analysis(self, llm_chat, mock_llm_client, sample_breakdown):
         """Test /refine (alias for /edit) re-invokes Sequential Thinking with
         current breakdown + user feedback."""
         # Set up breakdown in session
@@ -1226,9 +1192,7 @@ class TestTaskDecomposition:
             llm_chat_module.SLASH_COMMANDS = original_slash_commands
 
     @pytest.mark.asyncio
-    async def test_error_with_full_context_and_save_option(
-        self, llm_chat, mock_llm_client, sample_breakdown, tmp_path
-    ):
+    async def test_error_with_full_context_and_save_option(self, llm_chat, mock_llm_client, sample_breakdown, tmp_path):
         """Test decomposition failure shows full context and offers retry with auto-save."""
         # Set up breakdown in session
         llm_chat.session.current_breakdown = sample_breakdown
@@ -1271,9 +1235,7 @@ class TestTaskDecomposition:
         assert "/discard" in error_response
 
     @pytest.mark.asyncio
-    async def test_confirm_with_invalid_dependencies(
-        self, llm_chat, mock_beads_client, sample_breakdown
-    ):
+    async def test_confirm_with_invalid_dependencies(self, llm_chat, mock_beads_client, sample_breakdown):
         """Test /confirm with invalid dependency indices."""
         # Set Beads client
         await llm_chat.set_beads_client(mock_beads_client)
@@ -1319,9 +1281,7 @@ class TestTaskDecomposition:
         assert llm_chat.session.current_breakdown is not None
 
     @pytest.mark.asyncio
-    async def test_refine_breakdown_with_invalid_json(
-        self, llm_chat, mock_llm_client, sample_breakdown
-    ):
+    async def test_refine_breakdown_with_invalid_json(self, llm_chat, mock_llm_client, sample_breakdown):
         """Test /refine (alias for /edit) with invalid JSON response from LLM."""
         # Set up breakdown
         llm_chat.session.current_breakdown = sample_breakdown
@@ -1340,9 +1300,7 @@ class TestTaskDecomposition:
         assert llm_chat.session.current_breakdown == sample_breakdown
 
     @pytest.mark.asyncio
-    async def test_confirm_breakdown_with_beads_error(
-        self, llm_chat, mock_beads_client, sample_breakdown
-    ):
+    async def test_confirm_breakdown_with_beads_error(self, llm_chat, mock_beads_client, sample_breakdown):
         """Test /confirm when Beads create_task fails mid-way."""
         # Set Beads client
         await llm_chat.set_beads_client(mock_beads_client)

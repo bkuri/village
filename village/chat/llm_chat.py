@@ -1,6 +1,7 @@
 """LLM chat session with task specification rendering."""
 
 import asyncio
+import json
 import logging
 import time
 import uuid
@@ -39,6 +40,7 @@ SLASH_COMMANDS = {
     "/undo": "handle_undo",
     "/confirm": "handle_confirm",
     "/discard": "handle_discard",
+    "/reset": "handle_discard",  # Alias for /discard
     "/tasks": "handle_tasks",
     "/task": "handle_task",
     "/ready": "handle_ready",
@@ -248,8 +250,6 @@ class LLMChat:
             system_prompt=self.system_prompt or self._get_prompt(),
         )
 
-        import json
-
         try:
             task_spec_dict = json.loads(response)
         except json.JSONDecodeError:
@@ -288,7 +288,122 @@ class LLMChat:
 
         logger.info(f"Task spec created: {task_spec.title}")
 
+        # Check if task should be decomposed
+        should_decompose, reasoning = await self._should_decompose(task_spec)
+
+        if should_decompose:
+            logger.info(f"Task '{task_spec.title}' identified as complex. Offering decomposition. Reason: {reasoning}")
+            return await self._offer_decomposition(task_spec, user_input)
+
         return self.render_task_spec(task_spec)
+
+    async def _should_decompose(self, task_spec: TaskSpec) -> tuple[bool, str]:
+        """
+        Ask LLM if task should be decomposed into smaller subtasks.
+
+        Uses semantic understanding instead of brittle keyword matching.
+
+        Args:
+            task_spec: The task specification to evaluate
+
+        Returns:
+            Tuple of (should_decompose: bool, reasoning: str)
+        """
+        prompt = f"""Given this task:
+Title: {task_spec.title}
+Description: {task_spec.description}
+Scope: {task_spec.scope}
+Estimate: {task_spec.estimate}
+
+Should this task be decomposed into smaller subtasks?
+
+Consider:
+- Can it be completed in one focused session (2-4 hours)?
+- Are there natural boundaries or phases?
+- Would parallel work by multiple developers help?
+- Are there distinct deliverables?
+- Is the description vague or broad?
+
+Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief explanation"}}"""
+
+        try:
+            response: str = self.llm_client.call(
+                prompt=prompt,
+                system_prompt="You are a task analysis expert. Determine if tasks should be broken down into smaller pieces.",
+            )
+
+            result = json.loads(response)
+
+            should_decompose = result.get("should_decompose", False)
+            reasoning = result.get("reasoning", "No reasoning provided")
+
+            return should_decompose, reasoning
+
+        except (json.JSONDecodeError, KeyError, Exception) as e:
+            logger.warning(f"Failed to parse complexity detection response: {e}")
+            # Default to not decomposing on error
+            return False, f"Error in complexity detection: {e}"
+
+    async def _offer_decomposition(self, task_spec: TaskSpec, user_input: str) -> str:
+        """
+        Generate task breakdown using Sequential Thinking.
+
+        Creates BaselineReport from task_spec, calls generate_task_breakdown(),
+        validates dependencies, and stores in session.
+
+        Args:
+            task_spec: The task specification to decompose
+            user_input: Original user input for context
+
+        Returns:
+            Rendered breakdown or error message
+        """
+        from village.chat.baseline import BaselineReport
+        from village.chat.sequential_thinking import generate_task_breakdown, validate_dependencies
+
+        if not self.config:
+            return "❌ Config not available. Cannot generate breakdown."
+
+        try:
+            # Create baseline report from task spec
+            baseline = BaselineReport(
+                title=task_spec.title,
+                reasoning=f"Task decomposition requested for: {task_spec.description[:100]}...",
+                parent_task_id=None,
+            )
+
+            # Generate breakdown using Sequential Thinking
+            breakdown = generate_task_breakdown(
+                baseline=baseline,
+                config=self.config,
+                beads_state=None,  # Could pass current Beads state for context
+            )
+
+            # Validate dependencies
+            if not validate_dependencies(breakdown):
+                return self._render_decomposition_error(
+                    error_message="Generated breakdown has invalid dependencies",
+                    task_info=f"Title: {task_spec.title}",
+                    breakdown=self._breakdown_to_text(breakdown),
+                    offer_retry=True,
+                )
+
+            # Store in session
+            self.session.current_breakdown = breakdown
+            self.session.current_task = task_spec  # Keep original for reference
+
+            logger.info(f"Generated breakdown with {len(breakdown.items)} subtasks")
+
+            # Render and return
+            return self._render_breakdown(breakdown)
+
+        except Exception as e:
+            logger.error(f"Failed to generate breakdown: {e}")
+            return self._render_decomposition_error(
+                error_message=f"Failed to generate task breakdown: {e}",
+                task_info=f"Title: {task_spec.title}\nDescription: {task_spec.description[:100]}...",
+                offer_retry=True,
+            )
 
     def _render_breakdown(self, breakdown: TaskBreakdown) -> str:
         """Render TaskBreakdown as ASCII table."""
