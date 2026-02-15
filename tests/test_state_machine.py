@@ -709,6 +709,8 @@ def test_write_state_history_no_existing_history_line(tmp_path: Path):
     # Verify state_history line was appended
     content = lock_path.read_text(encoding="utf-8")
     assert "state_history=" in content
+
+
 def test_read_state_from_lock_io_error(tmp_path: Path):
     """Test reading lock file with IOError."""
     from unittest.mock import patch
@@ -807,7 +809,7 @@ def test_write_state_history_io_error(tmp_path: Path):
 
 def test_log_transition_event_io_error(tmp_path: Path):
     """Test logging transition event with IOError."""
-    from unittest.mock import patch, mock_open
+    from unittest.mock import mock_open, patch
 
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
     config = Config(

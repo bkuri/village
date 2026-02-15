@@ -26,14 +26,19 @@ Example Usage:
     registry.register_processor(MyCustomProcessor())
 """
 
-from village.extensibility.processors import ChatProcessor, DefaultChatProcessor
-from village.extensibility.tool_invokers import DefaultToolInvoker, ToolInvoker
-from village.extensibility.thinking_refiners import DefaultThinkingRefiner, ThinkingRefiner
-from village.extensibility.context import ChatContext, DefaultChatContext
 from village.extensibility.beads_integrators import BeadsIntegrator, DefaultBeadsIntegrator
-from village.extensibility.server_discovery import DefaultServerDiscovery, ServerDiscovery
+from village.extensibility.context import ChatContext, DefaultChatContext
 from village.extensibility.llm_adapters import DefaultLLMProviderAdapter, LLMProviderAdapter
+from village.extensibility.loader import discover_mcp_servers, initialize_extensions
+from village.extensibility.processors import ChatProcessor, DefaultChatProcessor
 from village.extensibility.registry import ExtensionRegistry
+from village.extensibility.server_discovery import (
+    DefaultServerDiscovery,
+    MCPServer,
+    ServerDiscovery,
+)
+from village.extensibility.thinking_refiners import DefaultThinkingRefiner, ThinkingRefiner
+from village.extensibility.tool_invokers import DefaultToolInvoker, ToolInvoker
 
 __all__ = [
     "ExtensionRegistry",
@@ -51,4 +56,7 @@ __all__ = [
     "DefaultServerDiscovery",
     "LLMProviderAdapter",
     "DefaultLLMProviderAdapter",
+    "MCPServer",
+    "initialize_extensions",
+    "discover_mcp_servers",
 ]

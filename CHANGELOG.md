@@ -4,6 +4,47 @@ All notable changes to Village will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - ST → AoT Light Strategy
+
+### Added
+- **Task Breakdown Strategy: ST → AoT Light**
+  - New configuration-driven approach for task decomposition
+  - Phase 1: Sequential Thinking for deep analysis (requirements, constraints, dependencies)
+  - Phase 2: Atom of Thoughts (AoT-light) for atomic, queueable task creation
+  - Default strategy: `st_aot_light` (configurable via env or config file)
+  - Supported strategies: `sequential`, `atomic`, `st_aot_light`
+- **Configuration Options**
+  - Environment variable: `VILLAGE_TASK_BREAKDOWN_STRATEGY`
+  - Config file key: `TASK_BREAKDOWN.STRATEGY`
+  - New `TaskBreakdownConfig` dataclass with `from_env_and_config()` method
+- **Tool Mapping**
+  - Added `ATOM_OF_THOUGHTS` mapping (server="atom_of_thoughts", tool="AoT-light")
+  - Added `ATOM_OF_THOUGHTS_TOOL` definition with JSON schema for prompts
+  - Tool name format: `mcproxy_{server}__{tool}` pattern
+- **Prompt Builders**
+  - `_build_st_analysis_prompt()`: Creates analysis-focused Sequential Thinking prompt
+  - `_build_aot_light_atomization_prompt()`: Creates atomic task atomization prompt
+  - Both support `beads_state` context for dependency awareness
+- **Strategy Router**
+  - `generate_task_breakdown()` now routes based on `config.task_breakdown.strategy`
+  - `_st_aot_light_strategy()`: Orchestrates two-phase analysis → atomization workflow
+  - Graceful fallback to original sequential behavior for unknown strategies
+- **Bug Fixes**
+  - Added missing `@dataclass` decorator to `ExtensionConfig` class
+  - Added `from_env_and_config()` method to `ExtensionConfig` for consistency
+
+### Testing
+- **New Test Files**
+  - `tests/test_config/task_breakdown.py`: 10 tests for TaskBreakdownConfig
+  - `tests/test_llm_tools_atom_of_thoughts.py`: 9 tests for AoT tool mappings
+  - `tests/test_chat/test_sequential_thinking_aot_light.py`: 10 tests for strategy
+- **Total Tests**: 29 new tests, all passing
+
+### Files Modified
+- `village/config.py`: Added TaskBreakdownConfig, fixed ExtensionConfig
+- `village/llm/tools.py`: Added ATOM_OF_THOUGHTS mappings and tool definition
+- `village/chat/sequential_thinking.py`: Added prompt builders and strategy router
+
 ## [1.0.0] - Production-Ready Coordination - 2026-01-27
 
 ### Added

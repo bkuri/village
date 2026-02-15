@@ -385,7 +385,7 @@ class TaskStateMachine:
             ts=datetime.now(timezone.utc).isoformat(),
             from_state=current_state,
             to_state=new_state,
-            context=context
+            context=context,
         )
 
         history = self._read_state_history(task_id)
@@ -441,7 +441,7 @@ class TaskStateMachine:
             ts=datetime.now(timezone.utc).isoformat(),
             from_state=None,
             to_state=initial_state,
-            context=context
+            context=context,
         )
 
         try:

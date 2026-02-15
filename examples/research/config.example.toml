@@ -1,0 +1,51 @@
+# Research domain configuration example
+
+[extensions]
+# Extension module paths for research domain
+# Format: "module.path:ClassName"
+
+# Chat message processor - pre/post processing hooks
+processor_module = "examples.research.chat.processors:ResearchChatProcessor"
+
+# Thinking refiner - domain-specific query refinement
+thinking_refiner_module = "examples.research.chat.thinking_refiners:ResearchThinkingRefiner"
+
+# Tool invoker - customize MCP tool invocation
+tool_invoker_module = "examples.research.chat.tool_invokers:ResearchToolInvoker"
+
+# Chat context - session state management
+chat_context_module = "examples.research.chat.context:ResearchChatContext"
+
+# Beads integrator - task management integration
+beads_integrator_module = "examples.research.chat.beads_integrators:ResearchBeadsIntegrator"
+
+[research]
+# Research-specific settings
+
+# Citation format: APA, MLA, Chicago
+citation_style = "APA"
+
+# Default research methodology
+# Options: qualitative, quantitative, mixed
+default_methodology = "mixed"
+
+# Enable query caching (in-memory)
+enable_query_cache = true
+
+# Audit trail settings
+log_research_queries = true
+log_bead_creation = true
+
+# Data sources for research queries
+data_sources = ["knowledge_store", "perplexity"]
+
+[research.fields]
+# Research field mappings for query extraction
+
+machine_learning = "Machine Learning"
+deep_learning = "Deep Learning"
+nlp = "Natural Language Processing"
+computer_vision = "Computer Vision"
+ai_safety = "AI Safety"
+reinforcement_learning = "Reinforcement Learning"
+llm = "Large Language Models"

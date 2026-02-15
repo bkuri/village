@@ -1,24 +1,23 @@
 """Extension registry for managing domain-specific hooks."""
 
 import logging
-from typing import Optional, Type
 
-from village.extensibility.processors import ChatProcessor, DefaultChatProcessor
-from village.extensibility.tool_invokers import DefaultToolInvoker, ToolInvoker
-from village.extensibility.thinking_refiners import (
-    DefaultThinkingRefiner,
-    ThinkingRefiner,
-)
-from village.extensibility.context import ChatContext, DefaultChatContext
 from village.extensibility.beads_integrators import (
     BeadsIntegrator,
     DefaultBeadsIntegrator,
 )
+from village.extensibility.context import ChatContext, DefaultChatContext
+from village.extensibility.llm_adapters import DefaultLLMProviderAdapter, LLMProviderAdapter
+from village.extensibility.processors import ChatProcessor, DefaultChatProcessor
 from village.extensibility.server_discovery import (
     DefaultServerDiscovery,
     ServerDiscovery,
 )
-from village.extensibility.llm_adapters import DefaultLLMProviderAdapter, LLMProviderAdapter
+from village.extensibility.thinking_refiners import (
+    DefaultThinkingRefiner,
+    ThinkingRefiner,
+)
+from village.extensibility.tool_invokers import DefaultToolInvoker, ToolInvoker
 
 logger = logging.getLogger(__name__)
 

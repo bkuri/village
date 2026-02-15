@@ -2,17 +2,14 @@
 
 import json
 import subprocess
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from village.config import Config
-from village.state_machine import TaskState, TaskStateMachine
 from village.resume import execute_resume
-from village.scm.git import GitSCM
-from village.locks import Lock
+from village.state_machine import TaskState, TaskStateMachine
 
 
 @pytest.fixture
@@ -120,7 +117,6 @@ class TestResumeWithRollback:
         subprocess.run(["git", "init"], cwd=worktree_path, check=True, capture_output=True)
 
         # Mock reset_workspace to raise an error
-        from village.probes.tools import SubprocessError
 
         with patch("village.scm.git.GitSCM.reset_workspace") as mock_reset:
             mock_reset.side_effect = RuntimeError("Failed to reset")

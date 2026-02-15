@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -11,7 +10,7 @@ class QueryRefinement:
 
     original_query: str
     refined_steps: list[str]
-    context_hints: dict[str, object] = None
+    context_hints: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         """Initialize context_hints if not provided."""

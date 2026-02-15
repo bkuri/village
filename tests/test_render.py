@@ -5,6 +5,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from village.chat.drafts import DraftTask
+from village.ready import ReadyAssessment, SuggestedAction
 from village.render.json import render_status_json
 from village.render.text import (
     format_datetime,
@@ -17,8 +19,6 @@ from village.render.text import (
     render_summary,
     render_worker_table,
 )
-from village.chat.drafts import DraftTask
-from village.ready import ReadyAssessment, SuggestedAction
 from village.resume import ResumeAction, ResumeResult
 from village.runtime import InitializationPlan
 from village.status import FullStatus, Orphan, StatusSummary, Worker

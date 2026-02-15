@@ -4,8 +4,8 @@ Tests end-to-end workflows for event logging, queue deduplication,
 and cleanup operations.
 """
 
-from datetime import datetime, timedelta, timezone
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 

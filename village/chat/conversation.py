@@ -1,5 +1,6 @@
 """Core conversation orchestration."""
 
+import asyncio
 import json
 import logging
 import re
@@ -539,8 +540,8 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         return state
 
     # Actually create tasks in Beads by calling create_draft_tasks
-    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
     from village.chat.state import load_session_state, save_session_state
+    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
 
     state_dict = load_session_state(config)
 
@@ -555,7 +556,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
             config_git_root_name,
         )
 
-        created_tasks = create_draft_tasks(specs, config)
+        created_tasks = asyncio.run(create_draft_tasks(specs, config))
         created_ids = list(created_tasks.values())
 
         # Update session state
@@ -563,7 +564,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         snapshot = state_dict.get("session_snapshot", {})
         snapshot["brainstorm_created_ids"] = created_ids
         state_dict["session_snapshot"] = snapshot
-        save_session_state(config, state_dict)
+        save_session_state(state_dict, config)
 
         summary_text = f"Created {len(created_tasks)} task(s) in Beads"
         state.messages.append(

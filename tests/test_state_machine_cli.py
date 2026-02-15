@@ -1,16 +1,13 @@
 """Tests for state machine CLI commands."""
 
 import json
-import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from village.config import Config
-from village.errors import EXIT_BLOCKED, EXIT_ERROR
-from village.state_machine import TaskState, TaskStateMachine
+from village.errors import EXIT_BLOCKED
 
 
 @pytest.fixture

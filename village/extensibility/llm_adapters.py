@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -15,7 +15,7 @@ class LLMProviderConfig:
     timeout: int
     max_tokens: int
     temperature: float = 0.7
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Initialize metadata if not provided."""
@@ -105,6 +105,6 @@ class DefaultLLMProviderAdapter(LLMProviderAdapter):
         """Exponential backoff with jitter."""
         import random
 
-        base_delay = 2 ** attempt
+        base_delay = 2**attempt
         jitter = random.uniform(0, 1)
-        return base_delay + jitter
+        return base_delay + jitter  # type: ignore[no-any-return]

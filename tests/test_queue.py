@@ -694,8 +694,9 @@ class TestQueueDeduplication:
 
     def test_deduplication_blocks_recent_tasks(self, mock_config: Config):
         """Test deduplication blocks tasks executed recently."""
-        from village.event_log import append_event, Event
         from datetime import datetime, timedelta, timezone
+
+        from village.event_log import Event, append_event
 
         mock_config.git_root.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
@@ -723,8 +724,9 @@ class TestQueueDeduplication:
 
     def test_force_bypasses_deduplication(self, mock_config: Config):
         """Test --force flag bypasses deduplication check."""
-        from village.event_log import append_event, Event
         from datetime import datetime, timezone
+
+        from village.event_log import Event, append_event
 
         mock_config.git_root.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
@@ -752,8 +754,9 @@ class TestQueueDeduplication:
 
     def test_ttl_zero_allows_immediate_reexecution(self, mock_config: Config):
         """Test TTL of 0 allows immediate re-execution."""
-        from village.event_log import append_event, Event
         from datetime import datetime, timezone
+
+        from village.event_log import Event, append_event
 
         mock_config.git_root.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
@@ -840,8 +843,9 @@ class TestQueueJsonOutput:
 
     def test_json_includes_worktree_path(self, mock_config: Config):
         """Test JSON output includes worktree path."""
-        from village.queue import QueuePlan, render_queue_plan_json
         import json
+
+        from village.queue import QueuePlan, render_queue_plan_json
 
         # Create a plan with worktree path
         task = QueueTask(
@@ -868,8 +872,9 @@ class TestQueueJsonOutput:
 
     def test_json_handles_missing_lock_and_worktree(self, mock_config: Config):
         """Test JSON output handles missing lock and worktree."""
-        from village.queue import QueuePlan, render_queue_plan_json
         import json
+
+        from village.queue import QueuePlan, render_queue_plan_json
 
         # Create a plan without lock and worktree
         task = QueueTask(task_id="bd-a3f8", agent="build")
@@ -896,8 +901,9 @@ class TestQueueJsonOutput:
 
     def test_json_validates_schema(self, mock_config: Config):
         """Test JSON output structure is valid."""
-        from village.queue import QueuePlan, render_queue_plan_json
         import json
+
+        from village.queue import QueuePlan, render_queue_plan_json
 
         plan = QueuePlan(
             ready_tasks=[],
@@ -926,8 +932,9 @@ class TestQueueJsonOutput:
 
     def test_json_sorted_keys(self, mock_config: Config):
         """Test JSON output has sorted keys."""
-        from village.queue import QueuePlan, render_queue_plan_json
         import json
+
+        from village.queue import QueuePlan, render_queue_plan_json
 
         plan = QueuePlan(
             ready_tasks=[],
@@ -947,8 +954,9 @@ class TestQueueJsonOutput:
 
     def test_arbitrate_populates_lock_info(self, mock_config: Config):
         """Test arbitrate_locks populates lock information."""
-        from village.locks import Lock, write_lock
         from datetime import datetime, timezone
+
+        from village.locks import Lock, write_lock
 
         mock_config.git_root.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)

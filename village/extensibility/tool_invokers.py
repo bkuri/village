@@ -11,7 +11,7 @@ class ToolInvocation:
 
     tool_name: str
     args: dict[str, Any]
-    context: dict[str, Any] = None
+    context: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Initialize context if not provided."""

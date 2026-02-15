@@ -9,7 +9,13 @@ from typing import Optional
 from village.chat.baseline import BaselineReport
 from village.config import Config
 from village.llm import get_llm_client
-from village.llm.tools import SEQUENTIAL_THINKING_TOOL
+from village.llm.tools import (
+    ATOM_OF_THOUGHTS,
+    ATOM_OF_THOUGHTS_TOOL,
+    SEQUENTIAL_THINKING,
+    SEQUENTIAL_THINKING_TOOL,
+    format_mcp_tool_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +78,10 @@ def generate_task_breakdown(
     beads_state: Optional[str] = None,
 ) -> TaskBreakdown:
     """
-    Call LLM with Sequential Thinking tool request.
+    Generate task breakdown using configured strategy.
 
-    Build prompt with baseline info, invoke LLM, parse response.
+    Routes to appropriate strategy method based on config.task_breakdown.strategy.
+    Available strategies: "st_aot_light" (default), "sequential", "atomic"
 
     Args:
         baseline: Collected baseline information
@@ -88,9 +95,15 @@ def generate_task_breakdown(
         ValueError: If response is invalid or missing required fields
         json.JSONDecodeError: If response is not valid JSON
     """
+    strategy = config.task_breakdown.strategy
+
+    if strategy == "st_aot_light":
+        return _st_aot_light_strategy(baseline, config, beads_state)
+
+    # Default sequential strategy (for "sequential" and "atomic")
     prompt = _build_sequential_thinking_prompt(baseline, beads_state)
 
-    logger.info("Invoking Sequential Thinking via LLM")
+    logger.info(f"Invoking {strategy} task breakdown via LLM")
 
     llm_client = get_llm_client(config)
 
@@ -273,3 +286,221 @@ def validate_dependencies(breakdown: TaskBreakdown) -> bool:
                 return False
 
     return True
+
+
+def _build_st_analysis_prompt(
+    baseline: BaselineReport,
+    beads_state: Optional[str] = None,
+    config: Optional[Config] = None,
+) -> str:
+    """
+    Build Phase 1 prompt for Sequential Thinking analysis.
+
+    Thoroughly analyzes the task to identify requirements, dependencies, edge cases,
+    and other important considerations. Does NOT create tasks yet.
+
+    Args:
+        baseline: Collected baseline information
+        beads_state: Optional current Beads tasks (for context)
+        config: Village configuration (for tool name pattern)
+
+    Returns:
+        Prompt string
+    """
+    tool_name = format_mcp_tool_name(SEQUENTIAL_THINKING, config)
+
+    prompt = f"""Use Sequential Thinking MCP tool to deeply analyze this task and identify all important considerations.
+
+USER PROVIDED:
+  Title: {baseline.title}
+  Reasoning: {baseline.reasoning}
+"""
+
+    if baseline.parent_task_id:
+        prompt += f"  Parent task: {baseline.parent_task_id}\n"
+
+    if baseline.tags:
+        prompt += f"  Tags: {', '.join(baseline.tags)}\n"
+
+    prompt += """
+
+TASK:
+"""
+
+    if beads_state:
+        prompt += f"""
+CONTEXT: Consider these existing Beads tasks:
+{beads_state}
+
+Use this context to:
+- Identify dependencies on existing work
+- Avoid duplicating existing functionality
+- Ensure new work integrates properly with existing tasks
+"""
+
+    prompt += (
+        """
+1. Analyze the requirements thoroughly (not tasks yet)
+2. Identify all technical requirements and constraints
+3. Determine necessary system components or modules
+4. Identify dependencies (internal and external)
+5. Identify edge cases and error conditions
+6. Determine testing and verification requirements
+7. Consider performance and scaling considerations
+8. Identify potential risks and blockers
+9. Consider security and access requirements
+10. Think about maintenance and future extensibility
+
+OUTPUT FORMAT:
+Return a JSON object with the following structure:
+{
+  "analysis": {
+    "requirements": ["requirement 1", "requirement 2"],
+    "technical_constraints": ["constraint 1", "constraint 2"],
+    "system_components": ["component 1", "component 2"],
+    "dependencies": ["dependency 1", "dependency 2"],
+    "edge_cases": ["edge case 1", "edge case 2"],
+    "testing_requirements": ["test type 1", "test type 2"],
+    "performance_considerations": ["consideration 1", "consideration 2"],
+    "risks_and_blockers": ["risk/blocker 1", "risk/blocker 2"],
+    "security_requirements": ["requirement 1", "requirement 2"],
+    "maintenance_considerations": ["consideration 1", "consideration 2"]
+  },
+  "summary": "Brief summary of analysis findings"
+}
+
+IMPORTANT: Use """
+        + tool_name
+        + """ MCP tool to generate this analysis.
+"""
+    )
+
+    return prompt
+
+
+def _build_aot_light_atomization_prompt(
+    analysis: dict[str, object],
+    baseline: BaselineReport,
+) -> str:
+    """
+    Build Phase 2 prompt for Atom of Thoughts (AoT-light) atomization.
+
+    Takes Sequential Thinking's analysis as input and creates atomic, queueable tasks.
+
+    Args:
+        analysis: Analysis from Sequential Thinking (requirements, constraints, etc.)
+        baseline: Original baseline information
+
+    Returns:
+        Prompt string
+    """
+    tool_name = format_mcp_tool_name(ATOM_OF_THOUGHTS)
+
+    prompt = f"""Use Atom of Thoughts (AoT-light) MCP tool to create atomic, queueable tasks based on the analysis.
+
+ANALYSIS:
+{json.dumps(analysis, indent=2, ensure_ascii=False)}
+"""
+
+    prompt += f"""
+USER PROVIDED:
+  Title: {baseline.title}
+"""
+
+    if baseline.tags:
+        prompt += f"  Tags: {', '.join(baseline.tags)}\n"
+
+    prompt += (
+        """
+TASK:
+1. Create atomic, queueable tasks (each should be completable in 1-4 hours)
+2. Each task should have clear, independent scope
+3. Avoid mixing concerns across tasks
+4. Ensure tasks can be executed independently
+5. Provide success criteria for each task
+6. Identify dependencies between tasks (by index)
+7. Each task should be testable and verifiable
+8. Tasks should be small enough to queue and process
+
+OUTPUT FORMAT:
+Return a JSON object with the following structure:
+{
+  "items": [
+    {
+      "title": "Atomic task title",
+      "description": "Detailed description of what to do",
+      "estimated_effort": "X hours",
+      "success_criteria": ["success criterion 1", "success criterion 2"],
+      "dependencies": [0, 1],
+      "tags": ["tag1", "tag2"]
+    }
+  ],
+  "summary": "Brief summary of task breakdown"
+}
+
+IMPORTANT: Use """
+        + tool_name
+        + """ MCP tool to generate this atomic breakdown. Focus on creating small, manageable tasks that can be queued and executed independently.
+"""
+    )
+
+    return prompt
+
+
+def _st_aot_light_strategy(
+    baseline: BaselineReport,
+    config: Config,
+    beads_state: Optional[str] = None,
+) -> TaskBreakdown:
+    """
+    ST → AoT Light strategy: Deep analysis first, then atomic atomization.
+
+    Phase 1: Use Sequential Thinking for thorough analysis
+    Phase 2: Use Atom of Thoughts (AoT-light) for creating atomic, queueable tasks
+
+    Args:
+        baseline: Collected baseline information
+        config: Village configuration
+        beads_state: Optional current Beads tasks (for context)
+
+    Returns:
+        TaskBreakdown with atomic task list
+
+    Raises:
+        ValueError: If response is invalid or missing required fields
+        json.JSONDecodeError: If response is not valid JSON
+    """
+    logger.info("Phase 1: Running Sequential Thinking for deep analysis")
+    analysis_prompt = _build_st_analysis_prompt(baseline, beads_state, config)
+
+    llm_client = get_llm_client(config)
+
+    analysis_response = llm_client.call(
+        analysis_prompt,
+        timeout=config.llm.timeout,
+        max_tokens=config.llm.max_tokens,
+        tools=[SEQUENTIAL_THINKING_TOOL] if llm_client.supports_tools else None,
+    )
+
+    logger.debug(f"Sequential Thinking analysis output length: {len(analysis_response)}")
+
+    try:
+        analysis = json.loads(analysis_response)
+        logger.info(f"Analysis collected: {len(analysis.get('analysis', {}))} categories")
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse Sequential Thinking analysis, using fallback")
+        analysis = {"analysis": {}, "summary": analysis_response[:200]}
+
+    logger.info("Phase 2: Running AoT-light for atomic task creation")
+    atomization_prompt = _build_aot_light_atomization_prompt(analysis, baseline)
+
+    response = llm_client.call(
+        atomization_prompt,
+        timeout=config.llm.timeout,
+        max_tokens=config.llm.max_tokens,
+        tools=[ATOM_OF_THOUGHTS_TOOL] if llm_client.supports_tools else None,
+    )
+
+    logger.debug(f"AoT-light atomization output length: {len(response)}")
+
+    return _parse_task_breakdown(response)

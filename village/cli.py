@@ -4,10 +4,14 @@ import json
 import signal
 import sys
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 import click
 
 from village.chat.beads_client import BeadsClient, BeadsError
+
+if TYPE_CHECKING:
+    from village.config import Config
 from village.chat.llm_chat import LLMChat
 from village.config import get_config
 from village.errors import (
@@ -18,16 +22,12 @@ from village.errors import (
     InterruptedResume,
 )
 from village.event_log import Event, append_event
+from village.extensibility import discover_mcp_servers, initialize_extensions
 from village.llm.factory import get_llm_client
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
     clear_pane_cache,
-    load_village_config,
     session_exists,
-    set_window_indicator,
-    update_status_border_colour,
-    update_status_draft_count,
-    update_status_mode,
 )
 from village.queue import (
     execute_queue_plan,
@@ -41,6 +41,20 @@ from village.runtime import collect_runtime_state
 from village.status import collect_workers
 
 logger = get_logger(__name__)
+
+
+async def _initialize_extensions_and_mcp(config: "Config") -> tuple:
+    """Initialize extensions and discover MCP servers.
+
+    Args:
+        config: Village configuration
+
+    Returns:
+        Tuple of (extensions registry, discovered servers list)
+    """
+    extensions = await initialize_extensions(config)
+    discovered_servers = await discover_mcp_servers(extensions)
+    return extensions, discovered_servers
 
 
 def _handle_interrupt(signum: int, frame: object) -> None:
@@ -723,12 +737,16 @@ def chat() -> None:
 
     chat = LLMChat(llm_client, system_prompt=system_prompt, config=config)
 
-    async def setup_beads_client() -> None:
+    async def setup_chat() -> None:
+        extensions, discovered_servers = await _initialize_extensions_and_mcp(config)
+
+        await chat.set_extensions(extensions)
+
         if beads_client:
             await chat.set_beads_client(beads_client)
 
     try:
-        asyncio.run(setup_beads_client())
+        asyncio.run(setup_chat())
     except Exception:
         pass
 

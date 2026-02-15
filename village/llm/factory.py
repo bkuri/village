@@ -2,6 +2,7 @@
 
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from village.config import Config
 from village.llm.client import LLMClient
@@ -9,6 +10,9 @@ from village.llm.mcp import MCPClient, MCPUseClient
 from village.llm.providers.anthropic import AnthropicClient
 from village.llm.providers.ollama import OllamaClient
 from village.llm.providers.openrouter import OpenRouterClient
+
+if TYPE_CHECKING:
+    from village.extensibility.server_discovery import MCPServer
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +75,15 @@ def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
 
-def get_mcp_client(config: Config) -> MCPClient | None:
+def get_mcp_client(
+    config: Config, discovered_servers: list["MCPServer"] | None = None
+) -> MCPClient | None:
     """
     Factory to get MCP client based on config.
 
     Args:
         config: Village configuration
+        discovered_servers: Optional list of discovered MCP servers
 
     Returns:
         MCP client instance, or None if MCP is disabled
@@ -86,6 +93,12 @@ def get_mcp_client(config: Config) -> MCPClient | None:
         return None
 
     logger.debug(f"Creating MCP client: type={config.mcp.client_type}")
+
+    if discovered_servers is not None:
+        logger.info(
+            f"Discovered {len(discovered_servers)} MCP servers: "
+            f"{', '.join(s.name for s in discovered_servers)}"
+        )
 
     if config.mcp.client_type == "mcp-use":
         return MCPUseClient(mcp_use_path=config.mcp.mcp_use_path)

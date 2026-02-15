@@ -1,6 +1,5 @@
 """GitHub PR integration via GitHub CLI."""
 
-import json
 import logging
 import subprocess
 from dataclasses import dataclass, field

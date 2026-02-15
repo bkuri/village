@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -10,7 +9,7 @@ class ProcessingResult:
     """Result of message processing."""
 
     content: str
-    metadata: dict[str, object] = None
+    metadata: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         """Initialize metadata if not provided."""

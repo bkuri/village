@@ -13,10 +13,10 @@ class BeadSpec:
     description: str
     issue_type: str  # bug, feature, task, epic, chore
     priority: int  # 0-4
-    tags: list[str] = None
+    tags: list[str] | None = None
     parent_id: Optional[str] = None
-    deps: list[str] = None
-    metadata: dict[str, Any] = None
+    deps: list[str] | None = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Initialize optional fields."""
@@ -35,7 +35,7 @@ class BeadCreated:
     bead_id: str
     parent_id: Optional[str]
     created_at: str
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         """Initialize metadata if not provided."""

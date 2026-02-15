@@ -1,5 +1,6 @@
 """Subcommand registry and execution (read-only)."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -465,14 +466,14 @@ def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
             config_git_root_name,
         )
 
-        created_tasks = create_draft_tasks(specs, config)
+        created_tasks = asyncio.run(create_draft_tasks(specs, config))
         created_ids = list(created_tasks.values())
 
         # Update session state with created task IDs
         snapshot = state_dict.get("session_snapshot", {})
         snapshot["brainstorm_created_ids"] = created_ids
         state_dict["created_task_ids"] = created_ids
-        save_session_state(config, state_dict)
+        save_session_state(state_dict, config)
 
         return f"Created {len(created_tasks)} task(s) in Beads", "", 0
     except Exception as e:

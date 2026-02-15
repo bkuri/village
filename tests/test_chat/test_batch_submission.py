@@ -379,6 +379,6 @@ class TestTaskSubcommandRouting:
         )
         save_draft(draft, mock_config)
 
-        state = _handle_task_subcommand(mock_state, "discard", [draft.id], mock_config)
+        _handle_task_subcommand(mock_state, "discard", [draft.id], mock_config)
 
         assert not (mock_config.village_dir / "drafts" / f"{draft.id}.json").exists()

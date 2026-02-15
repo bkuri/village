@@ -2,8 +2,9 @@
 
 import asyncio
 import logging
+import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal, cast, Optional
+from typing import TYPE_CHECKING, Literal, Optional, cast
 
 from village.chat.beads_client import BeadsClient, BeadsError
 from village.chat.sequential_thinking import (
@@ -11,6 +12,8 @@ from village.chat.sequential_thinking import (
 )
 from village.chat.task_spec import TaskSpec
 from village.extensibility import ExtensionRegistry
+from village.extensibility.context import SessionContext
+from village.extensibility.thinking_refiners import QueryRefinement
 
 ScopeType = Literal["fix", "feature", "config", "docs", "test", "refactor"]
 ConfidenceType = Literal["high", "medium", "low"]
@@ -52,6 +55,7 @@ class ChatSession:
     refinements: list[dict[str, object]] = field(default_factory=list)
     current_iteration: int = 0  # 0 = original, 1+ = refinements
     current_breakdown: TaskBreakdown | None = None
+    query_refinement: QueryRefinement | None = None
 
     def get_current_spec(self) -> TaskSpec | None:
         """Get latest task spec."""
@@ -113,7 +117,7 @@ class ChatSession:
 @dataclass
 class LLMChat:
     """LLM chat session with task rendering and Beads API integration.
-    
+
     Supports domain-specific customization through ExtensionRegistry hooks:
     - ChatProcessor: Pre/post message processing
     - ToolInvoker: Customize MCP tool invocation
@@ -128,6 +132,8 @@ class LLMChat:
     beads_client: BeadsClient | None = None
     system_prompt: str | None = None
     config: _Config | None = None
+    session_id: str = field(default="")
+    session_context: SessionContext | None = None
 
     def __init__(
         self,
@@ -137,7 +143,7 @@ class LLMChat:
         extensions: Optional[ExtensionRegistry] = None,
     ) -> None:
         """Initialize LLM chat.
-        
+
         Args:
             llm_client: LLM client for API calls
             system_prompt: System prompt for LLM
@@ -150,10 +156,16 @@ class LLMChat:
         self.system_prompt = system_prompt
         self.config = config
         self.extensions = extensions or ExtensionRegistry()
+        self.session_id = str(uuid.uuid4())
+        self.session_context = None
 
     async def set_beads_client(self, beads_client: BeadsClient) -> None:
         """Set Beads client for task creation."""
         self.beads_client = beads_client
+
+    async def set_extensions(self, extensions: ExtensionRegistry) -> None:
+        """Set extension registry."""
+        self.extensions = extensions
 
     async def handle_message(self, user_input: str) -> str:
         """
@@ -167,19 +179,41 @@ class LLMChat:
         """
         user_input = user_input.strip()
 
-        # Apply pre-processing hook (domain-specific input normalization)
         processor = self.extensions.get_processor()
-        user_input = await processor.pre_process(user_input)
+        chat_context = self.extensions.get_chat_context()
 
-        # Handle slash commands
+        # Load context if not already loaded
+        if self.session_context is None:
+            self.session_context = await chat_context.load_context(self.session_id)
+
+        # Handle slash commands BEFORE pre-processing (to preserve command detection)
         if user_input.startswith("/"):
             response = await self.handle_slash_command(user_input)
-        # Check if we have a current task or creating new one
-        elif self.session.current_task is None:
-            response = await self.handle_create(user_input)
-        # If we have a task, user is refining/confirming/discard
         else:
-            response = await self.handle_refine(user_input)
+            # Apply pre-processing hook (domain-specific input normalization)
+            user_input = await processor.pre_process(user_input)
+
+            # Enrich context with domain-specific data
+            self.session_context = await chat_context.enrich_context(self.session_context)
+
+            # Apply domain-specific query refinement
+            refiner = self.extensions.get_thinking_refiner()
+            if await refiner.should_refine(user_input):
+                self.session.query_refinement = await refiner.refine_query(user_input)
+                logger.info(
+                    f"Query refined into {len(self.session.query_refinement.refined_steps)} steps"
+                )
+
+            # Check if we have a current task or creating new one
+            if self.session.current_task is None:
+                response = await self.handle_create(user_input)
+            # If we have a task, user is refining/confirming/discard
+            else:
+                response = await self.handle_refine(user_input)
+
+        # Save context after processing
+        if self.session_context:
+            await chat_context.save_context(self.session_context)
 
         # Apply post-processing hook (domain-specific output formatting)
         response = await processor.post_process(response)
@@ -203,9 +237,20 @@ class LLMChat:
         """Handle /create or natural language task creation."""
         logger.info(f"Creating task from input: {user_input[:50]}...")
 
+        # Build prompt with refined steps if available
+        if self.session.query_refinement:
+            refined_steps_text = "\n".join(
+                f"{i + 1}. {step}"
+                for i, step in enumerate(self.session.query_refinement.refined_steps)
+            )
+            prompt = f"""Original user query: {user_input}\n\nDomain-specific analysis steps:\n{refined_steps_text}\n\nContext hints: {self.session.query_refinement.context_hints}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."""
+            logger.info("Using refined steps for task creation")
+        else:
+            prompt = f"{user_input}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."
+
         # Parse JSON response (type: ignore for Any return)
         response: str = self.llm_client.call(
-            prompt=f"{user_input}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only.",
+            prompt=prompt,
             system_prompt=self.system_prompt or self._get_prompt(),
         )
 
@@ -245,6 +290,7 @@ class LLMChat:
         self.session.current_task = task_spec
         self.session.current_iteration = 0
         self.session.refinements = []
+        self.session.query_refinement = None
 
         logger.info(f"Task spec created: {task_spec.title}")
 
@@ -441,12 +487,14 @@ class LLMChat:
 
         # Case 2: Discard single task (existing behavior)
         if not self.session.current_task:
+            self.session.query_refinement = None
             return "❌ No current task or breakdown to discard."
 
         task_title = self.session.current_task.title if self.session.current_task else "task"
         self.session.current_task = None
         self.session.current_iteration = 0
         self.session.refinements = []
+        self.session.query_refinement = None
 
         logger.info(f"Discarded task: {task_title}")
         return f"🗑️ Task '{task_title}' discarded. Use /create to start a new task."

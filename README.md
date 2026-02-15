@@ -20,6 +20,8 @@ No daemon.
 No database.
 No hidden state.
 
+**Extensible by design**: Village provides a 7-point extensibility framework for domain customization without forking.
+
 ---
 
 ## Why Village?
@@ -114,6 +116,24 @@ Village runs as a **local service with auditable source code**:
 
 ---
 
+## Features
+
+- **Multi-agent coordination**: Lock system prevents duplicate work, concurrency limits enforce fairness
+- **State management**: Lock files survive crashes, event logs capture audit trails
+- **Observability**: Real-time dashboard, metrics export, event queries
+- **Safety guarantees**: Conflict detection, automatic rollback, resource quotas
+- **Extensibility framework**: 7 extension points for domain customization without forking
+  - Custom readiness engines (replace Beads)
+  - Custom SCM backends (Git, Jujutsu, or your own)
+  - Custom probes (domain-specific runtime checks)
+  - Custom renderers (JSON, text, or your own format)
+  - Custom queue hooks (pre/post processing)
+  - Custom task contracts (domain-specific templates)
+  - Custom CLI commands (domain-specific workflows)
+- **Zero-dependency**: Runs with tools you already trust (tmux, git, beads, opencode)
+
+---
+
 ## Architecture
 
 ```mermaid
@@ -149,6 +169,12 @@ flowchart TB
 village up
 village ready
 village queue --n 3
+```
+
+To use custom extensions, add to `.village/config`:
+```ini
+[extensions]
+readiness_engine=village.ext.research
 ```
 
 Inspect anytime:
@@ -571,6 +597,7 @@ For practical examples and workflows, see [docs/examples/](docs/examples/):
 - [Queue Multiple](docs/examples/03-commands/queue-multiple.md) - Queue across agent types
 - [Multiple Agents](docs/examples/04-configuration/multiple-agents.md) - 3+ specialized agents
 - [Multi-Day Workflow](docs/examples/05-advanced/workflow.md) - Interrupts, stale locks, corrupted locks
+- [Research Domain](docs/examples/research/) - Custom readiness engine for research tasks (extensibility example)
 
 ---
 
@@ -826,3 +853,6 @@ MIT
 - [docs/PROPOSALS.md](docs/PROPOSALS.md) - Optional extensions and proposals
 - [docs/examples/](docs/examples/) - Practical examples
 - [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) - Shell setup
+- [EXTENSIBILITY.md](EXTENSIBILITY.md) - Extensibility framework (PRD)
+- [EXTENSIBILITY_GUIDE.md](EXTENSIBILITY_GUIDE.md) - Extensibility development guide
+- [EXTENSIBILITY_API.md](EXTENSIBILITY_API.md) - Extensibility API reference

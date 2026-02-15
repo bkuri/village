@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
 
 
 @dataclass
@@ -12,8 +11,8 @@ class MCPServer:
     name: str
     type: str  # e.g., "stdio", "sse"
     command: str
-    args: list[str] = None
-    env: dict[str, str] = None
+    args: list[str] | None = None
+    env: dict[str, str] | None = None
     enabled: bool = True
 
     def __post_init__(self) -> None:

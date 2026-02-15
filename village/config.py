@@ -58,11 +58,9 @@ class LLMConfig:
         api_key_config = config.get("LLM_API_KEY")
         api_key = api_key_env or api_key_config
 
-        timeout_env = os.environ.get("VILLAGE_LLM_TIMEOUT")
         timeout_str = os.environ.get("VILLAGE_LLM_TIMEOUT") or config.get("LLM_TIMEOUT")
         timeout = int(timeout_str) if timeout_str else 300
 
-        max_tokens_env = os.environ.get("VILLAGE_LLM_MAX_TOKENS")
         max_tokens_str = os.environ.get("VILLAGE_LLM_MAX_TOKENS") or config.get("LLM_MAX_TOKENS")
         max_tokens = int(max_tokens_str) if max_tokens_str else 4096
 
@@ -85,14 +83,15 @@ class MCPConfig:
     enabled: bool = True
     client_type: str = "mcp-use"
     mcp_use_path: str = "mcp-use"
+    tool_name_pattern: str = "mcproxy_{server}__{tool}"
 
     @classmethod
     def from_env_and_config(cls, config: dict[str, str]) -> "MCPConfig":
         """Load MCP config from environment variable and config file."""
         enabled_env = os.environ.get("VILLAGE_MCP_ENABLED")
         enabled_config = config.get("MCP_ENABLED")
-        enabled = enabled_env or enabled_config
-        enabled = enabled in ("1", "true", "yes")
+        enabled_value = enabled_env or enabled_config
+        enabled = enabled_value in ("1", "true", "yes") if enabled_value else True
 
         client_type_env = os.environ.get("VILLAGE_MCP_CLIENT")
         client_type_config = config.get("MCP_CLIENT")
@@ -101,10 +100,15 @@ class MCPConfig:
         mcp_use_path = config.get("MCP_USE_PATH")
         mcp_use_path_value = mcp_use_path if mcp_use_path is not None else "mcp-use"
 
+        pattern_env = os.environ.get("VILLAGE_MCP_TOOL_PATTERN")
+        pattern_config = config.get("MCP_TOOL_PATTERN")
+        tool_name_pattern = pattern_env or pattern_config or "mcproxy_{server}__{tool}"
+
         return cls(
             enabled=enabled,
             client_type=client_type,
             mcp_use_path=mcp_use_path_value,
+            tool_name_pattern=tool_name_pattern,
         )
 
 
@@ -311,36 +315,42 @@ class ExtensionConfig:
 
     @classmethod
     def from_env_and_config(cls, config: dict[str, str]) -> "ExtensionConfig":
-        """Load extension config from environment variables and config file."""
-        enabled_env = os.environ.get("VILLAGE_EXTENSIONS_ENABLED", "").lower()
-        enabled_config = config.get("EXTENSIONS.ENABLED", "").lower()
-        enabled = enabled_env or enabled_config
-        extensions_enabled = enabled in ("1", "true", "yes") or not (enabled_env or enabled_config)
+        """Load extension config from environment variable and config file."""
+        enabled_env = os.environ.get("VILLAGE_EXTENSIONS_ENABLED") or config.get(
+            "EXTENSIONS.ENABLED"
+        )
+        enabled = enabled_env is None or enabled_env.lower() in ("1", "true", "yes", "")
 
-        processor_module = os.environ.get("VILLAGE_EXTENSION_PROCESSOR") or config.get(
+        processor_module = os.environ.get("VILLAGE_EXTENSIONS_PROCESSOR_MODULE") or config.get(
             "EXTENSIONS.PROCESSOR_MODULE"
         )
-        tool_invoker_module = os.environ.get("VILLAGE_EXTENSION_TOOL_INVOKER") or config.get(
-            "EXTENSIONS.TOOL_INVOKER_MODULE"
-        )
-        thinking_refiner_module = os.environ.get("VILLAGE_EXTENSION_THINKING_REFINER") or config.get(
-            "EXTENSIONS.THINKING_REFINER_MODULE"
-        )
-        chat_context_module = os.environ.get("VILLAGE_EXTENSION_CHAT_CONTEXT") or config.get(
-            "EXTENSIONS.CHAT_CONTEXT_MODULE"
-        )
-        beads_integrator_module = os.environ.get("VILLAGE_EXTENSION_BEADS_INTEGRATOR") or config.get(
-            "EXTENSIONS.BEADS_INTEGRATOR_MODULE"
-        )
-        server_discovery_module = os.environ.get("VILLAGE_EXTENSION_SERVER_DISCOVERY") or config.get(
-            "EXTENSIONS.SERVER_DISCOVERY_MODULE"
-        )
-        llm_adapter_module = os.environ.get("VILLAGE_EXTENSION_LLM_ADAPTER") or config.get(
+
+        tool_invoker_module = os.environ.get(
+            "VILLAGE_EXTENSIONS_TOOL_INVOKER_MODULE"
+        ) or config.get("EXTENSIONS.TOOL_INVOKER_MODULE")
+
+        thinking_refiner_module = os.environ.get(
+            "VILLAGE_EXTENSIONS_THINKING_REFINER_MODULE"
+        ) or config.get("EXTENSIONS.THINKING_REFINER_MODULE")
+
+        chat_context_module = os.environ.get(
+            "VILLAGE_EXTENSIONS_CHAT_CONTEXT_MODULE"
+        ) or config.get("EXTENSIONS.CHAT_CONTEXT_MODULE")
+
+        beads_integrator_module = os.environ.get(
+            "VILLAGE_EXTENSIONS_BEADS_INTEGRATOR_MODULE"
+        ) or config.get("EXTENSIONS.BEADS_INTEGRATOR_MODULE")
+
+        server_discovery_module = os.environ.get(
+            "VILLAGE_EXTENSIONS_SERVER_DISCOVERY_MODULE"
+        ) or config.get("EXTENSIONS.SERVER_DISCOVERY_MODULE")
+
+        llm_adapter_module = os.environ.get("VILLAGE_EXTENSIONS_LLM_ADAPTER_MODULE") or config.get(
             "EXTENSIONS.LLM_ADAPTER_MODULE"
         )
 
         return cls(
-            enabled=extensions_enabled,
+            enabled=enabled,
             processor_module=processor_module,
             tool_invoker_module=tool_invoker_module,
             thinking_refiner_module=thinking_refiner_module,
@@ -349,6 +359,22 @@ class ExtensionConfig:
             server_discovery_module=server_discovery_module,
             llm_adapter_module=llm_adapter_module,
         )
+
+
+@dataclass
+class TaskBreakdownConfig:
+    """Task breakdown strategy configuration."""
+
+    strategy: str = "st_aot_light"
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "TaskBreakdownConfig":
+        """Load task breakdown config from environment variable and config file."""
+        strategy_env = os.environ.get("VILLAGE_TASK_BREAKDOWN_STRATEGY")
+        strategy_config = config.get("TASK_BREAKDOWN.STRATEGY")
+        strategy = strategy_env or strategy_config or "st_aot_light"
+
+        return cls(strategy=strategy)
 
 
 @dataclass
@@ -376,6 +402,7 @@ class Config:
     ci: CIConfig = field(default_factory=CIConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
     extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
+    task_breakdown: TaskBreakdownConfig = field(default_factory=TaskBreakdownConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -547,6 +574,9 @@ def get_config() -> Config:
     # Parse extension configuration
     extensions_config = ExtensionConfig.from_env_and_config(file_config)
 
+    # Parse task breakdown configuration
+    task_breakdown_config = TaskBreakdownConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -615,4 +645,5 @@ def get_config() -> Config:
         ci=ci_config,
         notifications=notifications_config,
         extensions=extensions_config,
+        task_breakdown=task_breakdown_config,
     )

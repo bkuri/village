@@ -4,8 +4,6 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
-
 from village.config import Config
 from village.event_log import (
     Event,
