@@ -1,5 +1,5 @@
 [project]
-name = "village"
+name = "village-ai"
 version = "1.0.0"
 description = "CLI-native parallel development orchestrator"
 requires-python = ">=3.11"
