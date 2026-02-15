@@ -183,8 +183,6 @@ async def _create_single_draft(
     cmd = [
         "bd",
         "create",
-        "--status",
-        "draft",
         "--json",
         "--title",
         spec.title,
@@ -193,7 +191,18 @@ async def _create_single_draft(
     ]
 
     if spec.estimate and spec.estimate != "unknown":
-        cmd.extend(["--estimate", spec.estimate])
+        # Convert estimate to minutes (Beads expects integer minutes)
+        estimate_map = {
+            "minutes": "60",
+            "hours": "60",
+            "hour": "60",
+            "days": "480",  # 8 hours
+            "day": "480",
+            "weeks": "2400",  # 5 days
+            "week": "2400",
+        }
+        estimate_minutes = estimate_map.get(spec.estimate.lower(), spec.estimate)
+        cmd.extend(["--estimate", estimate_minutes])
 
     if spec.batch_id:
         cmd.extend(["--tag", f"batch:{spec.batch_id}"])

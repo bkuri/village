@@ -219,7 +219,7 @@ class TestBatchSubmission:
         assert "Error: No drafts enabled" in state.messages[-1].content
 
     def test_submit_with_enabled_drafts(self, mock_config, mock_state):
-        """Test submitting with enabled drafts shows summary."""
+        """Test submitting with enabled drafts creates tasks."""
         draft = DraftTask(
             id=generate_draft_id(),
             created_at=datetime.now(),
@@ -233,8 +233,9 @@ class TestBatchSubmission:
 
         state = _handle_submit(mock_state, mock_config)
 
-        assert "BATCH SUBMISSION REVIEW" in state.messages[-1].content
-        assert draft.id in state.messages[-1].content
+        # Task creation message (now actually creates Beads tasks)
+        assert "Created" in state.messages[-1].content
+        assert "task(s) in Beads" in state.messages[-1].content
 
     def test_prepare_batch_summary(self, mock_config, mock_state):
         """Test preparing batch summary."""

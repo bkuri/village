@@ -655,7 +655,7 @@ def _handle_reset(state: ConversationState, config: _Config) -> ConversationStat
     deleted_tasks = []
     for task_id in task_ids:
         try:
-            _ = run_command_output(["bd", "delete", task_id])
+            _ = run_command_output(["bd", "delete", "--force", task_id])
             deleted_tasks.append(task_id)
         except SubprocessError:
             pass
