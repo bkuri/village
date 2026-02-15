@@ -78,8 +78,17 @@ class TestExtractReadyTasks:
 
     def test_no_beads_available(self, mock_config: Config):
         """Test when Beads is not available."""
+        from village.probes.beads import BeadsStatus
+
         with patch("village.queue.beads_available") as mock_beads:
-            mock_beads.return_value.__bool__.return_value = False
+            status = BeadsStatus(
+                command_available=False,
+                command_path=None,
+                version=None,
+                repo_initialized=False,
+                beads_dir_exists=False,
+            )
+            mock_beads.return_value = status
             tasks = extract_ready_tasks(mock_config)
             assert tasks == []
 
@@ -113,7 +122,7 @@ class TestExtractReadyTasks:
         with patch("village.queue.beads_available") as mock_beads:
             with patch("village.queue.run_command_output") as mock_run:
                 mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = "bd-a3f8 agent:build"
+                mock_run.return_value = "1. [● P2] [task] bd-a3f8: Build feature agent:build"
                 tasks = extract_ready_tasks(mock_config)
                 assert len(tasks) == 1
                 assert tasks[0].task_id == "bd-a3f8"
@@ -123,9 +132,9 @@ class TestExtractReadyTasks:
         """Test extracting multiple ready tasks."""
         with patch("village.queue.beads_available") as mock_beads:
             with patch("village.queue.run_command_output") as mock_run:
-                output = """bd-a3f8 agent:build
-bd-b7d2 agent:test
-bd-c4e1 agent:worker"""
+                output = """1. [● P2] [task] bd-a3f8: Build feature agent:build
+2. [● P2] [task] bd-b7d2: Test feature agent:test
+3. [● P2] [task] bd-c4e1: Worker feature agent:worker"""
                 mock_beads.return_value.__bool__.return_value = True
                 mock_run.return_value = output
                 tasks = extract_ready_tasks(mock_config)
@@ -142,7 +151,7 @@ bd-c4e1 agent:worker"""
         with patch("village.queue.beads_available") as mock_beads:
             with patch("village.queue.run_command_output") as mock_run:
                 mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = "bd-a3f8 priority:high"
+                mock_run.return_value = "1. [● P2] [task] bd-a3f8: Some task priority:high"
                 tasks = extract_ready_tasks(mock_config)
                 assert len(tasks) == 1
                 assert tasks[0].task_id == "bd-a3f8"
@@ -163,11 +172,11 @@ bd-c4e1 agent:worker"""
         """Test empty lines are ignored."""
         with patch("village.queue.beads_available") as mock_beads:
             with patch("village.queue.run_command_output") as mock_run:
-                output = """bd-a3f8 agent:build
+                output = """1. [● P2] [task] bd-a3f8: Build agent:build
 
-bd-b7d2 agent:test
+2. [● P2] [task] bd-b7d2: Test agent:test
 
-bd-c4e1 agent:worker"""
+3. [● P2] [task] bd-c4e1: Worker agent:worker"""
                 mock_beads.return_value.__bool__.return_value = True
                 mock_run.return_value = output
                 tasks = extract_ready_tasks(mock_config)

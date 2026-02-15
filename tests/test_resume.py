@@ -322,9 +322,7 @@ class TestExecuteResume:
                             )
                             mock_create.return_value = "%12"
 
-                            result = execute_resume(
-                                task_id, agent, detached=False, dry_run=False, config=mock_config
-                            )
+                            result = execute_resume(task_id, agent, detached=False, dry_run=False, config=mock_config)
 
                             assert result.success is True
                             assert result.task_id == task_id
@@ -345,9 +343,7 @@ class TestExecuteResume:
                 "bd-a3f8",
             )
 
-            result = execute_resume(
-                task_id, agent, detached=False, dry_run=True, config=mock_config
-            )
+            result = execute_resume(task_id, agent, detached=False, dry_run=True, config=mock_config)
 
             assert result.success is True
             assert result.pane_id == ""
@@ -363,9 +359,7 @@ class TestExecuteResume:
         with patch("village.resume._ensure_worktree_exists") as mock_ensure:
             mock_ensure.side_effect = RuntimeError("Worktree creation failed")
 
-            result = execute_resume(
-                task_id, agent, detached=False, dry_run=False, config=mock_config
-            )
+            result = execute_resume(task_id, agent, detached=False, dry_run=False, config=mock_config)
 
             assert result.success is False
             assert result.error is not None
@@ -413,9 +407,7 @@ class TestEnsureWorktreeExists:
                 commit="abc123",
             )
 
-            path, window, final_id = _ensure_worktree_exists(
-                task_id, session_name, dry_run=False, config=mock_config
-            )
+            path, window, final_id = _ensure_worktree_exists(task_id, session_name, dry_run=False, config=mock_config)
 
             assert path == mock_config.worktrees_dir / task_id
 
@@ -460,9 +452,7 @@ class TestEnsureWorktreeExists:
                 mock_create.side_effect = SubprocessError("worktree already exists")
 
                 with pytest.raises(RuntimeError, match="failed after 3 attempts"):
-                    _ensure_worktree_exists(
-                        task_id, session_name, dry_run=False, config=mock_config
-                    )
+                    _ensure_worktree_exists(task_id, session_name, dry_run=False, config=mock_config)
 
 
 class TestGenerateResumeWindow:
@@ -496,19 +486,18 @@ class TestCreateResumeWindow:
         window_name = "worker-1-bd-a3f8"
 
         with patch("village.resume.run_command") as mock_run:
-            with patch("village.resume.panes") as mock_panes:
+            with patch("village.probes.tools.run_command_output") as mock_run_output:
                 mock_run.return_value = subprocess.CompletedProcess(
                     ["tmux", "new-window", "-t", "village", "-n", "worker-1-bd-a3f8", "-d"],
                     returncode=0,
                     stdout="",
                     stderr="",
                 )
-                mock_panes.return_value = {"%10", "%11", "%12"}
+                mock_run_output.return_value = "%12"
 
                 pane_id = _create_resume_window(session_name, window_name, dry_run=False)
 
-                # Any pane from the set is acceptable
-                assert pane_id in {"%10", "%11", "%12"}
+                assert pane_id == "%12"
 
     def test_returns_empty_on_dry_run(self) -> None:
         """Test returns empty pane ID on dry run."""
@@ -525,10 +514,10 @@ class TestCreateResumeWindow:
         window_name = "worker-1-bd-a3f8"
 
         with patch("village.resume.run_command"):
-            with patch("village.resume.panes") as mock_panes:
-                mock_panes.return_value = set()
+            with patch("village.probes.tools.run_command_output") as mock_run_output:
+                mock_run_output.return_value = ""
 
-                with pytest.raises(RuntimeError, match="No panes found"):
+                with pytest.raises(RuntimeError, match="No panes found in window"):
                     _create_resume_window(session_name, window_name, dry_run=False)
 
 
