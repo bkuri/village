@@ -501,9 +501,9 @@ def _inject_contract(
     heredoc_command = f"opencode <<'VILLAGE_CONTRACT_EOF'\n{contract_json}\nVILLAGE_CONTRACT_EOF"
 
     # Send keys to start OpenCode with stdin
-    target = f"{session_name}:{pane_id}"
-    send_keys(session_name, target, heredoc_command)
-    send_keys(session_name, target, "Enter")
+    # Note: tmux targets panes by %id directly, not session:%id
+    send_keys(session_name, pane_id, heredoc_command)
+    send_keys(session_name, pane_id, "Enter")
 
     logger.debug(f"Injected contract to pane {pane_id}")
 
