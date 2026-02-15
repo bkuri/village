@@ -147,7 +147,7 @@ $ village chat --create
 **Note**: Reset deletes created Beads tasks but preserves all drafts for resubmission.
 
 ### Workflow 7: Automatic Task Decomposition
-When tasks are complex, Village automatically offers to break them down using Sequential Thinking.
+When tasks are complex, Village automatically offers to break them down using the **ST → AoT Light** strategy (Sequential Thinking + Atom of Thoughts).
 
 ```bash
 $ village chat --create
@@ -190,10 +190,10 @@ $ village chat --create
 > /exit
 ```
 
-**How it works:**
+**How it works (ST → AoT Light strategy):**
 1. After parsing your task, LLM evaluates complexity
-2. If complex (multiple deliverables, phases, or parallel work possible), decomposition is offered
-3. Sequential Thinking generates structured breakdown with dependencies
+2. If complex, **Phase 1 (Sequential Thinking)**: Deep analysis of requirements, constraints, dependencies, edge cases
+3. **Phase 2 (AoT-light)**: Creates atomic, queueable tasks (1-4 hours each) from analysis
 4. Dependencies are mapped to task titles (not indices) for clarity
 5. Confirm creates all subtasks with proper blocking relationships
 

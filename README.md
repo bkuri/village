@@ -122,7 +122,7 @@ Village runs as a **local service with auditable source code**:
 - **State management**: Lock files survive crashes, event logs capture audit trails
 - **Observability**: Real-time dashboard, metrics export, event queries
 - **Safety guarantees**: Conflict detection, automatic rollback, resource quotas
-- **Task decomposition**: Complex tasks automatically broken into subtasks using Sequential Thinking with LLM-based complexity detection
+- **Task decomposition**: Complex tasks automatically broken into subtasks using ST → AoT Light strategy (Sequential Thinking analysis + Atom of Thoughts atomization)
 - **Extensibility framework**: 7 extension points for domain customization without forking
   - Custom readiness engines (replace Beads)
   - Custom SCM backends (Git, Jujutsu, or your own)
