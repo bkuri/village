@@ -89,12 +89,15 @@ def test_beads_db(tmp_path, monkeypatch):
     """Create a real Beads database for integration tests."""
     db_path = tmp_path / ".beads"
 
-    result = subprocess.run(
-        ["bd", "init"],
-        cwd=tmp_path,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["bd", "init"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        pytest.skip("Beads (bd) command not available")
 
     if result.returncode != 0:
         pytest.skip(f"Failed to initialize Beads DB: {result.stderr}")
