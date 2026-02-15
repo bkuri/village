@@ -202,9 +202,7 @@ def execute_resume(
 
     try:
         # Phase 1: Ensure worktree exists (with retry on collision)
-        worktree_path, window_name, task_id = _ensure_worktree_exists(
-            base_task_id, session_name, dry_run, config
-        )
+        worktree_path, window_name, task_id = _ensure_worktree_exists(base_task_id, session_name, dry_run, config)
         created_resources["worktree_path"] = worktree_path
 
         if dry_run:
@@ -263,15 +261,9 @@ def execute_resume(
     except Exception as e:
         logger.error(f"Resume failed: {e}")
         worktree_path = (
-            created_resources["worktree_path"]
-            if isinstance(created_resources["worktree_path"], Path)
-            else Path("")
+            created_resources["worktree_path"] if isinstance(created_resources["worktree_path"], Path) else Path("")
         )
-        window_name = (
-            created_resources["window_name"]
-            if isinstance(created_resources["window_name"], str)
-            else ""
-        )
+        window_name = created_resources["window_name"] if isinstance(created_resources["window_name"], str) else ""
 
         # Rollback if enabled
         if config.safety.rollback_on_failure and worktree_path:
@@ -305,9 +297,7 @@ def execute_resume(
         )
 
         if not transition_result.success:
-            logger.warning(
-                f"Failed to transition task {task_id} to FAILED: {transition_result.message}"
-            )
+            logger.warning(f"Failed to transition task {task_id} to FAILED: {transition_result.message}")
 
         # Log task error
         log_task_error(task_id, "resume", str(e), config.village_dir)
@@ -381,9 +371,7 @@ def _ensure_worktree_exists(
                     logger.debug(f"Worktree collision detected, retrying as: {task_id}")
                     continue
                 else:
-                    raise RuntimeError(
-                        f"Worktree creation failed after {max_retries} attempts: {str(e)}"
-                    )
+                    raise RuntimeError(f"Worktree creation failed after {max_retries} attempts: {str(e)}")
             else:
                 # Non-collision error - abort immediately
                 raise RuntimeError(f"Worktree creation failed: {e}")
@@ -444,6 +432,8 @@ def _create_resume_window(
     Raises:
         RuntimeError: If window creation fails
     """
+    from village.probes.tools import run_command_output
+
     if dry_run:
         logger.info(f"Dry run: would create window '{window_name}'")
         return ""
@@ -456,13 +446,24 @@ def _create_resume_window(
     except SubprocessError as e:
         raise RuntimeError(f"Failed to create tmux window '{window_name}': {e}")
 
-    # Get pane ID for the new window
-    all_panes = panes(session_name, force_refresh=True)
-    if not all_panes:
-        raise RuntimeError(f"No panes found after creating window '{window_name}'")
-
-    # Return the most recent pane (last in list)
-    return list(all_panes)[-1]
+    # Get pane ID for the specific window we just created
+    # Query by window name to get the exact pane
+    try:
+        pane_cmd = [
+            "tmux",
+            "list-panes",
+            "-t",
+            f"{session_name}:{window_name}",
+            "-F",
+            "#{pane_id}",
+        ]
+        output = run_command_output(pane_cmd)
+        pane_ids = [line.strip() for line in output.splitlines() if line.strip()]
+        if not pane_ids:
+            raise RuntimeError(f"No panes found in window '{window_name}'")
+        return pane_ids[0]
+    except SubprocessError as e:
+        raise RuntimeError(f"Failed to get pane ID for window '{window_name}': {e}")
 
 
 def _inject_contract(
