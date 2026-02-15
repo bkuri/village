@@ -113,6 +113,9 @@ def write_lock(lock: Lock) -> None:
         f"claimed_at={lock.claimed_at.isoformat()}\n"
     )
 
+    # Ensure parent directory exists
+    lock.path.parent.mkdir(parents=True, exist_ok=True)
+
     # Atomic write
     temp_path = lock.path.with_suffix(".tmp")
     try:
@@ -142,9 +145,7 @@ def is_active(lock: Lock, session_name: str, force_refresh: bool = False) -> boo
     return pane_exists(session_name, lock.pane_id, force_refresh=force_refresh)
 
 
-def evaluate_locks(
-    locks: list[Lock], session_name: str, *, force_refresh: bool = False
-) -> dict[str, bool]:
+def evaluate_locks(locks: list[Lock], session_name: str, *, force_refresh: bool = False) -> dict[str, bool]:
     """
     Batch evaluate ACTIVE/STALE for all locks.
 

@@ -49,14 +49,16 @@ def mock_bd_create(monkeypatch):
 
     def fake_run_command(cmd, **kwargs):
         if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "create":
+            task_id = f"bd-{uuid4().hex[:6]}"
             created_calls.append(
                 {
                     "command": "create",
                     "args": cmd,
-                    "task_id": f"bd-{uuid4().hex[:6]}",
+                    "task_id": task_id,
                 }
             )
-            return f"Created task: {created_calls[-1]['task_id']}"
+            # Return JSON response as expected by create_draft_tasks
+            return json.dumps({"id": task_id, "status": "draft"})
 
         if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "delete":
             created_calls.append(
@@ -65,11 +67,12 @@ def mock_bd_create(monkeypatch):
                     "task_id": cmd[2] if len(cmd) > 2 else "unknown",
                 }
             )
-            return "Task deleted"
+            return json.dumps({"status": "deleted"})
 
         return ""
 
-    monkeypatch.setattr("village.probes.tools.run_command_output", fake_run_command)
+    monkeypatch.setattr("village.chat.task_extractor.run_command_output", fake_run_command)
+    monkeypatch.setattr("village.chat.conversation.run_command_output", fake_run_command)
     return created_calls
 
 
@@ -104,9 +107,7 @@ def test_beads_db(tmp_path, monkeypatch):
 class TestMultiDraftWorkflows:
     """Test scenarios with multiple drafts in one session."""
 
-    def test_create_three_drafts_enable_all_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_three_drafts_enable_all_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create 3 different task types, enable all, submit batch."""
         state = fresh_conversation
 
@@ -126,9 +127,7 @@ class TestMultiDraftWorkflows:
             drafts.append(draft_id)
 
         assert len(drafts) == 3
-        assert all(
-            (integration_config.village_dir / "drafts" / f"{did}.json").exists() for did in drafts
-        )
+        assert all((integration_config.village_dir / "drafts" / f"{did}.json").exists() for did in drafts)
 
         assert len(state.pending_enables) == 3
 
@@ -141,9 +140,7 @@ class TestMultiDraftWorkflows:
         for draft_id in drafts:
             assert not (integration_config.village_dir / "drafts" / f"{draft_id}.json").exists()
 
-    def test_create_four_enable_two_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_four_enable_two_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create 4, enable selectively (2), submit only enabled."""
         state = fresh_conversation
 
@@ -166,9 +163,7 @@ class TestMultiDraftWorkflows:
         assert (integration_config.village_dir / "drafts" / f"{drafts[0]}.json").exists()
         assert (integration_config.village_dir / "drafts" / f"{drafts[2]}.json").exists()
 
-    def test_create_enable_all_discard_one_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_enable_all_discard_one_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create 3, enable all, discard 1 before submit, submit 2."""
         state = fresh_conversation
 
@@ -193,9 +188,7 @@ class TestMultiDraftWorkflows:
 class TestEditWorkflows:
     """Test editing and re-entering Q&A for existing drafts."""
 
-    def test_create_edit_enable_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_edit_enable_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create draft, edit it, enable, submit."""
         state = fresh_conversation
 
@@ -217,9 +210,7 @@ class TestEditWorkflows:
         assert len(mock_bd_create) == 1
         assert not (integration_config.village_dir / "drafts" / f"{draft_id}.json").exists()
 
-    def test_create_multiple_edit_one_enable_all_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_multiple_edit_one_enable_all_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create 3, edit middle one, enable all, submit all 3."""
         state = fresh_conversation
 
@@ -240,9 +231,7 @@ class TestEditWorkflows:
 
         assert len(mock_bd_create) == 3
 
-    def test_create_edit_discard_create_new(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_edit_discard_create_new(self, integration_config, mock_bd_create, fresh_conversation):
         """Create A, edit, discard, create different B, submit B."""
         state = fresh_conversation
 
@@ -262,9 +251,7 @@ class TestEditWorkflows:
         assert len(mock_bd_create) == 1
         assert not (integration_config.village_dir / "drafts" / f"{draft_b}.json").exists()
 
-    def test_create_enable_edit_before_submit(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_enable_edit_before_submit(self, integration_config, mock_bd_create, fresh_conversation):
         """Create, enable, edit before submit (all sequential)."""
         state = fresh_conversation
 
@@ -311,9 +298,7 @@ class TestResetRollback:
 
         assert "preserved" in state.messages[-1].content.lower()
 
-    def test_create_multiple_submit_partial_reset(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_create_multiple_submit_partial_reset(self, integration_config, mock_bd_create, fresh_conversation):
         """Create 3, enable 2, submit 2, reset."""
         state = fresh_conversation
 
@@ -378,9 +363,7 @@ class TestSessionPersistence:
         state2 = start_conversation(integration_config)
         assert state2.mode == "knowledge-share"
 
-    def test_snapshot_tracks_created_tasks(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_snapshot_tracks_created_tasks(self, integration_config, mock_bd_create, fresh_conversation):
         """Create, submit, verify snapshot has task IDs."""
         state = fresh_conversation
 
@@ -419,9 +402,7 @@ class TestSessionPersistence:
 class TestErrorHandling:
     """Test error handling and edge cases."""
 
-    def test_enable_nonexistent_draft_error(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_enable_nonexistent_draft_error(self, integration_config, mock_bd_create, fresh_conversation):
         """User typos draft ID on enable."""
         state = fresh_conversation
 
@@ -431,9 +412,7 @@ class TestErrorHandling:
         assert "Draft not found" in state.errors[-1] if state.errors else ""
         assert state.pending_enables == []
 
-    def test_submit_no_drafts_enabled_error(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_submit_no_drafts_enabled_error(self, integration_config, mock_bd_create, fresh_conversation):
         """Submit with empty pending_enables."""
         state = fresh_conversation
 
@@ -443,9 +422,7 @@ class TestErrorHandling:
         assert len(state.errors) > 0
         assert "No drafts enabled" in state.errors[-1] if state.errors else ""
 
-    def test_discard_nonexistent_draft_error(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_discard_nonexistent_draft_error(self, integration_config, mock_bd_create, fresh_conversation):
         """Discard draft that doesn't exist."""
         state = fresh_conversation
 
@@ -454,9 +431,7 @@ class TestErrorHandling:
         assert len(state.errors) > 0
         assert "Draft not found" in state.errors[-1] if state.errors else ""
 
-    def test_mode_conflict_create_in_task_mode(
-        self, integration_config, mock_bd_create, fresh_conversation
-    ):
+    def test_mode_conflict_create_in_task_mode(self, integration_config, mock_bd_create, fresh_conversation):
         """User calls /create while already in task-create mode."""
         state = fresh_conversation
 

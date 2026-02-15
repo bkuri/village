@@ -1,5 +1,6 @@
 """Core conversation orchestration."""
 
+import asyncio
 import json
 import logging
 import re
@@ -507,7 +508,9 @@ def _handle_discard(args: list[str], state: ConversationState, config: _Config) 
 
 def _handle_submit(state: ConversationState, config: _Config) -> ConversationState:
     """
-    Review batch of enabled drafts.
+    Review and submit batch of enabled drafts.
+
+    Creates actual Beads tasks for enabled drafts.
 
     Args:
         state: Current conversation state
@@ -527,15 +530,105 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         )
         return state
 
-    summary = _prepare_batch_summary(state, config)
-    summary_text = _display_batch_summary(summary)
-    state.messages.append(
-        ConversationMessage(
-            role="assistant",
-            content=summary_text,
+    # Import here to avoid circular imports
+    from village.chat.state import load_session_state, save_session_state
+    from village.chat.task_extractor import BeadsTaskSpec
+
+    state_dict = load_session_state(config)
+
+    try:
+        # Check if we have a breakdown (brainstorm workflow) or just drafts
+        breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
+
+        if breakdown and hasattr(breakdown, "items"):
+            # Brainstorm workflow: extract specs from breakdown
+            baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
+            config_git_root_name = config.git_root.name
+
+            specs = extract_beads_specs(
+                baseline,
+                breakdown,  # type: ignore[arg-type]
+                config_git_root_name,
+            )
+        else:
+            # Manual draft workflow: create specs from enabled drafts
+            specs = []
+            for draft_id in state.pending_enables:
+                try:
+                    draft = load_draft(draft_id, config)
+                    spec = BeadsTaskSpec(
+                        title=draft.title,
+                        description=draft.description,
+                        estimate=draft.estimate or "unknown",
+                        success_criteria=[],
+                        blockers=[],
+                        depends_on=[],
+                        batch_id="",
+                        parent_task_id=None,
+                        custom_fields={"scope": draft.scope} if draft.scope else {},
+                    )
+                    specs.append(spec)
+                except FileNotFoundError:
+                    logger.warning(f"Draft not found: {draft_id}")
+                    continue
+
+        if not specs:
+            error_msg = "Error: No valid tasks to submit."
+            state.errors.append(error_msg)
+            state.messages.append(
+                ConversationMessage(
+                    role="assistant",
+                    content=error_msg,
+                )
+            )
+            return state
+
+        created_tasks = asyncio.run(create_draft_tasks(specs, config))
+        created_ids = list(created_tasks.values())
+
+        # Update conversation state
+        if state.session_snapshot is None:
+            from village.chat.state import SessionSnapshot
+
+            state.session_snapshot = SessionSnapshot(
+                start_time=datetime.now(),
+                batch_id="",
+                initial_context_files={},
+                current_context_files={},
+                pending_enables=[],
+                created_task_ids=[],
+            )
+        state.session_snapshot.created_task_ids = created_ids
+        state.batch_submitted = True
+
+        summary_text = f"Created {len(created_tasks)} task(s) in Beads"
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=summary_text,
+            )
         )
-    )
-    return state
+        state.active_draft_id = None
+
+        # Delete draft files after successful submission
+        for draft_id in state.pending_enables:
+            try:
+                delete_draft(draft_id, config)
+            except FileNotFoundError:
+                pass  # Already deleted or never existed
+        state.pending_enables = []
+
+        return state
+    except Exception as e:
+        logger.error(f"Failed to create tasks: {e}")
+        state.errors.append(str(e))
+        state.messages.append(
+            ConversationMessage(
+                role="assistant",
+                content=f"Error creating tasks: {e}",
+            )
+        )
+        return state
 
 
 def _handle_reset(state: ConversationState, config: _Config) -> ConversationState:
