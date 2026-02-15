@@ -14,8 +14,10 @@ from village.chat.sequential_thinking import (
 )
 from village.chat.task_spec import TaskSpec
 from village.extensibility import ExtensionRegistry
+from village.extensibility.beads_integrators import BeadCreated
 from village.extensibility.context import SessionContext
 from village.extensibility.thinking_refiners import QueryRefinement
+from village.extensibility.tool_invokers import ToolInvocation, ToolResult
 
 ScopeType = Literal["fix", "feature", "config", "docs", "test", "refactor"]
 ConfidenceType = Literal["high", "medium", "low"]
@@ -166,6 +168,45 @@ class LLMChat:
         """Set extension registry."""
         self.extensions = extensions
 
+    async def _call_llm_with_retry(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_retries: int = 3,
+    ) -> str:
+        """Call LLM with retry logic from LLMProviderAdapter.
+
+        Args:
+            prompt: User prompt for LLM
+            system_prompt: Optional system prompt
+            max_retries: Maximum retry attempts
+
+        Returns:
+            LLM response string
+
+        Raises:
+            Exception: If all retries fail
+        """
+        adapter = self.extensions.get_llm_adapter()
+        last_error: Exception | None = None
+
+        for attempt in range(max_retries):
+            try:
+                return self.llm_client.call(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                )
+            except Exception as e:
+                last_error = e
+                if not await adapter.should_retry(e):
+                    raise
+                if attempt < max_retries - 1:
+                    delay = await adapter.get_retry_delay(attempt + 1)
+                    logger.warning(f"LLM call failed (attempt {attempt + 1}), retrying in {delay:.1f}s: {e}")
+                    await asyncio.sleep(delay)
+
+        raise last_error or Exception("LLM call failed after retries")
+
     async def handle_message(self, user_input: str) -> str:
         """
         Process user message and return response.
@@ -216,6 +257,54 @@ class LLMChat:
         response = await processor.post_process(response)
         return response
 
+    async def invoke_tool(self, tool_name: str, args: dict[str, object]) -> ToolResult:
+        """Invoke an MCP tool with ToolInvoker customization hooks.
+
+        This is a hook point for future MCP tool integration. When the chat loop
+        needs to call MCP tools (e.g., for context enrichment, external API calls,
+        or domain-specific operations), use this method to allow domains to customize:
+
+        - should_invoke(): Filter/allow tool calls based on domain rules
+        - transform_args(): Modify arguments before invocation (e.g., inject context)
+        - on_success(): Post-process results, cache, log metrics
+        - on_error(): Handle failures, fallback strategies
+
+        Example future usage in handle_message():
+            # Fetch additional context from external tools
+            result = await self.invoke_tool("fetch_docs", {"url": doc_url})
+            if result.success:
+                context = result.result
+
+        Args:
+            tool_name: Name of the MCP tool to invoke
+            args: Arguments to pass to the tool
+
+        Returns:
+            ToolResult with success status, result data, and optional error
+        """
+        invoker = self.extensions.get_tool_invoker()
+        invocation = ToolInvocation(
+            tool_name=tool_name,
+            args=args,
+            context={"session_id": self.session_id},
+        )
+
+        if not await invoker.should_invoke(invocation):
+            return ToolResult(success=False, result=None, error="Tool invocation skipped by domain filter")
+
+        transformed_args = await invoker.transform_args(invocation)
+
+        try:
+            # TODO: Wire to actual MCP tool invocation when integrated
+            # result = await self.mcp_client.call_tool(tool_name, transformed_args)
+            # For now, return placeholder indicating hook infrastructure is ready
+            result = {"tool_name": tool_name, "args": transformed_args, "status": "hook_ready"}
+            processed_result = await invoker.on_success(invocation, result)
+            return ToolResult(success=True, result=processed_result)
+        except Exception as e:
+            await invoker.on_error(invocation, e)
+            return ToolResult(success=False, result=None, error=str(e))
+
     async def handle_slash_command(self, command: str) -> str:
         """Handle slash commands."""
         parts = command.split(maxsplit=1)
@@ -244,8 +333,8 @@ class LLMChat:
         else:
             prompt = f"{user_input}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."
 
-        # Parse JSON response (type: ignore for Any return)
-        response: str = self.llm_client.call(
+        # Parse JSON response
+        response: str = await self._call_llm_with_retry(
             prompt=prompt,
             system_prompt=self.system_prompt or self._get_prompt(),
         )
@@ -327,7 +416,7 @@ Consider:
 Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief explanation"}}"""
 
         try:
-            response: str = self.llm_client.call(
+            response: str = await self._call_llm_with_retry(
                 prompt=prompt,
                 system_prompt="You are a task analysis expert. Determine if tasks should be broken down into smaller pieces.",
             )
@@ -495,7 +584,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         if not current_spec:
             return "❌ No current task specification."
 
-        response = self.llm_client.call(
+        response = await self._call_llm_with_retry(
             prompt=f"Current task:\n{self._task_spec_to_text(current_spec)}\n\nUser refinement: {user_input}\n\nUpdate task specification based on this feedback. Preserve as much as possible, only change what refinement explicitly addresses. Extract any new dependencies. Return JSON only.",
             system_prompt=self.system_prompt or self._get_prompt(),
         )
@@ -568,8 +657,27 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
 
         logger.info(f"Confirming task: {spec.title}")
 
+        integrator = self.extensions.get_beads_integrator()
+        context = {
+            "task_spec": spec,
+            "session_id": self.session_id,
+            "session_context": self.session_context,
+        }
+
         try:
-            task_id = await self.beads_client.create_task(spec)
+            if await integrator.should_create_bead(context):
+                bead_spec = await integrator.create_bead_spec(context)
+                task_id = await self.beads_client.create_task(spec)
+                bead = BeadCreated(
+                    bead_id=task_id,
+                    parent_id=bead_spec.parent_id,
+                    created_at="",
+                    metadata=bead_spec.metadata,
+                )
+                await integrator.on_bead_created(bead, context)
+            else:
+                task_id = await self.beads_client.create_task(spec)
+
             return f"✓ Task created: {task_id}\n\nDependencies: {spec.dependency_summary()}\n\nReady to queue with: village queue --agent {spec.scope}"
         except BeadsError as e:
             logger.error(f"Failed to create task: {e}")
@@ -624,6 +732,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         # Create tasks and map indices to task IDs
         task_id_map: dict[int, str] = {}
         created_tasks: dict[str, str] = {}
+        integrator = self.extensions.get_beads_integrator()
 
         for i, item in enumerate(items):
             # Map dependency indices to actual task IDs
@@ -641,9 +750,30 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
                 confidence="medium",
             )
 
-            # Create in Beads
+            context = {
+                "task_spec": spec,
+                "breakdown_item": item,
+                "item_index": i,
+                "breakdown": breakdown,
+                "session_id": self.session_id,
+                "session_context": self.session_context,
+                "created_task_ids": task_id_map,
+            }
+
             try:
-                task_id = await self.beads_client.create_task(spec)
+                if await integrator.should_create_bead(context):
+                    bead_spec = await integrator.create_bead_spec(context)
+                    task_id = await self.beads_client.create_task(spec)
+                    bead = BeadCreated(
+                        bead_id=task_id,
+                        parent_id=bead_spec.parent_id,
+                        created_at="",
+                        metadata=bead_spec.metadata,
+                    )
+                    await integrator.on_bead_created(bead, context)
+                else:
+                    task_id = await self.beads_client.create_task(spec)
+
                 task_id_map[i] = task_id
                 created_tasks[item.title] = task_id
                 logger.info(f"Created subtask {task_id}: {item.title}")
@@ -711,7 +841,7 @@ Return JSON in same breakdown format:
         import json
 
         try:
-            response = self.llm_client.call(prompt)
+            response = await self._call_llm_with_retry(prompt)
 
             # Parse refined breakdown
             refined_data = json.loads(response)

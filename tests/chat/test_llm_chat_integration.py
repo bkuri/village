@@ -1154,9 +1154,14 @@ class TestTaskDecomposition:
 
         # Verify LLM was called with current breakdown + user feedback
         mock_llm_client.call.assert_called()
-        call_args = mock_llm_client.call.call_args[0][0]
-        assert "Current task breakdown:" in call_args
-        assert "User refinement: Add OAuth support" in call_args
+        # Handle both positional and keyword args (retry wrapper uses kwargs)
+        call_args = mock_llm_client.call.call_args
+        if call_args.kwargs:
+            call_prompt = call_args.kwargs.get("prompt", "")
+        else:
+            call_prompt = call_args[0][0] if call_args.args else ""
+        assert "Current task breakdown:" in call_prompt
+        assert "User refinement: Add OAuth support" in call_prompt
 
         # Verify breakdown was updated
         assert llm_chat.session.current_breakdown is not None
