@@ -4,6 +4,47 @@ All notable changes to Village will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] - Task Decomposition & Extensibility
+
+### Added
+- **Automatic Task Decomposition**
+  - LLM-based complexity detection evaluates if tasks should be broken down
+  - Uses semantic understanding (not keyword matching) for flexibility
+  - Sequential Thinking generates structured breakdown with dependencies
+  - Dependencies displayed as task titles (not indices) for clarity
+  - `/confirm` creates all subtasks with proper blocking relationships
+  - `/edit` allows refining the entire breakdown
+  - `/discard` skips decomposition, creates as single task
+  - `/reset` alias for `/discard` command
+- **Extensibility Framework**
+  - 7 extension points for domain-specific customization without forking
+  - ChatProcessor: Pre/post-process chat messages
+  - ToolInvoker: Customize MCP tool invocation with caching
+  - ThinkingRefiner: Domain-specific query refinement
+  - ChatContext: Session state management
+  - BeadsIntegrator: Custom task metadata
+  - ServerDiscovery: Dynamic MCP server discovery
+  - LLMProviderAdapter: LLM provider customization
+- **Documentation**
+  - Comprehensive EXTENSIBILITY_GUIDE.md (1596 lines, 7 tutorials)
+  - EXTENSIBILITY_API.md for API reference
+  - Research domain example in examples/research/
+- **LLM Tools Module**
+  - MCP tool mappings for Sequential Thinking, Atom of Thoughts, Think tool
+  - ToolDefinitions with JSON schemas for prompts
+
+### Fixed
+- Beads CLI compatibility: removed unsupported `--status` flag
+- Estimate conversion: string estimates ("days", "weeks") → minutes for `bd create`
+- Delete requires `--force`: added to `bd delete` commands
+- Lock directory creation: defensive `mkdir(parents=True, exist_ok=True)`
+- JSON serialization: SessionStateEncoder handles datetime and dataclass objects
+- Test suite: 41 failures reduced to 1 (97% reduction)
+
+### Test Results
+- Before: 1208 passed, 26 skipped, 41 failed
+- After: 1242 passed, 26 skipped, 1 failed
+
 ## [Unreleased] - ST → AoT Light Strategy
 
 ### Added

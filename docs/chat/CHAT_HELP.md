@@ -146,7 +146,60 @@ $ village chat --create
 
 **Note**: Reset deletes created Beads tasks but preserves all drafts for resubmission.
 
-### Workflow 7: Mixed Mode
+### Workflow 7: Automatic Task Decomposition
+When tasks are complex, Village automatically offers to break them down using Sequential Thinking.
+
+```bash
+$ village chat --create
+
+> /create "Build a new authentication system with OAuth2, MFA, and session management"
+> [LLM parses task spec]
+> [LLM detects complexity: "This task has multiple distinct deliverables"]
+> 
+> ┌────────────────────────────────────────────────────┐
+> │ BREAKDOWN: Build authentication system             │
+> ├────────────────────────────────────────────────────┤
+> │ 1. Setup OAuth2 provider integration               │
+> │    [depends: none] [effort: 4 hours]               │
+> │                                                    │
+> │ 2. Implement MFA with TOTP                         │
+> │    [depends: Setup OAuth2] [effort: 3 hours]       │
+> │                                                    │
+> │ 3. Add session management with Redis               │
+> │    [depends: Setup OAuth2] [effort: 2 hours]       │
+> │                                                    │
+> │ 4. Create authentication middleware                │
+> │    [depends: MFA, Session] [effort: 2 hours]       │
+> │                                                    │
+> │ 5. Write integration tests                         │
+> │    [depends: Middleware] [effort: 3 hours]         │
+> └────────────────────────────────────────────────────┘
+> 
+> Actions:
+>   /confirm   Create all subtasks in Beads
+>   /edit      Refine entire breakdown
+>   /discard   Cancel this breakdown
+>
+> /confirm
+> ✓ Created 5 subtasks:
+>   bd-a1b2: Setup OAuth2 provider integration
+>   bd-c3d4: Implement MFA with TOTP
+>   bd-e5f6: Add session management with Redis
+>   bd-g7h8: Create authentication middleware
+>   bd-i9j0: Write integration tests
+> /exit
+```
+
+**How it works:**
+1. After parsing your task, LLM evaluates complexity
+2. If complex (multiple deliverables, phases, or parallel work possible), decomposition is offered
+3. Sequential Thinking generates structured breakdown with dependencies
+4. Dependencies are mapped to task titles (not indices) for clarity
+5. Confirm creates all subtasks with proper blocking relationships
+
+**Tip:** Use `/discard` to skip decomposition and create as a single task.
+
+### Workflow 8: Mixed Mode
 Start in knowledge-share mode, switch to task-create as needed.
 
 ```bash
