@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from village import __version__
 from village.chat.beads_client import BeadsClient, BeadsError
 
 if TYPE_CHECKING:
@@ -72,7 +73,7 @@ def _handle_interrupt(signum: int, frame: object) -> None:
 
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
-@click.version_option()
+@click.version_option(version=__version__)
 def village(verbose: bool) -> None:
     """Village - CLI-native parallel development orchestrator."""
     setup_logging(verbose=verbose)

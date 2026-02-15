@@ -1,11 +1,12 @@
 [project]
 name = "village-ai"
-version = "1.0.0"
+dynamic = ["version"]
 description = "CLI-native parallel development orchestrator"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.76.0",
     "click>=8.1.0",
+    "hatch-vcs>=0.5.0",
     "httpx>=0.28.1",
 ]
 
@@ -21,8 +22,12 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+raw-options = { version_scheme = "post-release" }
 
 [tool.ruff]
 target-version = "py311"
