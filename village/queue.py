@@ -108,8 +108,21 @@ def extract_ready_tasks(config: Config) -> list[QueueTask]:
             if not line:
                 continue
 
-            # Extract task_id (first token, typically "bd-xxxx")
-            task_id = line.split()[0] if line.split() else line
+            # Skip header lines (e.g., "📋 Ready work...")
+            if not re.match(r"^\d+\.", line):
+                continue
+
+            # Extract task_id from format: "1. [● P2] [task] village-5dr: Title"
+            # Pattern: number prefix, brackets with metadata, then task ID before colon
+            match = re.search(r"\[task\]\s+([a-zA-Z0-9_-]+):", line)
+            if not match:
+                # Fallback: try old pattern for "bd-xxxx" format
+                match = re.search(r"\b(bd-[a-f0-9]+)\b", line)
+            if not match:
+                logger.debug(f"Could not parse task_id from line: {line}")
+                continue
+
+            task_id = match.group(1)
 
             # Extract agent from metadata
             agent = extract_agent_from_metadata(line, config)
@@ -237,8 +250,7 @@ def arbitrate_locks(
                         continue
                     else:
                         logger.warning(
-                            f"Task {task.task_id} has potential conflicts: "
-                            f"{render_conflict_report(conflict_report)}"
+                            f"Task {task.task_id} has potential conflicts: {render_conflict_report(conflict_report)}"
                         )
 
         # Task is available
@@ -413,10 +425,7 @@ def execute_queue_plan(
                 )
 
                 if not transition_result.success:
-                    logger.warning(
-                        f"Failed to transition task {task.task_id} to CLAIMED: "
-                        f"{transition_result.message}"
-                    )
+                    logger.warning(f"Failed to transition task {task.task_id} to CLAIMED: {transition_result.message}")
             else:
                 logger.warning(f"Task failed to start: {task.task_id} - {result.error}")
 
