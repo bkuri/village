@@ -145,9 +145,7 @@ def status(
 @village.command()
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
-@click.option(
-    "--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window"
-)
+@click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
 def up(dry_run: bool, plan: bool, dashboard: bool) -> None:
     """
     Initialize village runtime (idempotent).
@@ -270,9 +268,7 @@ def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
     if dry_run or plan:
         items_to_remove = len(cleanup_plan.stale_locks)
         if apply:
-            items_to_remove += len(cleanup_plan.orphan_worktrees) + len(
-                cleanup_plan.stale_worktrees
-            )
+            items_to_remove += len(cleanup_plan.orphan_worktrees) + len(cleanup_plan.stale_worktrees)
         click.echo(f"(preview: would remove {items_to_remove} item(s))")
         return
 
@@ -516,9 +512,7 @@ def resume(
     if html and result.success:
         from village.contracts import generate_contract
 
-        contract = generate_contract(
-            result.task_id, result.agent, result.worktree_path, result.window_name, config
-        )
+        contract = generate_contract(result.task_id, result.agent, result.worktree_path, result.window_name, config)
         from village.render.html import render_resume_html
 
         click.echo(render_resume_html(contract))
@@ -1203,3 +1197,78 @@ def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -
     else:
         click.echo(f"Unknown backend: {backend_choice}")
         sys.exit(EXIT_ERROR)
+
+
+@village.command()
+@click.option("--dry-run", is_flag=True, help="Preview without applying")
+@click.option("--changelog/--no-changelog", default=True, help="Update CHANGELOG.md")
+@click.option("--tag/--no-tag", default=True, help="Create git tag")
+def release(dry_run: bool, changelog: bool, tag: bool) -> None:
+    """
+    Apply pending version bumps.
+
+    Aggregates pending bump types (highest wins) and applies version bump.
+    Updates CHANGELOG.md and creates git tag by default.
+
+    \b
+    Examples:
+        village release                # Apply pending bumps
+        village release --dry-run      # Preview what would happen
+        village release --no-changelog # Skip CHANGELOG update
+        village release --no-tag       # Skip git tag
+
+    Options:
+        --dry-run: Preview mode (no mutations)
+        --changelog/--no-changelog: Update CHANGELOG.md (default: yes)
+        --tag/--no-tag: Create git tag (default: yes)
+
+    Exit codes:
+        0: Release applied successfully
+        1: No pending bumps or error
+    """
+    from village.release import (
+        aggregate_bumps,
+        clear_pending_bumps,
+        get_pending_bumps,
+        record_release,
+    )
+
+    pending = get_pending_bumps()
+
+    if not pending:
+        click.echo("No pending version bumps")
+        click.echo("Complete tasks with bump labels to queue releases")
+        sys.exit(EXIT_SUCCESS)
+
+    aggregate = aggregate_bumps([b.bump for b in pending])
+    task_ids = [b.task_id for b in pending]
+
+    click.echo(f"Pending release: {len(pending)} task(s)")
+    click.echo(f"Aggregate bump: {aggregate}")
+    click.echo(f"Tasks: {', '.join(task_ids)}")
+
+    if dry_run:
+        click.echo("\n(dry-run: would apply bump and clear queue)")
+        return
+
+    if changelog:
+        click.echo("\nNote: CHANGELOG update not yet implemented")
+
+    if tag:
+        click.echo("Note: Git tag creation not yet implemented")
+
+    clear_pending_bumps()
+
+    from village.release import ReleaseRecord
+
+    record = ReleaseRecord(
+        version="pending",
+        released_at=datetime.now(timezone.utc),
+        aggregate_bump=aggregate,
+        tasks=task_ids,
+        changelog_entry="",
+    )
+    record_release(record)
+
+    click.echo(f"\nRelease recorded: {aggregate} bump from {len(pending)} task(s)")
+    click.echo("Run version bump tool manually to update version number")

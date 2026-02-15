@@ -101,6 +101,11 @@ SUBCOMMANDS = {
         "description": "Alias for /refine",
         "args": ["clarification"],
     },
+    "/releases": {
+        "handler": "release_status",
+        "description": "Show release status dashboard",
+        "args": ["--last", "--pending", "--open"],
+    },
 }
 
 
@@ -159,6 +164,7 @@ def execute_command(command: str, args: list[str], config: _Config) -> Subcomman
         "task_list_drafts": _task_list_drafts,
         "task_brainstorm": _task_brainstorm,
         "task_refine": _task_refine,
+        "release_status": _release_status,
     }
 
     handler = handlers.get(command)
@@ -226,6 +232,7 @@ def _help_text(args: list[str], config: _Config) -> tuple[str, str, int]:
 - `/queue` — alias for /ready
 - `/lock` — show active locks
 - `/cleanup` — show cleanup plan (read-only)
+- `/releases` — show release status dashboard
 - `/create [title]` — enter task-create mode to define new task
 - `/enable <id|all>` — enable draft(s) for batch submission
 - `/edit <id>` — edit existing draft
@@ -269,6 +276,7 @@ Draft tasks stored in:
 - `/queue` — alias for /ready
 - `/lock` — show active locks
 - `/cleanup` — show cleanup plan (read-only)
+- `/releases` — show release status dashboard
 - `/create [title]` — enter task-create mode
 - `/enable <id|all>` — enable draft(s) for submission
 - `/edit <id>` — edit existing draft
@@ -339,8 +347,7 @@ Use `/reset` to rollback session (deletes created tasks, restores context).
 """
         else:
             help_text = (
-                f"Unknown topic: {args[0]}\nAvailable: "
-                f"commands, tasks, context, files, policy, workflow, drafts"
+                f"Unknown topic: {args[0]}\nAvailable: commands, tasks, context, files, policy, workflow, drafts"
             )
 
     return help_text, "", 0
@@ -517,3 +524,32 @@ def _task_refine(args: list[str], config: _Config) -> tuple[str, str, int]:
     """Handle /refine and /revise commands (runs in conversation, not read-only)."""
     clarification = " ".join(args) if args else "no clarification provided"
     return "", f"Use /refine or /revise in conversation mode with: {clarification}", 0
+
+
+def _release_status(args: list[str], config: _Config) -> tuple[str, str, int]:
+    """Show release status dashboard."""
+    from village.release import (
+        format_release_dashboard,
+        get_open_bump_tasks,
+        get_pending_bumps,
+        get_release_history,
+    )
+
+    limit = 10
+    for i, arg in enumerate(args):
+        if arg == "--last" and i + 1 < len(args):
+            try:
+                limit = int(args[i + 1])
+            except ValueError:
+                pass
+
+    history = get_release_history(limit=limit)
+    pending = get_pending_bumps()
+
+    try:
+        open_tasks = get_open_bump_tasks()
+    except Exception:
+        open_tasks = []
+
+    output = format_release_dashboard(history, pending, open_tasks)
+    return output, "", 0

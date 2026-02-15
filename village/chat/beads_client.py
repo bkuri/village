@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from village.chat.task_spec import TaskSpec
+from village.release import scope_to_bump
 
 logger = logging.getLogger(__name__)
 
@@ -42,9 +43,7 @@ class BeadsClient:
             "estimate": spec.estimate,
         }
 
-    async def search_tasks(
-        self, query: str, limit: int = 5, status: str = "open"
-    ) -> list[dict[str, object]]:
+    async def search_tasks(self, query: str, limit: int = 5, status: str = "open") -> list[dict[str, object]]:
         """
         Search for tasks in Beads.
 
@@ -111,6 +110,13 @@ class BeadsClient:
         if deps_parts:
             deps_str = ",".join(deps_parts)
             cmd.extend(["--deps", deps_str])
+
+        bump = spec.bump
+        if bump is None:
+            bump = scope_to_bump(spec.scope)
+
+        if bump and bump != "none":
+            cmd.extend(["--label", f"bump:{bump}"])
 
         result = await self._run_command(cmd)
 

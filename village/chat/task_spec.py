@@ -19,6 +19,7 @@ class TaskSpec:
     success_criteria: list[str]
     estimate: str
     confidence: Literal["high", "medium", "low"] = "medium"
+    bump: Literal["major", "minor", "patch", "none"] | None = None
 
     def has_dependencies(self) -> bool:
         """

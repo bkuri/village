@@ -171,16 +171,30 @@ tests/
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **Evaluate version impact** - Review your changes and apply bump label:
+   ```bash
+   bd label add <task-id> bump:<type>
+   ```
+   
+   | Type   | When to use                          |
+   |--------|--------------------------------------|
+   | major  | Breaking changes, API removal        |
+   | minor  | New features, backwards-compatible   |
+   | patch  | Bug fixes, small improvements        |
+   | none   | Docs, tests, internal refactors      |
+   
+   Default mapping from scope: fix→patch, feature→minor, others→none.
+   Override with explicit label if actual impact differs.
+5. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
    bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+6. **Clean up** - Clear stashes, prune remote branches
+7. **Verify** - All changes committed AND pushed
+8. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
 - Work is NOT complete until `git push` succeeds

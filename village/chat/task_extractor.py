@@ -9,6 +9,7 @@ from village.chat.baseline import BaselineReport, generate_batch_id
 from village.chat.sequential_thinking import TaskBreakdown
 from village.config import Config
 from village.probes.tools import SubprocessError, run_command_output
+from village.release import BumpType
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class BeadsTaskSpec:
         batch_id: Group ID for tasks from one brainstorm
         parent_task_id: Optional parent task ID
         custom_fields: Additional custom fields
+        bump: Version bump type (major|minor|patch|none)
     """
 
     title: str
@@ -39,6 +41,7 @@ class BeadsTaskSpec:
     batch_id: str
     parent_task_id: Optional[str]
     custom_fields: dict[str, str]
+    bump: BumpType = "patch"
 
     def __post_init__(self) -> None:
         if self.depends_on is None:
@@ -76,6 +79,8 @@ def extract_beads_specs(
     specs = []
 
     for item in breakdown.items:
+        bump = _extract_bump_from_tags(item.tags) if item.tags else "patch"
+
         spec = BeadsTaskSpec(
             title=item.title,
             description=item.description,
@@ -89,6 +94,7 @@ def extract_beads_specs(
                 "batch": batch_id,
                 "source": "village-brainstorm",
             },
+            bump=bump,
         )
 
         if item.tags:
@@ -125,6 +131,29 @@ def _resolve_dependencies(
             spec.depends_on = [f"index-{dep}" for dep in item.dependencies]
 
     logger.debug(f"Resolved dependencies for {len(specs)} specs")
+
+
+def _extract_bump_from_tags(tags: list[str]) -> BumpType:
+    """
+    Extract bump type from tags list.
+
+    Looks for tags in format "bump:major", "bump:minor", "bump:patch", "bump:none".
+
+    Args:
+        tags: List of tags
+
+    Returns:
+        Bump type if found in tags, otherwise "patch"
+    """
+    valid_bumps: set[BumpType] = {"major", "minor", "patch", "none"}
+
+    for tag in tags:
+        if tag.startswith("bump:"):
+            bump_type = tag[5:].lower()
+            if bump_type in valid_bumps:
+                return bump_type  # type: ignore[return-value]
+
+    return "patch"
 
 
 async def create_draft_tasks(
@@ -206,6 +235,9 @@ async def _create_single_draft(
 
     if spec.batch_id:
         cmd.extend(["--tag", f"batch:{spec.batch_id}"])
+
+    if spec.bump and spec.bump != "none":
+        cmd.extend(["--label", f"bump:{spec.bump}"])
 
     if spec.parent_task_id:
         cmd.extend(["--relates-to", spec.parent_task_id])

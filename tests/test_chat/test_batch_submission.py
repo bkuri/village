@@ -1,5 +1,7 @@
 """Test batch submission and task creation workflow."""
 
+import json
+import uuid
 from datetime import datetime
 from unittest.mock import patch
 
@@ -56,6 +58,39 @@ def mock_state():
         batch_submitted=False,
         context_diffs={},
     )
+
+
+@pytest.fixture
+def mock_bd_create(monkeypatch):
+    """Mock bd create subprocess calls."""
+    created_calls = []
+
+    def fake_run_command(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "create":
+            task_id = f"bd-{uuid.uuid4().hex[:6]}"
+            created_calls.append(
+                {
+                    "command": "create",
+                    "args": cmd,
+                    "task_id": task_id,
+                }
+            )
+            return json.dumps({"id": task_id, "status": "draft"})
+
+        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "delete":
+            created_calls.append(
+                {
+                    "command": "delete",
+                    "task_id": cmd[2] if len(cmd) > 2 else "unknown",
+                }
+            )
+            return json.dumps({"status": "deleted"})
+
+        return ""
+
+    monkeypatch.setattr("village.chat.task_extractor.run_command_output", fake_run_command)
+    monkeypatch.setattr("village.chat.conversation.run_command_output", fake_run_command)
+    return created_calls
 
 
 class TestModeSwitching:
@@ -218,7 +253,7 @@ class TestBatchSubmission:
 
         assert "Error: No drafts enabled" in state.messages[-1].content
 
-    def test_submit_with_enabled_drafts(self, mock_config, mock_state):
+    def test_submit_with_enabled_drafts(self, mock_config, mock_state, mock_bd_create):
         """Test submitting with enabled drafts creates tasks."""
         draft = DraftTask(
             id=generate_draft_id(),
@@ -236,6 +271,7 @@ class TestBatchSubmission:
         # Task creation message (now actually creates Beads tasks)
         assert "Created" in state.messages[-1].content
         assert "task(s) in Beads" in state.messages[-1].content
+        assert len(mock_bd_create) == 1
 
     def test_prepare_batch_summary(self, mock_config, mock_state):
         """Test preparing batch summary."""
