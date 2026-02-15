@@ -54,6 +54,7 @@ def _list_panes(session_name: str) -> set[str]:
     cmd = [
         "tmux",
         "list-panes",
+        "-s",
         "-t",
         session_name,
         "-F",
