@@ -440,7 +440,8 @@ Return a JSON object with the following structure:
 
 IMPORTANT: Use """
         + tool_name
-        + """ MCP tool to generate this atomic breakdown. Focus on creating small, manageable tasks that can be queued and executed independently.
+        + """ MCP tool to generate this atomic breakdown.
+Focus on creating small, manageable tasks that can be queued and executed independently.
 """
     )
 

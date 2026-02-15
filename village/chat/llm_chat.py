@@ -328,10 +328,20 @@ class LLMChat:
             refined_steps_text = "\n".join(
                 f"{i + 1}. {step}" for i, step in enumerate(self.session.query_refinement.refined_steps)
             )
-            prompt = f"""Original user query: {user_input}\n\nDomain-specific analysis steps:\n{refined_steps_text}\n\nContext hints: {self.session.query_refinement.context_hints}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."""
+            prompt = (
+                f"Original user query: {user_input}\n\n"
+                f"Domain-specific analysis steps:\n{refined_steps_text}\n\n"
+                f"Context hints: {self.session.query_refinement.context_hints}\n\n"
+                "Parse this as a task specification. Extract any dependencies "
+                "(blocks X, blocked by Y). Return JSON only."
+            )
             logger.info("Using refined steps for task creation")
         else:
-            prompt = f"{user_input}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."
+            prompt = (
+                f"{user_input}\n\n"
+                "Parse this as a task specification. Extract any dependencies "
+                "(blocks X, blocked by Y). Return JSON only."
+            )
 
         # Parse JSON response
         response: str = await self._call_llm_with_retry(
@@ -418,7 +428,9 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         try:
             response: str = await self._call_llm_with_retry(
                 prompt=prompt,
-                system_prompt="You are a task analysis expert. Determine if tasks should be broken down into smaller pieces.",
+                system_prompt=(
+                    "You are a task analysis expert. Determine if tasks should be broken down into smaller pieces."
+                ),
             )
 
             result = json.loads(response)
@@ -585,7 +597,13 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             return "❌ No current task specification."
 
         response = await self._call_llm_with_retry(
-            prompt=f"Current task:\n{self._task_spec_to_text(current_spec)}\n\nUser refinement: {user_input}\n\nUpdate task specification based on this feedback. Preserve as much as possible, only change what refinement explicitly addresses. Extract any new dependencies. Return JSON only.",
+            prompt=(
+                f"Current task:\n{self._task_spec_to_text(current_spec)}\n\n"
+                f"User refinement: {user_input}\n\n"
+                "Update task specification based on this feedback. "
+                "Preserve as much as possible, only change what refinement explicitly addresses. "
+                "Extract any new dependencies. Return JSON only."
+            ),
             system_prompt=self.system_prompt or self._get_prompt(),
         )
 
@@ -632,7 +650,10 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         previous_spec = self.session.get_current_spec()
         if previous_spec:
             logger.info(f"Undid to refinement #{self.session.current_iteration}")
-            return f"↩️ Reverted to Refinement #{self.session.current_iteration}\n\n{self.render_task_spec(previous_spec, self.session.current_iteration)}"
+            return (
+                f"↩️ Reverted to Refinement #{self.session.current_iteration}\n\n"
+                f"{self.render_task_spec(previous_spec, self.session.current_iteration)}"
+            )
         return "↩️ Reverted to original task"
 
     async def handle_confirm(self, args: str) -> str:
@@ -678,7 +699,11 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             else:
                 task_id = await self.beads_client.create_task(spec)
 
-            return f"✓ Task created: {task_id}\n\nDependencies: {spec.dependency_summary()}\n\nReady to queue with: village queue --agent {spec.scope}"
+            return (
+                f"✓ Task created: {task_id}\n\n"
+                f"Dependencies: {spec.dependency_summary()}\n\n"
+                f"Ready to queue with: village queue --agent {spec.scope}"
+            )
         except BeadsError as e:
             logger.error(f"Failed to create task: {e}")
             return f"❌ Failed to create task: {e}"

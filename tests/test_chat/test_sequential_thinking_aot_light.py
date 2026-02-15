@@ -188,7 +188,11 @@ class TestStAotLightStrategy:
 
         mock_client.call.side_effect = [
             '{"analysis": {"requirements": ["auth"], "technical_constraints": ["oauth"]}, "summary": "Analysis"}',
-            '{"items": [{"title": "Auth setup", "description": "Setup auth", "estimated_effort": "2 hours", "success_criteria": ["auth works"], "dependencies": [], "tags": []}], "summary": "Tasks"}',
+            (
+                '{"items": [{"title": "Auth setup", "description": "Setup auth", '
+                '"estimated_effort": "2 hours", "success_criteria": ["auth works"], '
+                '"dependencies": [], "tags": []}], "summary": "Tasks"}'
+            ),
         ]
 
         result = _st_aot_light_strategy(baseline, config)
@@ -240,24 +244,14 @@ class TestStAotLightStrategy:
 
         # First call should have Sequential Thinking tool
         first_call = calls[0]
-        tools_kwarg = first_call.kwargs.get("tools") or (
-            first_call.args[2] if len(first_call.args) > 2 else None
-        )
+        tools_kwarg = first_call.kwargs.get("tools") or (first_call.args[2] if len(first_call.args) > 2 else None)
         assert tools_kwarg is not None
         tools_str = str(tools_kwarg)
-        assert (
-            "sequentialthinking" in tools_str.lower() or "sequential_thinking" in tools_str.lower()
-        )
+        assert "sequentialthinking" in tools_str.lower() or "sequential_thinking" in tools_str.lower()
 
         # Second call should have AoT-light tool
         second_call = calls[1]
-        tools_kwarg = second_call.kwargs.get("tools") or (
-            second_call.args[2] if len(second_call.args) > 2 else None
-        )
+        tools_kwarg = second_call.kwargs.get("tools") or (second_call.args[2] if len(second_call.args) > 2 else None)
         assert tools_kwarg is not None
         tools_str = str(tools_kwarg)
-        assert (
-            "aot_light" in tools_str.lower()
-            or "AoT-light" in tools_str
-            or "atom_of_thoughts" in tools_str.lower()
-        )
+        assert "aot_light" in tools_str.lower() or "AoT-light" in tools_str or "atom_of_thoughts" in tools_str.lower()

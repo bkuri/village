@@ -1,15 +1,12 @@
 """Tests for release queue management."""
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from village.release import (
-    BumpType,
     PendingBump,
-    ReleaseQueue,
     ReleaseRecord,
     aggregate_bumps,
     clear_pending_bumps,
