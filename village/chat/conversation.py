@@ -531,7 +531,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         return state
 
     # Import here to avoid circular imports
-    from village.chat.state import load_session_state, save_session_state
+    from village.chat.state import load_session_state
     from village.chat.task_extractor import BeadsTaskSpec
 
     state_dict = load_session_state(config)
@@ -547,7 +547,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
 
             specs = extract_beads_specs(
                 baseline,
-                breakdown,  # type: ignore[arg-type]
+                breakdown,
                 config_git_root_name,
             )
         else:

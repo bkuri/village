@@ -100,9 +100,6 @@ def generate_mock_response(prompt: str, use_think_tool: bool) -> str:
     Returns:
         Mock response as JSON string
     """
-    # Extract key terms from prompt
-    prompt_lower = prompt.lower()
-
     responses: dict[str, dict] = {
         # Scenario 1: KNOWLEDGE_SHARE - Architecture Decision
         "microservices vs monolith": {
@@ -341,9 +338,7 @@ No change recommended unless there's a specific business requirement.
         },
     }
 
-    return json.dumps(
-        responses.get(extract_key_phrase(prompt), responses.get("fallback", {})), indent=2
-    )
+    return json.dumps(responses.get(extract_key_phrase(prompt), responses.get("fallback", {})), indent=2)
 
 
 def extract_key_phrase(prompt: str) -> str:
@@ -403,9 +398,7 @@ def print_results(scenario_name: str, without_think: dict, with_think: dict):
 
     print("\nMETRICS:")
     print(f"  Tools: {', '.join(with_think['tools_used'])}")
-    print(
-        f"  Duration: {with_think['duration_seconds']}s (vs {without_think['duration_seconds']}s)"
-    )
+    print(f"  Duration: {with_think['duration_seconds']}s (vs {without_think['duration_seconds']}s)")
     print()
 
     # Calculate scores

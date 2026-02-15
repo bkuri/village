@@ -38,6 +38,33 @@ select = ["E", "F", "I"]
 python_version = "3.11"
 strict = true
 
+[project.urls]
+Homepage = "https://github.com/bkuri/village"
+Repository = "https://github.com/bkuri/village"
+Issues = "https://github.com/bkuri/village/issues"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".beads",
+    ".village",
+    ".worktrees",
+    "tests",
+    "docs",
+    "examples",
+    ".github",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
+    ".coverage",
+    "uv.lock",
+    "*.pyc",
+    "__pycache__",
+    "*.egg-info",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["village"]
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
