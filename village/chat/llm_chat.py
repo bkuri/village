@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional, cast
@@ -71,9 +72,7 @@ class ChatSession:
                 blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
-                confidence=cast(
-                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
-                ),
+                confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
             )
         return self.current_task
 
@@ -85,7 +84,7 @@ class ChatSession:
                 "iteration": self.current_iteration,
                 "task_spec": task_spec.__dict__,
                 "user_input": user_input,
-                "timestamp": asyncio.get_event_loop().time() if asyncio.get_event_loop() else 0,
+                "timestamp": time.time(),
             }
         )
         self.current_task = task_spec
@@ -107,9 +106,7 @@ class ChatSession:
                 blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
-                confidence=cast(
-                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
-                ),
+                confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
             )
         return True
 
@@ -200,9 +197,7 @@ class LLMChat:
             refiner = self.extensions.get_thinking_refiner()
             if await refiner.should_refine(user_input):
                 self.session.query_refinement = await refiner.refine_query(user_input)
-                logger.info(
-                    f"Query refined into {len(self.session.query_refinement.refined_steps)} steps"
-                )
+                logger.info(f"Query refined into {len(self.session.query_refinement.refined_steps)} steps")
 
             # Check if we have a current task or creating new one
             if self.session.current_task is None:
@@ -240,8 +235,7 @@ class LLMChat:
         # Build prompt with refined steps if available
         if self.session.query_refinement:
             refined_steps_text = "\n".join(
-                f"{i + 1}. {step}"
-                for i, step in enumerate(self.session.query_refinement.refined_steps)
+                f"{i + 1}. {step}" for i, step in enumerate(self.session.query_refinement.refined_steps)
             )
             prompt = f"""Original user query: {user_input}\n\nDomain-specific analysis steps:\n{refined_steps_text}\n\nContext hints: {self.session.query_refinement.context_hints}\n\nParse this as a task specification. Extract any dependencies (blocks X, blocked by Y). Return JSON only."""
             logger.info("Using refined steps for task creation")
@@ -331,9 +325,7 @@ class LLMChat:
 
             # Dependencies and effort
             lines.append("│" + f"    [depends: {deps_str}]" + " " * (box_width - 22) + "│")
-            lines.append(
-                "│" + f"    [effort: {item.estimated_effort}]" + " " * (box_width - 20) + "│"
-            )
+            lines.append("│" + f"    [effort: {item.estimated_effort}]" + " " * (box_width - 20) + "│")
 
             if i < len(breakdown.items):
                 lines.append("│" + " " * box_width + "│")
@@ -424,9 +416,7 @@ class LLMChat:
         self.session.add_refinement(refined_spec, user_input)
 
         summary = refined_dict.get("refinement_summary", "Updated based on feedback")
-        logger.info(
-            f"Task refined (iteration {self.session.current_iteration}): {refined_spec.title} - {summary}"
-        )
+        logger.info(f"Task refined (iteration {self.session.current_iteration}): {refined_spec.title} - {summary}")
 
         return self.render_task_spec(refined_spec, self.session.current_iteration)
 
@@ -671,9 +661,7 @@ Return JSON in same breakdown format:
             lines = [f"\n📋 TASK: {task_id}\n", "DEPENDENCIES:\n"]
             for dep_type, task_list in deps.items():
                 if isinstance(task_list, list):
-                    lines.append(
-                        f"  {dep_type}: {', '.join(cast(list[str], task_list)) if task_list else '(none)'}"
-                    )
+                    lines.append(f"  {dep_type}: {', '.join(cast(list[str], task_list)) if task_list else '(none)'}")
                 else:
                     lines.append(f"  {dep_type}: {task_list}")
 
@@ -735,9 +723,7 @@ Return JSON in same breakdown format:
                 blocked_by=cast(list[str], task_spec_dict.get("blocked_by") or []),
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
-                confidence=cast(
-                    ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))
-                ),
+                confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
             )
             lines.append(f"  #{ref['iteration']}: {task_spec.title}")
             lines.append(f"     User: {ref['user_input']}")
@@ -798,9 +784,7 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
         lines = []
 
         lines.append("┌" + "─" * box_width + "┐")
-        title_display = (
-            f"{spec.title} (Refinement #{refinement_count})" if refinement_count > 0 else spec.title
-        )
+        title_display = f"{spec.title} (Refinement #{refinement_count})" if refinement_count > 0 else spec.title
         lines.append("│" + f" TASK: {title_display[:38]} " + " " * (box_width - 39) + "│")
         lines.append("├" + "─" * box_width + "┤")
         lines.append("│" + f" Title: {spec.title[:35]} " + " " * (box_width - 35) + "│")
@@ -814,9 +798,7 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
 
             if spec.blocked_by:
                 blocked_str = ", ".join(spec.blocked_by)[:30]
-                lines.append(
-                    "│" + f"   ⬇ BLOCKED BY: {blocked_str} " + " " * (box_width - 42) + "│"
-                )
+                lines.append("│" + f"   ⬇ BLOCKED BY: {blocked_str} " + " " * (box_width - 42) + "│")
             else:
                 lines.append("│" + " " * box_width + "│")
 
@@ -829,12 +811,7 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
             lines.append("│" + " DEPENDENCIES: (none) " + " " * (box_width - 19) + "│")
 
         lines.append("├" + "─" * box_width + "┤")
-        lines.append(
-            "│"
-            + f" SUCCESS CRITERIA ({len(spec.success_criteria)}): "
-            + " " * (box_width - 23)
-            + "│"
-        )
+        lines.append("│" + f" SUCCESS CRITERIA ({len(spec.success_criteria)}): " + " " * (box_width - 23) + "│")
 
         for i, criterion in enumerate(spec.success_criteria, 1):
             lines.append("│" + f"   {i}. {criterion[:40]} " + " " * (box_width - 41) + "│")
@@ -844,39 +821,14 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
         # Confidence indicator
         confidence_emoji = {"high": "🟢", "medium": "🟡", "low": "🔴"}
         emoji = confidence_emoji[spec.confidence]
-        lines.append(
-            "│"
-            + f" Confidence: {emoji} {spec.confidence.upper():<30} "
-            + " " * (box_width - 41)
-            + "│"
-        )
+        lines.append("│" + f" Confidence: {emoji} {spec.confidence.upper():<30} " + " " * (box_width - 41) + "│")
         lines.append("├" + "─" * box_width + "┤")
 
         # Commands
-        lines.append(
-            "│"
-            + " /refine /revise <clarification> - Revise this task      "
-            + " " * (box_width - 55)
-            + "│"
-        )
-        lines.append(
-            "│"
-            + " /undo - Revert to previous version                     "
-            + " " * (box_width - 50)
-            + "│"
-        )
-        lines.append(
-            "│"
-            + " /confirm - Queue this task                              "
-            + " " * (box_width - 50)
-            + "│"
-        )
-        lines.append(
-            "│"
-            + " /discard - Cancel                                       "
-            + " " * (box_width - 43)
-            + "│"
-        )
+        lines.append("│" + " /refine /revise <clarification> - Revise this task      " + " " * (box_width - 55) + "│")
+        lines.append("│" + " /undo - Revert to previous version                     " + " " * (box_width - 50) + "│")
+        lines.append("│" + " /confirm - Queue this task                              " + " " * (box_width - 50) + "│")
+        lines.append("│" + " /discard - Cancel                                       " + " " * (box_width - 43) + "│")
         lines.append("└" + "─" * box_width + "┘")
 
         return "\n".join(lines)

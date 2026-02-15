@@ -24,7 +24,7 @@ class AnthropicClient(LLMClient):
             api_key: Anthropic API key
             model: Model name to use
         """
-        self.client = Anthropic(api_key=api_key)  # type: ignore[misc]
+        self.client = Anthropic(api_key=api_key)
         self.model = model
 
     def call(

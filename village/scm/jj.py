@@ -8,7 +8,7 @@ from typing import Literal
 from village.probes.tools import SubprocessError, run_command_output_cwd
 from village.scm.protocol import WorkspaceInfo
 
-logger = logging.getLogger(__name__)  # type: ignore
+logger = logging.getLogger(__name__)
 
 
 class JJSCM:

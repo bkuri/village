@@ -16,6 +16,17 @@ else:
 logger = logging.getLogger(__name__)
 
 
+class SessionStateEncoder(json.JSONEncoder):
+    """JSON encoder that handles datetime and dataclass objects."""
+
+    def default(self, o: object) -> object:
+        if isinstance(o, datetime):
+            return o.isoformat()
+        if hasattr(o, "__dict__"):
+            return o.__dict__
+        return super().default(o)
+
+
 @dataclass
 class SessionSnapshot:
     """Capture state for reset capability."""
@@ -47,10 +58,16 @@ def save_session_state(state: Any, config: _Config) -> None:
 
     if hasattr(state, "created_task_ids"):
         session_data["created_task_ids"] = state.created_task_ids
-    if hasattr(state, "session_snapshot"):
-        session_data["session_snapshot"] = state.session_snapshot
+    if hasattr(state, "session_snapshot") and state.session_snapshot:
+        if isinstance(state.session_snapshot, SessionSnapshot):
+            session_data["session_snapshot"] = state.session_snapshot.__dict__
+        else:
+            session_data["session_snapshot"] = state.session_snapshot
 
-    session_file.write_text(json.dumps(session_data, indent=2), encoding="utf-8")
+    session_file.write_text(
+        json.dumps(session_data, indent=2, cls=SessionStateEncoder),
+        encoding="utf-8",
+    )
     logger.debug(f"Saved session state: {session_file}")
 
 

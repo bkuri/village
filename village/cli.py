@@ -22,7 +22,12 @@ from village.errors import (
     InterruptedResume,
 )
 from village.event_log import Event, append_event
-from village.extensibility import discover_mcp_servers, initialize_extensions
+from village.extensibility import (
+    ExtensionRegistry,
+    MCPServer,
+    discover_mcp_servers,
+    initialize_extensions,
+)
 from village.llm.factory import get_llm_client
 from village.logging import get_logger, setup_logging
 from village.probes.tmux import (
@@ -43,7 +48,9 @@ from village.status import collect_workers
 logger = get_logger(__name__)
 
 
-async def _initialize_extensions_and_mcp(config: "Config") -> tuple:
+async def _initialize_extensions_and_mcp(
+    config: "Config",
+) -> tuple[ExtensionRegistry, list[MCPServer]]:
     """Initialize extensions and discover MCP servers.
 
     Args:

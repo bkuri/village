@@ -109,7 +109,7 @@ def check_work_available(beads_capable: bool) -> tuple[str, Optional[int]]:
         return "unknown", None
 
 
-def collect_readiness_data(session_name: str, config: Any) -> dict:
+def collect_readiness_data(session_name: str, config: Any) -> dict[str, Any]:
     """
     Gather all data needed for readiness assessment.
 
@@ -164,7 +164,7 @@ def generate_suggested_actions(
     runtime_error: Optional[str],
     work_available: str,
     ready_count: Optional[int],
-    orphans_data: dict,
+    orphans_data: dict[str, Any],
     active_workers: int,
 ) -> list[SuggestedAction]:
     """

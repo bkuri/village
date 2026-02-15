@@ -83,7 +83,7 @@ def _ensure_beads_initialized(dry_run: bool) -> bool:
     """Ensure Beads is initialized (if available)."""
     config = get_config()
 
-    if config.beads_dir.exists():
+    if (config.git_root / ".beads").exists():
         logger.debug("Beads already initialized")
         return True
 

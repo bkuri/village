@@ -1,6 +1,5 @@
 """Core conversation orchestration."""
 
-import asyncio
 import json
 import logging
 import re
@@ -155,9 +154,7 @@ def start_conversation(config: _Config, mode: str = "knowledge-share") -> Conver
     return state
 
 
-async def process_user_input(
-    state: ConversationState, user_input: str, config: _Config
-) -> ConversationState:
+async def process_user_input(state: ConversationState, user_input: str, config: _Config) -> ConversationState:
     """
     Process user input (command or conversational).
 
@@ -206,9 +203,7 @@ async def process_user_input(
     try:
         written_files = apply_context_update(context_dir, update)
         for filename, content in update.writes.items():
-            state.context_files[filename] = ContextFile(
-                name=filename, path=written_files[filename], content=content
-            )
+            state.context_files[filename] = ContextFile(name=filename, path=written_files[filename], content=content)
     except Exception as e:
         state.errors.append(f"Failed to write context files: {e}")
         logger.error(f"Failed to write context files: {e}")
@@ -274,9 +269,7 @@ def _extract_json(content: str) -> str:
     return content
 
 
-def _call_llm(
-    messages: list[ConversationMessage], config: _Config, mode: str = "knowledge-share"
-) -> str:
+def _call_llm(messages: list[ConversationMessage], config: _Config, mode: str = "knowledge-share") -> str:
     """
     Call LLM via provider-agnostic client.
 
@@ -338,9 +331,7 @@ def _handle_task_subcommand(
     return state
 
 
-def _switch_to_create_mode(
-    args: list[str], state: ConversationState, config: _Config
-) -> ConversationState:
+def _switch_to_create_mode(args: list[str], state: ConversationState, config: _Config) -> ConversationState:
     """
     Switch to task-create mode with optional title.
 
@@ -370,8 +361,7 @@ def _switch_to_create_mode(
     state.session_snapshot = snapshot
 
     message = (
-        f"Task creation mode enabled. Draft ID: {draft.id}\n\n"
-        f"Starting Q&A Phase 1: What is the goal of this task?"
+        f"Task creation mode enabled. Draft ID: {draft.id}\n\nStarting Q&A Phase 1: What is the goal of this task?"
     )
     state.messages.append(ConversationMessage(role="assistant", content=message))
 
@@ -470,9 +460,7 @@ def _handle_edit(args: list[str], state: ConversationState, config: _Config) -> 
     return state
 
 
-def _handle_discard(
-    args: list[str], state: ConversationState, config: _Config
-) -> ConversationState:
+def _handle_discard(args: list[str], state: ConversationState, config: _Config) -> ConversationState:
     """
     Delete draft without creating task.
 
@@ -519,7 +507,7 @@ def _handle_discard(
 
 def _handle_submit(state: ConversationState, config: _Config) -> ConversationState:
     """
-    Review and submit batch of enabled drafts.
+    Review batch of enabled drafts.
 
     Args:
         state: Current conversation state
@@ -539,52 +527,15 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         )
         return state
 
-    # Actually create tasks in Beads by calling create_draft_tasks
-    from village.chat.state import load_session_state, save_session_state
-    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
-
-    state_dict = load_session_state(config)
-
-    try:
-        baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
-        breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
-        config_git_root_name = config.git_root.name
-
-        specs = extract_beads_specs(
-            baseline,
-            breakdown,
-            config_git_root_name,
+    summary = _prepare_batch_summary(state, config)
+    summary_text = _display_batch_summary(summary)
+    state.messages.append(
+        ConversationMessage(
+            role="assistant",
+            content=summary_text,
         )
-
-        created_tasks = asyncio.run(create_draft_tasks(specs, config))
-        created_ids = list(created_tasks.values())
-
-        # Update session state
-        state_dict["created_task_ids"] = created_ids
-        snapshot = state_dict.get("session_snapshot", {})
-        snapshot["brainstorm_created_ids"] = created_ids
-        state_dict["session_snapshot"] = snapshot
-        save_session_state(state_dict, config)
-
-        summary_text = f"Created {len(created_tasks)} task(s) in Beads"
-        state.messages.append(
-            ConversationMessage(
-                role="assistant",
-                content=summary_text,
-            )
-        )
-        state.active_draft_id = None
-        return state
-    except Exception as e:
-        logger.error(f"Failed to create tasks: {e}")
-        state.errors.append(str(e))
-        state.messages.append(
-            ConversationMessage(
-                role="assistant",
-                content=f"Error creating tasks: {e}",
-            )
-        )
-        return state
+    )
+    return state
 
 
 def _handle_reset(state: ConversationState, config: _Config) -> ConversationState:
@@ -817,10 +768,7 @@ async def _handle_brainstorm(
             state.messages.append(
                 ConversationMessage(
                     role="assistant",
-                    content=(
-                        "Error: Task dependencies are invalid.\n\n"
-                        "Try: /brainstorm with simpler breakdown"
-                    ),
+                    content=("Error: Task dependencies are invalid.\n\nTry: /brainstorm with simpler breakdown"),
                 )
             )
             return state
@@ -839,9 +787,7 @@ async def _handle_brainstorm(
 
         for title, task_id in created_tasks.items():
             truncated = title[:48]
-            state.messages.append(
-                ConversationMessage(role="assistant", content=f"☐ {task_id}: {truncated}")
-            )
+            state.messages.append(ConversationMessage(role="assistant", content=f"☐ {task_id}: {truncated}"))
 
         state.messages.append(
             ConversationMessage(
