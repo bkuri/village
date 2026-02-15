@@ -92,7 +92,7 @@ def _ensure_beads_initialized(dry_run: bool) -> bool:
             run_command(["bd", "init"], check=True)
             logger.debug(f"Initialized Beads in {config.git_root}")
             return True
-        except SubprocessError:
+        except (SubprocessError, FileNotFoundError):
             logger.debug("Beads command not available, skipping initialization")
             return True
 
