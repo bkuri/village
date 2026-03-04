@@ -144,6 +144,68 @@ def status(
 
 
 @village.command()
+@click.argument("name")
+@click.option("--path", "path", type=click.Path(), default=".", help="Parent directory (default: current directory)")
+@click.option("--dry-run", is_flag=True, help="Show what would be done")
+@click.option("--plan", is_flag=True, help="Alias for --dry-run")
+@click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
+def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool) -> None:
+    """
+    Create a new project with village support.
+
+    Creates a new project directory with:
+      - git init
+      - .gitignore (with .village/, .worktrees/, .beads/ entries)
+      - README.md stub
+      - AGENTS.md template
+      - .village/config with commented defaults
+      - bd init (if beads available)
+      - tmux session + dashboard window
+
+    Errors if already inside a git repository (use `village up` instead).
+
+    Examples:
+      village new myproject
+      village new myproject --path ~/projects
+      village new myproject --dry-run
+    """
+    from pathlib import Path
+
+    from village.scaffold import (
+        execute_scaffold,
+        is_inside_git_repo,
+        plan_scaffold,
+    )
+
+    if dry_run or plan:
+        parent_dir = Path(path).resolve()
+        scaffold_plan = plan_scaffold(name, parent_dir)
+        click.echo(f"Would create project: {scaffold_plan.project_dir}")
+        click.echo("\nSteps:")
+        for step in scaffold_plan.steps:
+            click.echo(f"  - {step}")
+        return
+
+    if is_inside_git_repo():
+        raise click.ClickException("Already inside a git repository. Use `village up` instead.")
+
+    parent_dir = Path(path).resolve()
+    result = execute_scaffold(name, parent_dir, dashboard=dashboard)
+
+    if result.success:
+        click.echo(f"Created project: {result.project_dir}")
+        click.echo("\nCreated:")
+        for item in result.created:
+            click.echo(f"  - {item}")
+        click.echo(f"\nNext steps:")
+        click.echo(f"  cd {name}")
+        click.echo(f"  village chat   # create your first task")
+    else:
+        click.echo(f"Failed to create project: {result.error}", err=True)
+        raise click.ClickException(result.error or "Unknown error")
+
+
+@village.command()
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
@@ -1204,7 +1266,8 @@ def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -
 @click.option("--dry-run", is_flag=True, help="Preview without applying")
 @click.option("--changelog/--no-changelog", default=True, help="Update CHANGELOG.md")
 @click.option("--tag/--no-tag", default=True, help="Create git tag")
-def release(dry_run: bool, changelog: bool, tag: bool) -> None:
+@click.option("--force", is_flag=True, help="Skip unlabeled-task check")
+def release(dry_run: bool, changelog: bool, tag: bool, force: bool) -> None:
     """
     Apply pending version bumps.
 
@@ -1217,53 +1280,99 @@ def release(dry_run: bool, changelog: bool, tag: bool) -> None:
         village release --dry-run      # Preview what would happen
         village release --no-changelog # Skip CHANGELOG update
         village release --no-tag       # Skip git tag
-
-    Options:
-        --dry-run: Preview mode (no mutations)
-        --changelog/--no-changelog: Update CHANGELOG.md (default: yes)
-        --tag/--no-tag: Create git tag (default: yes)
+        village release --force        # Skip unlabeled-task check
 
     Exit codes:
         0: Release applied successfully
-        1: No pending bumps or error
+        1: Unlabeled closed tasks found, no pending bumps, or error
     """
+    import subprocess as _subprocess
+
     from village.release import (
+        ReleaseRecord,
         aggregate_bumps,
         clear_pending_bumps,
+        compute_next_version,
         get_pending_bumps,
+        get_unlabeled_closed_tasks,
+        is_no_op_release,
         record_release,
+        update_changelog,
     )
 
+    # --- a) Check for unlabeled closed tasks ---
+    if not force:
+        unlabeled = get_unlabeled_closed_tasks()
+        if unlabeled:
+            click.echo(f"Error: {len(unlabeled)} closed task(s) have no bump label:", err=True)
+            for task in unlabeled:
+                click.echo(f"  {task['id']}  {task['title']}", err=True)
+            click.echo("Label them with: bd label add <id> bump:<major|minor|patch|none>", err=True)
+            click.echo("Or use --force to skip this check.", err=True)
+            sys.exit(EXIT_ERROR)
+
+    # --- b) Get pending bumps ---
     pending = get_pending_bumps()
 
     if not pending:
         click.echo("No pending version bumps")
-        click.echo("Complete tasks with bump labels to queue releases")
         sys.exit(EXIT_SUCCESS)
 
+    # --- c) Compute aggregate and check for no-op ---
     aggregate = aggregate_bumps([b.bump for b in pending])
-    task_ids = [b.task_id for b in pending]
 
-    click.echo(f"Pending release: {len(pending)} task(s)")
-    click.echo(f"Aggregate bump: {aggregate}")
-    click.echo(f"Tasks: {', '.join(task_ids)}")
+    if is_no_op_release([b.bump for b in pending]):
+        click.echo("All pending tasks are bump:none — no version change required.")
+        click.echo("Clearing queue without creating a release.")
+        if dry_run:
+            click.echo("(dry-run: would clear queue, no version bump)")
+            return
+        clear_pending_bumps()
+        sys.exit(EXIT_SUCCESS)
 
+    # --- d) Compute next version ---
+    try:
+        version = compute_next_version(aggregate)
+    except ValueError as exc:
+        click.echo(f"Error computing version: {exc}", err=True)
+        sys.exit(EXIT_ERROR)
+
+    click.echo(f"New version: {version} (bump: {aggregate})")
+
+    # --- e) Dry-run exit ---
     if dry_run:
-        click.echo("\n(dry-run: would apply bump and clear queue)")
+        task_ids_preview = [b.task_id for b in pending]
+        click.echo(f"Pending tasks ({len(pending)}): {', '.join(task_ids_preview)}")
+        click.echo("(dry-run: no changes applied)")
         return
 
+    # --- f) Apply changelog ---
     if changelog:
-        click.echo("\nNote: CHANGELOG update not yet implemented")
+        try:
+            update_changelog(version, pending)
+            click.echo(f"Updated CHANGELOG.md with version {version}")
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"Warning: CHANGELOG update failed: {exc}", err=True)
 
+    # --- g) Apply tag ---
     if tag:
-        click.echo("Note: Git tag creation not yet implemented")
+        tag_result = _subprocess.run(
+            ["git", "tag", "-a", f"v{version}", "-m", f"Release v{version}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if tag_result.returncode == 0:
+            click.echo(f"Created git tag v{version}")
+        else:
+            click.echo(f"Warning: git tag failed: {tag_result.stderr.strip()}", err=True)
 
+    # --- h) Clear queue and record release ---
+    task_ids = [b.task_id for b in pending]
     clear_pending_bumps()
 
-    from village.release import ReleaseRecord
-
     record = ReleaseRecord(
-        version="pending",
+        version=version,
         released_at=datetime.now(timezone.utc),
         aggregate_bump=aggregate,
         tasks=task_ids,
@@ -1271,5 +1380,5 @@ def release(dry_run: bool, changelog: bool, tag: bool) -> None:
     )
     record_release(record)
 
-    click.echo(f"\nRelease recorded: {aggregate} bump from {len(pending)} task(s)")
-    click.echo("Run version bump tool manually to update version number")
+    click.echo(f"Release v{version} applied: {aggregate} bump from {len(pending)} task(s)")
+    click.echo("Run: git push --tags")
