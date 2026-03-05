@@ -4,6 +4,7 @@ dynamic = ["version"]
 description = "CLI-native parallel development orchestrator"
 requires-python = ">=3.11"
 dependencies = [
+    "agent-client-protocol>=0.8.1",
     "anthropic>=0.76.0",
     "click>=8.1.0",
     "httpx>=0.28.1",
