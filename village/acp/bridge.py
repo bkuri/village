@@ -8,6 +8,7 @@ This module provides the critical integration layer that:
 """
 
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -181,7 +182,7 @@ class ACPBridge:
     async def session_cancel(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle ACP session/cancel.
 
-        Pauses Village task.
+        Cancels or pauses Village task based on current state.
 
         Args:
             params: ACP session/cancel parameters
@@ -190,21 +191,53 @@ class ACPBridge:
             Cancel confirmation
 
         Raises:
-            ACPBridgeError: If sessionId not provided or pause fails
+            ACPBridgeError: If sessionId not provided or cancel fails
         """
         session_id = params.get("sessionId")
         if not session_id:
             raise ACPBridgeError("sessionId required")
 
-        # Transition to PAUSED
-        result = self.state_machine.transition(session_id, TaskState.PAUSED)
+        # Get current state
+        current_state = self.state_machine.get_state(session_id)
+        if not current_state:
+            raise ACPBridgeError(f"Task not found: {session_id}")
+
+        # Handle based on current state
+        if current_state == TaskState.QUEUED:
+            # Task not started - mark as cancelled via CLAIMED -> FAILED path
+            # First claim it (with cancel context)
+            claim_result = self.state_machine.transition(
+                session_id, TaskState.CLAIMED, context={"reason": "cancelling"}
+            )
+            if not claim_result.success:
+                # Can't claim it, but that's ok - task is effectively cancelled
+                logger.warning(f"Cannot claim task for cancellation: {claim_result.message}")
+                return {"sessionId": session_id, "state": "cancelled", "queued": True}
+
+            # Then fail it
+            result = self.state_machine.transition(session_id, TaskState.FAILED, context={"reason": "cancelled"})
+            final_state = "failed"
+        elif current_state == TaskState.IN_PROGRESS:
+            # Task running - pause it
+            result = self.state_machine.transition(session_id, TaskState.PAUSED)
+            final_state = "paused"
+        elif current_state == TaskState.CLAIMED:
+            # Claimed but not started - fail it
+            result = self.state_machine.transition(session_id, TaskState.FAILED, context={"reason": "cancelled"})
+            final_state = "failed"
+        elif current_state in (TaskState.COMPLETED, TaskState.FAILED, TaskState.PAUSED):
+            # Already terminal or paused
+            return {"sessionId": session_id, "state": current_state.value}
+        else:
+            # Unknown state
+            raise ACPBridgeError(f"Cannot cancel task in state: {current_state.value}")
 
         if not result.success:
-            raise ACPBridgeError(f"Cannot pause task: {result.message}")
+            raise ACPBridgeError(f"Cannot cancel task: {result.message}")
 
         logger.info(f"Cancelled ACP session: {session_id}")
 
-        return {"sessionId": session_id, "state": "paused"}
+        return {"sessionId": session_id, "state": final_state}
 
     # === File System API ===
 
@@ -279,6 +312,323 @@ class ACPBridge:
             return {"success": True, "path": str(path)}
         except Exception as e:
             raise ACPBridgeError(f"Failed to write file: {e}") from e
+
+    # === Terminal API ===
+
+    async def terminal_create(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP terminal/create.
+
+        Creates tmux pane in Village session.
+
+        Args:
+            params: ACP terminal/create parameters
+                - command: Command to execute
+                - args: Optional command arguments
+                - cwd: Optional working directory
+                - env: Optional environment variables
+                - output_byte_limit: Optional output limit
+
+        Returns:
+            Terminal info with terminal_id
+
+        Raises:
+            ACPBridgeError: If sessionId not provided or creation fails
+        """
+        import uuid
+
+        from village.probes.tmux import create_window
+
+        session_id = params.get("sessionId")
+        command = params.get("command", "")
+        args = params.get("args", [])
+        cwd = params.get("cwd")
+        env = params.get("env", [])
+        output_byte_limit = params.get("output_byte_limit")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        # Check task is active
+        if not self._is_task_active(session_id):
+            raise ACPBridgeError(f"Task not active: {session_id}")
+
+        # Generate terminal ID
+        terminal_id = f"term-{uuid.uuid4().hex[:8]}"
+
+        # Create tmux window
+        window_name = f"{session_id}-{terminal_id}"
+        success = create_window(
+            self.config.tmux_session,
+            window_name,
+            command or "",
+        )
+
+        if not success:
+            raise ACPBridgeError(f"Failed to create terminal: {terminal_id}")
+
+        # Store terminal metadata
+        if not hasattr(self, "_terminals"):
+            self._terminals = {}
+
+        self._terminals[terminal_id] = {
+            "sessionId": session_id,
+            "windowName": window_name,
+            "command": command,
+            "args": args,
+            "cwd": cwd,
+            "env": env,
+            "outputByteLimit": output_byte_limit,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+
+        logger.info(f"Created terminal {terminal_id} for session {session_id}")
+
+        return {
+            "terminalId": terminal_id,
+            "windowName": window_name,
+        }
+
+    async def terminal_output(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP terminal/output.
+
+        Captures output from tmux pane.
+
+        Args:
+            params: ACP terminal/output parameters
+                - sessionId: Session ID
+                - terminalId: Terminal ID
+
+        Returns:
+            Terminal output
+
+        Raises:
+            ACPBridgeError: If sessionId/terminalId not provided or terminal not found
+        """
+        session_id = params.get("sessionId")
+        terminal_id = params.get("terminalId")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not terminal_id:
+            raise ACPBridgeError("terminalId required")
+
+        # Check terminal exists
+        if not hasattr(self, "_terminals") or terminal_id not in self._terminals:
+            raise ACPBridgeError(f"Terminal not found: {terminal_id}")
+
+        terminal_info = self._terminals[terminal_id]
+
+        if terminal_info["sessionId"] != session_id:
+            raise ACPBridgeError(f"Terminal does not belong to session: {terminal_id}")
+
+        # Capture pane output
+        from village.probes.tmux import capture_pane
+
+        # Find pane by window name
+        window_name = terminal_info["windowName"]
+
+        # Get pane ID from window
+        import subprocess
+
+        result = subprocess.run(
+            ["tmux", "list-panes", "-t", f"{self.config.tmux_session}:{window_name}", "-F", "#{pane_id}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        if result.returncode != 0:
+            raise ACPBridgeError(f"Failed to list panes: {result.stderr}")
+
+        pane_id = result.stdout.strip()
+
+        # Capture output
+        try:
+            output = capture_pane(self.config.tmux_session, pane_id)
+
+            # Apply byte limit if specified
+            byte_limit = terminal_info.get("outputByteLimit")
+            if byte_limit and len(output) > byte_limit:
+                output = output[:byte_limit]
+                truncated = True
+            else:
+                truncated = False
+
+            logger.debug(f"Captured {len(output)} bytes from terminal {terminal_id}")
+
+            return {
+                "terminalId": terminal_id,
+                "output": output,
+                "truncated": truncated,
+            }
+        except Exception as e:
+            raise ACPBridgeError(f"Failed to capture output: {e}") from e
+
+    async def terminal_kill(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP terminal/kill.
+
+        Kills tmux pane.
+
+        Args:
+            params: ACP terminal/kill parameters
+                - sessionId: Session ID
+                - terminalId: Terminal ID
+
+        Returns:
+            Kill confirmation
+
+        Raises:
+            ACPBridgeError: If sessionId/terminalId not provided or terminal not found
+        """
+        session_id = params.get("sessionId")
+        terminal_id = params.get("terminalId")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not terminal_id:
+            raise ACPBridgeError("terminalId required")
+
+        # Check terminal exists
+        if not hasattr(self, "_terminals") or terminal_id not in self._terminals:
+            raise ACPBridgeError(f"Terminal not found: {terminal_id}")
+
+        terminal_info = self._terminals[terminal_id]
+
+        if terminal_info["sessionId"] != session_id:
+            raise ACPBridgeError(f"Terminal does not belong to session: {terminal_id}")
+
+        # Kill window
+        from village.probes.tmux import kill_session
+
+        window_name = terminal_info["windowName"]
+        success = kill_session(f"{self.config.tmux_session}:{window_name}")
+
+        if not success:
+            logger.warning(f"Failed to kill terminal window: {window_name}")
+
+        # Remove from tracking
+        del self._terminals[terminal_id]
+
+        logger.info(f"Killed terminal {terminal_id} for session {session_id}")
+
+        return {"terminalId": terminal_id, "killed": True}
+
+    async def terminal_release(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP terminal/release.
+
+        Releases terminal (keeps window alive butbut stops tracking).
+
+        Args:
+            params: ACP terminal/release parameters
+                - sessionId: Session ID
+                - terminalId: Terminal ID
+
+        Returns:
+            Release confirmation
+
+        Raises:
+            ACPBridgeError: If sessionId/terminalId not provided or terminal not found
+        """
+        session_id = params.get("sessionId")
+        terminal_id = params.get("terminalId")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not terminal_id:
+            raise ACPBridgeError("terminalId required")
+
+        # Check terminal exists
+        if not hasattr(self, "_terminals") or terminal_id not in self._terminals:
+            raise ACPBridgeError(f"Terminal not found: {terminal_id}")
+
+        terminal_info = self._terminals[terminal_id]
+
+        if terminal_info["sessionId"] != session_id:
+            raise ACPBridgeError(f"Terminal does not belong to session: {terminal_id}")
+
+        # Remove from tracking (window stays alive)
+        del self._terminals[terminal_id]
+
+        logger.info(f"Released terminal {terminal_id} for session {session_id}")
+
+        return {"terminalId": terminal_id, "released": True}
+
+    async def terminal_wait_for_exit(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP terminal/wait_for_exit.
+
+        Waits for terminal command to exit.
+
+        Args:
+            params: ACP terminal/wait_for_exit parameters
+                - sessionId: Session ID
+                - terminalId: Terminal ID
+                - timeout: Optional timeout in seconds
+
+        Returns:
+            Exit status
+
+        Raises:
+            ACPBridgeError: If sessionId/terminalId not provided or terminal not found
+        """
+        import asyncio
+
+        session_id = params.get("sessionId")
+        terminal_id = params.get("terminalId")
+        timeout = params.get("timeout", 60)
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not terminal_id:
+            raise ACPBridgeError("terminalId required")
+
+        # Check terminal exists
+        if not hasattr(self, "_terminals") or terminal_id not in self._terminals:
+            raise ACPBridgeError(f"Terminal not found: {terminal_id}")
+
+        terminal_info = self._terminals[terminal_id]
+
+        if terminal_info["sessionId"] != session_id:
+            raise ACPBridgeError(f"Terminal does not belong to session: {terminal_id}")
+
+        # Wait for pane to to window_name = terminal_info["windowName"]
+        start_time = asyncio.get_event_loop().time()
+
+        while True:
+            # Check if window still exists
+            import subprocess
+
+            result = subprocess.run(
+                ["tmux", "list-windows", "-t", self.config.tmux_session, "-F", "#{window_name}"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            if result.returncode != 0:
+                # Window no longer exists - command exited
+                elapsed = asyncio.get_event_loop().time() - start_time
+                return {
+                    "terminalId": terminal_id,
+                    "exitStatus": 0,  # Assume success
+                    "elapsed": elapsed,
+                }
+
+            # Check timeout
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > timeout:
+                return {
+                    "terminalId": terminal_id,
+                    "exitStatus": None,
+                    "timeout": True,
+                    "elapsed": elapsed,
+                }
+
+            # Wait before checking again
+            await asyncio.sleep(0.5)
 
     # === Notification Streaming ===
 

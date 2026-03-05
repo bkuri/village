@@ -38,13 +38,16 @@
 {"issue_id":"bd-4uv.5","label":"ecosystem"}
 {"issue_id":"bd-4uv.5","label":"integration"}
 {"issue_id":"bd-4uv.5","label":"session"}
+{"issue_id":"bd-4uv.5","label":"status:in-progress"}
 {"issue_id":"bd-4uv.6","label":"acp"}
 {"issue_id":"bd-4uv.6","label":"ecosystem"}
 {"issue_id":"bd-4uv.6","label":"filesystem"}
 {"issue_id":"bd-4uv.6","label":"integration"}
+{"issue_id":"bd-4uv.6","label":"status:in-progress"}
 {"issue_id":"bd-4uv.7","label":"acp"}
 {"issue_id":"bd-4uv.7","label":"ecosystem"}
 {"issue_id":"bd-4uv.7","label":"integration"}
+{"issue_id":"bd-4uv.7","label":"status:in-progress"}
 {"issue_id":"bd-4uv.7","label":"terminal"}
 {"issue_id":"bd-4uv.8","label":"acp"}
 {"issue_id":"bd-4uv.8","label":"ecosystem"}

@@ -4,7 +4,6 @@ Uses official agent-client-protocol SDK to connect to
 ACP-compliant agents (Claude Code, Gemini CLI, etc.)
 """
 
-import asyncio
 import logging
 from pathlib import Path
 from typing import Any
@@ -17,12 +16,12 @@ logger = logging.getLogger(__name__)
 
 class VillageACPClient(Client):
     """Village's ACP client for connecting to external agents.
-    
+
     Implements Client interface to handle:
     - Permission requests from agents
     - Session updates from agents
     """
-    
+
     async def request_permission(
         self,
         options: Any,
@@ -31,20 +30,20 @@ class VillageACPClient(Client):
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Handle permission request from agent.
-        
+
         Args:
             options: Permission options
             session_id: Session ID
             tool_call: Tool call requesting permission
             **kwargs: Additional parameters
-            
+
         Returns:
             Permission response
         """
         # For now, auto-approve (can be configured later)
         logger.info(f"Auto-approving permission for {tool_call}")
         return {"outcome": {"outcome": "approved"}}
-    
+
     async def session_update(
         self,
         session_id: str,
@@ -52,7 +51,7 @@ class VillageACPClient(Client):
         **kwargs: Any,
     ) -> None:
         """Handle session update from agent.
-        
+
         Args:
             session_id: Session ID
             update: Session update notification
@@ -66,63 +65,62 @@ async def spawn_acp_agent(
     cwd: Path | None = None,
 ) -> tuple[Any, Any]:
     """Spawn an ACP-compliant agent.
-    
+
     Args:
         command: Command to spawn agent
         cwd: Working directory
-        
+
     Returns:
         Tuple of (connection, process)
     """
     client = VillageACPClient()
-    
+
     # Parse command
     parts = command.split()
     executable = parts[0]
     args = parts[1:] if len(parts) > 1 else []
-    
-    # Spawn agent process
-    conn, proc = await spawn_agent_process(
+
+    # Spawn agent process (use as context manager)
+    async with spawn_agent_process(
         client,
         executable,
         *args,
         cwd=str(cwd) if cwd else None,
-    )
-    
-    logger.info(f"Spawned ACP agent: {command}")
-    return conn, proc
+    ) as (conn, proc):
+        logger.info(f"Spawned ACP agent: {command}")
+        return conn, proc
 
 
 async def test_acp_agent(command: str) -> bool:
     """Test connection to ACP agent.
-    
+
     Args:
         command: Command to spawn agent
-        
+
     Returns:
         True if agent responds correctly
     """
     try:
         conn, proc = await spawn_acp_agent(command)
-        
+
         # Initialize connection
         await conn.initialize(protocol_version=1)
-        
+
         # Create test session
         session = await conn.new_session(
             cwd=".",
             mcp_servers=[],
         )
-        
+
         # Send test prompt
-        response = await conn.prompt(
+        await conn.prompt(
             session_id=session.session_id,
             prompt=[text_block("Hello from Village!")],
         )
-        
+
         # Cleanup
         await conn.shutdown()
-        
+
         logger.info(f"ACP agent test successful: {command}")
         return True
     except Exception as e:
