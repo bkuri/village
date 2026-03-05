@@ -38,7 +38,7 @@ from village.cli import lifecycle, state, acp
 # Register command groups (for now, just the new ones)
 village.add_command(lifecycle.lifecycle_group)
 village.add_command(state.state_group)
-village.add_command(acp.acp_group)
+village.add_command(acp.acp_command)  # ACP is a single command with flags, not a group
 
 # TODO: Migrate remaining commands from old cli.py:
 # - tasks (queue, resume, pause, resume-task, ready)

@@ -1,221 +1,424 @@
-"""ACP commands: server and client management."""
+"""ACP CLI commands for Village.
+
+Provides commands for managing ACP server and client operations:
+- village acp --server start/stop/status
+- village acp --client list/spawn/test
+"""
+
+import json
+import logging
+from typing import Any
 
 import click
 
 from village.config import get_config
-from village.logging import get_logger
 
-logger = get_logger(__name__)
-
-
-@click.group(name="acp")
-def acp_group() -> None:
-    """ACP (Agent Client Protocol) management."""
-    pass
+logger = logging.getLogger(__name__)
 
 
-# === Server Commands ===
-
-
-@acp_group.group("server")
-def server_group() -> None:
-    """ACP server management."""
-    pass
-
-
-@server_group.command("start")
-@click.option("--host", default=None, help="Server host (default: from config)")
-@click.option("--port", default=None, type=int, help="Server port (default: from config)")
-@click.option("--daemon", is_flag=True, help="Run as daemon")
-def server_start(host: str | None, port: int | None, daemon: bool) -> None:
+@click.command(name="acp")
+@click.option("--server", "mode", flag_value="server", help="Server mode operations")
+@click.option("--client", "mode", flag_value="client", help="Client mode operations")
+@click.argument("command", required=False, default="status")
+@click.argument("args", required=False)
+@click.option("--host", default="localhost", help="Server host (default: localhost)")
+@click.option("--port", default=9876, type=int, help="Server port (default: 9876)")
+@click.option("--cwd", type=click.Path(), help="Working directory (for spawn)")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.pass_context
+def acp_command(
+    ctx: click.Context,
+    mode: str | None,
+    command: str,
+    args: str | None,
+    host: str,
+    port: int,
+    cwd: click.Path | None,
+    json_output: bool,
+) -> None:
+    """ACP (Agent Client Protocol) integration commands.
+    
+    Village can act as either an ACP server (exposing Village to editors)
+    or an ACP client (connecting to external agents like Claude Code).
+    
+    Server operations:
+        village acp --server start [--host HOST] [--port PORT]
+        village acp --server stop
+        village acp --server status
+    
+    Client operations:
+        village acp --client list
+        village acp --client spawn <agent-name>
+        village acp --client test <agent-name>
     """
-    Start ACP server.
+    if mode is None:
+        # Default: show status
+        mode = "server"
+        command = "status"
+    
+    if mode == "server":
+        _handle_server_command(ctx, command, host, port, json_output)
+    elif mode == "client":
+        _handle_client_command(ctx, command, args, cwd, json_output)
+    else:
+        click.echo(f"Unknown mode: {mode}", err=True)
+        raise click.exceptions.Exit(1)
 
-    Launches Village as an ACP-compliant agent server that editors
-    can connect to.
 
-    Examples:
-      village acp server start
-      village acp server start --host 0.0.0.0 --port 9999
-      village acp server start --daemon
-    """
+def _handle_server_command(
+    ctx: click.Context,
+    command: str,
+    host: str,
+    port: int,
+    json_output: bool,
+) -> None:
+    """Handle ACP server commands."""
+    config = get_config()
+    
+    if command == "start":
+        _server_start(config, host, port, json_output)
+    elif command == "stop":
+        _server_stop(json_output)
+    elif command == "status":
+        _server_status(config, json_output)
+    else:
+        click.echo(f"Unknown server command: {command}", err=True)
+        click.echo("Available: start, stop, status")
+        raise click.exceptions.Exit(1)
+
+
+def _server_start(config: Any, host: str, port: int, json_output: bool) -> None:
+    """Start ACP server."""
+    import asyncio
+    
     from village.acp.agent import run_village_agent
-
-    config = get_config()
-
-    # Use config defaults if not specified
-    server_host = host or config.acp.server_host
-    server_port = port or config.acp.server_port
-
+    
+    # Override ACP config if specified
+    if host != "localhost":
+        config.acp.server_host = host
+    if port != 9876:
+        config.acp.server_port = port
+    
+    # Check if ACP is enabled in config
     if not config.acp.enabled:
-        click.echo("Warning: ACP is disabled in config. Set [acp] enabled = true to enable.")
-
-    click.echo(f"Starting ACP server on {server_host}:{server_port}")
-
-    if daemon:
-        click.echo("Daemon mode not yet implemented")
+        if json_output:
+            click.echo(json.dumps({
+                "status": "disabled",
+                "message": "ACP not enabled in configuration. Add [acp] enabled = true to .village/config",
+            }))
+        else:
+            click.echo("ACP server is disabled in configuration")
+            click.echo("Enable it by adding to .village/config:")
+            click.echo("  [acp]")
+            click.echo("  enabled = true")
         return
-
-    # Run the agent server
+    
+    if json_output:
+        click.echo(json.dumps({
+            "status": "starting",
+            "host": config.acp.server_host,
+            "port": config.acp.server_port,
+        }))
+    else:
+        click.echo(f"Starting ACP server on {config.acp.server_host}:{config.acp.server_port}")
+    
     try:
-        run_village_agent(config)
+        # Run the ACP agent (async)
+        asyncio.run(run_village_agent(config))
     except KeyboardInterrupt:
-        click.echo("\nServer stopped")
+        if json_output:
+            click.echo(json.dumps({"status": "stopped"}))
+        else:
+            click.echo("\nACP server stopped")
+    except Exception as e:
+        logger.exception(f"Failed to start ACP server: {e}")
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": str(e),
+            }))
+        else:
+            click.echo(f"Error starting ACP server: {e}", err=True)
+            raise click.exceptions.Exit(1)
 
 
-@server_group.command("stop")
-def server_stop() -> None:
-    """
-    Stop ACP server.
+def _server_stop(json_output: bool) -> None:
+    """Stop ACP server."""
+    # TODO: Implement daemon mode with PID file for background server
+    # For now, just use Ctrl+C on the running server
+    
+    if json_output:
+        click.echo(json.dumps({
+            "status": "not_implemented",
+            "message": "Use Ctrl+C to stop foreground server",
+        }))
+    else:
+        click.echo("ACP server runs in foreground mode")
+        click.echo("Use Ctrl+C to stop the running server")
+        click.echo("")
+        click.echo("Future: daemon mode with 'village acp --server stop' will be supported")
 
-    Gracefully shuts down the running ACP server.
 
-    Examples:
-      village acp server stop
-    """
-    # TODO: Implement server stop (need PID tracking)
-    click.echo("Server stop not yet implemented")
-
-
-@server_group.command("status")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def server_status(json_output: bool) -> None:
-    """
-    Show ACP server status.
-
-    Examples:
-      village acp server status
-      village acp server status --json
-    """
-    import json
-
-    config = get_config()
-
+def _server_status(config: Any, json_output: bool) -> None:
+    """Show ACP server status."""
     status_data = {
         "enabled": config.acp.enabled,
         "host": config.acp.server_host,
         "port": config.acp.server_port,
         "protocol_version": config.acp.protocol_version,
-        "capabilities": [{"name": cap.name, "description": cap.description} for cap in config.acp.capabilities],
-        "running": False,  # TODO: Check if server is actually running
+        "capabilities": [
+            {
+                "name": cap.name,
+                "description": cap.description,
+            }
+            for cap in config.acp.capabilities
+        ],
     }
-
+    
     if json_output:
         click.echo(json.dumps(status_data, indent=2))
     else:
-        click.echo(f"ACP Server Status:")
-        click.echo(f"  Enabled: {status_data['enabled']}")
-        click.echo(f"  Host: {status_data['host']}")
-        click.echo(f"  Port: {status_data['port']}")
-        click.echo(f"  Protocol Version: {status_data['protocol_version']}")
-        click.echo(f"  Running: {status_data['running']}")
-        if status_data["capabilities"]:
-            click.echo(f"  Capabilities:")
-            for cap in status_data["capabilities"]:
-                click.echo(f"    - {cap['name']}: {cap['description']}")
+        click.echo("ACP Server Configuration:")
+        click.echo(f"  Status: {'enabled' if config.acp.enabled else 'disabled'}")
+        click.echo(f"  Host: {config.acp.server_host}")
+        click.echo(f"  Port: {config.acp.server_port}")
+        click.echo(f"  Protocol Version: {config.acp.protocol_version}")
+        
+        if config.acp.capabilities:
+            click.echo(f"\nCapabilities:")
+            for cap in config.acp.capabilities:
+                click.echo(f"  - {cap.name}: {cap.description}")
+        else:
+            click.echo(f"\nCapabilities: (none configured)")
 
 
-# === Client Commands ===
-
-
-@acp_group.group("client")
-def client_group() -> None:
-    """ACP client management."""
-    pass
-
-
-@client_group.command("list")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def client_list(json_output: bool) -> None:
-    """
-    List configured ACP agents.
-
-    Shows all agents with type=acp from configuration.
-
-    Examples:
-      village acp client list
-      village acp client list --json
-    """
-    import json
-
+def _handle_client_command(
+    ctx: click.Context,
+    command: str,
+    args: str | None,
+    cwd: click.Path | None,
+    json_output: bool,
+) -> None:
+    """Handle ACP client commands."""
     config = get_config()
+    
+    if command == "list":
+        _client_list(config, json_output)
+    elif command == "spawn":
+        if not args:
+            click.echo("Error: agent-name required for spawn", err=True)
+            click.echo("Usage: village acp --client spawn <agent-name>")
+            raise click.exceptions.Exit(1)
+        _client_spawn(config, args, cwd, json_output)
+    elif command == "test":
+        if not args:
+            click.echo("Error: agent-name required for test", err=True)
+            click.echo("Usage: village acp --client test <agent-name>")
+            raise click.exceptions.Exit(1)
+        _client_test(config, args, json_output)
+    else:
+        click.echo(f"Unknown client command: {command}", err=True)
+        click.echo("Available: list, spawn, test")
+        raise click.exceptions.Exit(1)
 
+
+def _client_list(config: Any, json_output: bool) -> None:
+    """List configured ACP agents."""
     # Filter ACP agents
-    acp_agents = {name: agent for name, agent in config.agents.items() if agent.type == "acp"}
-
-    if json_output:
-        agents_data = {}
-        for name, agent in acp_agents.items():
-            agents_data[name] = {
-                "type": agent.type,
-                "command": agent.acp_command,
+    acp_agents = {
+        name: agent
+        for name, agent in config.agents.items()
+        if agent.type == "acp"
+    }
+    
+    agents_data = {
+        "agents": [
+            {
+                "name": name,
+                "command": agent.acp_command or "",
                 "capabilities": agent.acp_capabilities,
             }
+            for name, agent in acp_agents.items()
+        ],
+        "count": len(acp_agents),
+    }
+    
+    if json_output:
         click.echo(json.dumps(agents_data, indent=2))
     else:
         if not acp_agents:
             click.echo("No ACP agents configured")
-            click.echo("\nTo add an ACP agent, add to .village/config:")
+            click.echo("")
+            click.echo("Add an ACP agent to .village/config:")
             click.echo("  [agent.claude]")
             click.echo("  type = acp")
             click.echo("  acp_command = claude-code")
             click.echo("  acp_capabilities = filesystem,terminal")
-            return
-
-        click.echo(f"Configured ACP Agents ({len(acp_agents)}):\n")
-        for name, agent in acp_agents.items():
-            click.echo(f"  {name}:")
-            click.echo(f"    Command: {agent.acp_command}")
-            click.echo(f"    Capabilities: {', '.join(agent.acp_capabilities)}")
-
-
-@client_group.command("spawn")
-@click.argument("agent_name")
-@click.option("--test", is_flag=True, help="Test connection after spawn")
-def client_spawn(agent_name: str, test: bool) -> None:
-    """
-    Spawn an ACP agent.
-
-    Starts a specific ACP agent by name from configuration.
-
-    Examples:
-      village acp client spawn claude
-      village acp client spawn claude --test
-    """
-    import asyncio
-
-    from village.acp.external_client import spawn_acp_agent, test_acp_agent
-
-    config = get_config()
-
-    # Check agent exists and is ACP type
-    if agent_name not in config.agents:
-        raise click.ClickException(f"Agent not found: {agent_name}")
-
-    agent_config = config.agents[agent_name]
-    if agent_config.type != "acp":
-        raise click.ClickException(f"Agent '{agent_name}' is not an ACP agent (type={agent_config.type})")
-
-    if not agent_config.acp_command:
-        raise click.ClickException(f"Agent '{agent_name}' has no acp_command configured")
-
-    click.echo(f"Spawning ACP agent: {agent_name}")
-    click.echo(f"  Command: {agent_config.acp_command}")
-
-    if test:
-        click.echo("\nTesting connection...")
-
-        async def run_test():
-            success = await test_acp_agent(agent_config.acp_command or "")
-            return success
-
-        success = asyncio.run(run_test())
-
-        if success:
-            click.echo("✓ Agent test successful")
         else:
-            click.echo("✗ Agent test failed", err=True)
-            raise click.ClickException("Agent test failed")
+            click.echo(f"Configured ACP Agents ({len(acp_agents)}):")
+            click.echo("")
+            for name, agent in acp_agents.items():
+                click.echo(f"  {name}:")
+                click.echo(f"    Command: {agent.acp_command or '(not set)'}")
+                if agent.acp_capabilities:
+                    click.echo(f"    Capabilities: {', '.join(agent.acp_capabilities)}")
+                else:
+                    click.echo(f"    Capabilities: (none)")
+                click.echo("")
+
+
+def _client_spawn(config: Any, agent_name: str, cwd: click.Path | None, json_output: bool) -> None:
+    """Spawn an ACP agent."""
+    import asyncio
+    
+    from village.acp.external_client import spawn_acp_agent
+    from village.errors import EXIT_ERROR
+    
+    # Check agent exists
+    if agent_name not in config.agents:
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": f"Agent '{agent_name}' not found",
+                "available_agents": list(config.agents.keys()),
+            }))
+        else:
+            click.echo(f"Error: Agent '{agent_name}' not found", err=True)
+            click.echo(f"Available agents: {', '.join(config.agents.keys()) or '(none)'}")
+        raise click.exceptions.Exit(EXIT_ERROR)
+    
+    agent_config = config.agents[agent_name]
+    
+    # Check it's an ACP agent
+    if agent_config.type != "acp":
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": f"Agent '{agent_name}' is not an ACP agent (type={agent_config.type})",
+            }))
+        else:
+            click.echo(f"Error: Agent '{agent_name}' is not an ACP agent", err=True)
+            click.echo(f"Agent type: {agent_config.type}")
+        raise click.exceptions.Exit(EXIT_ERROR)
+    
+    # Check command is configured
+    if not agent_config.acp_command:
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": f"Agent '{agent_name}' missing acp_command configuration",
+            }))
+        else:
+            click.echo(f"Error: Agent '{agent_name}' missing acp_command", err=True)
+        raise click.exceptions.Exit(EXIT_ERROR)
+    
+    if json_output:
+        click.echo(json.dumps({
+            "status": "spawning",
+            "agent": agent_name,
+            "command": agent_config.acp_command,
+        }))
     else:
-        click.echo("\nNote: Use --test to verify agent connection")
-        click.echo("Actual spawning not yet implemented (requires session context)")
+        click.echo(f"Spawning ACP agent: {agent_name}")
+        click.echo(f"  Command: {agent_config.acp_command}")
+        if cwd:
+            click.echo(f"  Working directory: {cwd}")
+    
+    try:
+        # Spawn the agent
+        conn, proc = asyncio.run(spawn_acp_agent(
+            agent_config.acp_command,
+            cwd=cwd,
+        ))
+        
+        if json_output:
+            click.echo(json.dumps({
+                "status": "spawned",
+                "agent": agent_name,
+                "connection": str(type(conn)),
+                "process": str(type(proc)),
+            }))
+        else:
+            click.echo(f"✓ Agent spawned successfully")
+            click.echo(f"  Connection: {type(conn).__name__}")
+            click.echo(f"  Process: {type(proc).__name__}")
+            click.echo("")
+            click.echo("Note: Agent is running. Use the connection object to interact.")
+            
+    except Exception as e:
+        logger.exception(f"Failed to spawn agent: {e}")
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": str(e),
+            }))
+        else:
+            click.echo(f"Error spawning agent: {e}", err=True)
+        raise click.exceptions.Exit(EXIT_ERROR)
+
+
+def _client_test(config: Any, agent_name: str, json_output: bool) -> None:
+    """Test connection to an ACP agent."""
+    import asyncio
+    
+    from village.acp.external_client import test_acp_agent
+    from village.errors import EXIT_ERROR
+    
+    # Check agent exists
+    if agent_name not in config.agents:
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": f"Agent '{agent_name}' not found",
+            }))
+        else:
+            click.echo(f"Error: Agent '{agent_name}' not found", err=True)
+        raise click.exceptions.Exit(EXIT_ERROR)
+    
+    agent_config = config.agents[agent_name]
+    
+    # Check it's an ACP agent
+    if agent_config.type != "acp" or not agent_config.acp_command:
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": f"Agent '{agent_name}' is not a valid ACP agent",
+            }))
+        else:
+            click.echo(f"Error: Agent '{agent_name}' is not a valid ACP agent", err=True)
+        raise click.exceptions.Exit(EXIT_ERROR)
+    
+    if json_output:
+        click.echo(json.dumps({
+            "status": "testing",
+            "agent": agent_name,
+        }))
+    else:
+        click.echo(f"Testing ACP agent: {agent_name}...")
+    
+    try:
+        # Test the agent
+        success = asyncio.run(test_acp_agent(agent_config.acp_command))
+        
+        if json_output:
+            click.echo(json.dumps({
+                "status": "success" if success else "failed",
+                "agent": agent_name,
+            }))
+        else:
+            if success:
+                click.echo(f"✓ Agent test successful")
+            else:
+                click.echo(f"✗ Agent test failed", err=True)
+                raise click.exceptions.Exit(EXIT_ERROR)
+                
+    except Exception as e:
+        logger.exception(f"Agent test failed: {e}")
+        if json_output:
+            click.echo(json.dumps({
+                "status": "error",
+                "error": str(e),
+            }))
+        else:
+            click.echo(f"Error testing agent: {e}", err=True)
+        raise click.exceptions.Exit(EXIT_ERROR)
