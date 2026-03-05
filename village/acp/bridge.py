@@ -211,10 +211,13 @@ class ACPBridge:
     async def fs_read_text_file(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle ACP fs/read_text_file.
 
-        Reads file from Village worktree.
+        Reads file from Village worktree with optional line/limit slicing.
 
         Args:
             params: ACP fs/read parameters
+                - path: Absolute file path
+                - line: Optional starting line (1-indexed)
+                - limit: Optional max lines to read
 
         Returns:
             File content
@@ -223,6 +226,12 @@ class ACPBridge:
             ACPBridgeError: If path invalid or file not found
         """
         path = Path(params.get("path", ""))
+        line = params.get("line")
+        limit = params.get("limit")
+
+        # Validate path is absolute
+        if not path.is_absolute():
+            raise ACPBridgeError(f"Path must be absolute: {path}")
 
         # Validate path is in worktree
         worktree_info = self._find_worktree_for_path(path)
@@ -236,12 +245,40 @@ class ACPBridge:
         # Read file
         try:
             content = path.read_text(encoding="utf-8")
-            logger.debug(f"Read file: {path}")
+
+            # Apply line/limit slicing (from gemini example pattern)
+            if line is not None or limit is not None:
+                content = self._slice_text(content, line, limit)
+
+            logger.debug(f"Read file: {path} ({len(content)} bytes)")
             return {"content": content, "path": str(path)}
         except FileNotFoundError:
             raise ACPBridgeError(f"File not found: {path}")
         except Exception as e:
             raise ACPBridgeError(f"Failed to read file: {e}") from e
+
+    def _slice_text(self, content: str, line: int | None, limit: int | None) -> str:
+        """Slice text content by line number and limit.
+
+        Args:
+            content: Full text content
+            line: Starting line (1-indexed)
+            limit: Maximum number of lines
+
+        Returns:
+            Sliced content
+        """
+        lines = content.splitlines()
+
+        start = 0
+        if line is not None:
+            start = max(line - 1, 0)  # Convert to 0-indexed
+
+        end = len(lines)
+        if limit is not None:
+            end = min(start + limit, end)
+
+        return "\n".join(lines[start:end])
 
     async def fs_write_text_file(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle ACP fs/write_text_file.
