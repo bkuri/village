@@ -175,12 +175,8 @@ class MetricsConfig:
         port_str = os.environ.get("VILLAGE_METRICS_PORT") or config.get("METRICS_PORT")
         port = int(port_str) if port_str else 9090
 
-        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get(
-            "METRICS_EXPORT_INTERVAL"
-        )
-        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get(
-            "METRICS_EXPORT_INTERVAL"
-        )
+        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get("METRICS_EXPORT_INTERVAL")
+        interval_str = os.environ.get("VILLAGE_METRICS_EXPORT_INTERVAL") or config.get("METRICS_EXPORT_INTERVAL")
         export_interval_seconds = int(interval_str) if interval_str else 60
 
         statsd_host_env = os.environ.get("VILLAGE_STATSD_HOST")
@@ -209,12 +205,8 @@ class DashboardConfig:
     @classmethod
     def from_env_and_config(cls, config: dict[str, str]) -> "DashboardConfig":
         """Load dashboard config from environment variables and config file."""
-        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get(
-            "DASHBOARD_REFRESH_INTERVAL"
-        )
-        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get(
-            "DASHBOARD_REFRESH_INTERVAL"
-        )
+        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get("DASHBOARD_REFRESH_INTERVAL")
+        interval_str = os.environ.get("VILLAGE_DASHBOARD_REFRESH_INTERVAL") or config.get("DASHBOARD_REFRESH_INTERVAL")
         refresh_interval_seconds = int(interval_str) if interval_str else 2
 
         enabled_env = os.environ.get("VILLAGE_DASHBOARD_ENABLED", "").lower()
@@ -298,6 +290,9 @@ class AgentConfig:
     ppc_format: str = "markdown"
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
+    type: str = "opencode"  # Agent type: "opencode" or "acp"
+    acp_command: Optional[str] = None  # Command to spawn ACP agent
+    acp_capabilities: list[str] = field(default_factory=list)  # Capability names
 
 
 @dataclass
@@ -316,34 +311,32 @@ class ExtensionConfig:
     @classmethod
     def from_env_and_config(cls, config: dict[str, str]) -> "ExtensionConfig":
         """Load extension config from environment variable and config file."""
-        enabled_env = os.environ.get("VILLAGE_EXTENSIONS_ENABLED") or config.get(
-            "EXTENSIONS.ENABLED"
-        )
+        enabled_env = os.environ.get("VILLAGE_EXTENSIONS_ENABLED") or config.get("EXTENSIONS.ENABLED")
         enabled = enabled_env is None or enabled_env.lower() in ("1", "true", "yes", "")
 
         processor_module = os.environ.get("VILLAGE_EXTENSIONS_PROCESSOR_MODULE") or config.get(
             "EXTENSIONS.PROCESSOR_MODULE"
         )
 
-        tool_invoker_module = os.environ.get(
-            "VILLAGE_EXTENSIONS_TOOL_INVOKER_MODULE"
-        ) or config.get("EXTENSIONS.TOOL_INVOKER_MODULE")
+        tool_invoker_module = os.environ.get("VILLAGE_EXTENSIONS_TOOL_INVOKER_MODULE") or config.get(
+            "EXTENSIONS.TOOL_INVOKER_MODULE"
+        )
 
-        thinking_refiner_module = os.environ.get(
-            "VILLAGE_EXTENSIONS_THINKING_REFINER_MODULE"
-        ) or config.get("EXTENSIONS.THINKING_REFINER_MODULE")
+        thinking_refiner_module = os.environ.get("VILLAGE_EXTENSIONS_THINKING_REFINER_MODULE") or config.get(
+            "EXTENSIONS.THINKING_REFINER_MODULE"
+        )
 
-        chat_context_module = os.environ.get(
-            "VILLAGE_EXTENSIONS_CHAT_CONTEXT_MODULE"
-        ) or config.get("EXTENSIONS.CHAT_CONTEXT_MODULE")
+        chat_context_module = os.environ.get("VILLAGE_EXTENSIONS_CHAT_CONTEXT_MODULE") or config.get(
+            "EXTENSIONS.CHAT_CONTEXT_MODULE"
+        )
 
-        beads_integrator_module = os.environ.get(
-            "VILLAGE_EXTENSIONS_BEADS_INTEGRATOR_MODULE"
-        ) or config.get("EXTENSIONS.BEADS_INTEGRATOR_MODULE")
+        beads_integrator_module = os.environ.get("VILLAGE_EXTENSIONS_BEADS_INTEGRATOR_MODULE") or config.get(
+            "EXTENSIONS.BEADS_INTEGRATOR_MODULE"
+        )
 
-        server_discovery_module = os.environ.get(
-            "VILLAGE_EXTENSIONS_SERVER_DISCOVERY_MODULE"
-        ) or config.get("EXTENSIONS.SERVER_DISCOVERY_MODULE")
+        server_discovery_module = os.environ.get("VILLAGE_EXTENSIONS_SERVER_DISCOVERY_MODULE") or config.get(
+            "EXTENSIONS.SERVER_DISCOVERY_MODULE"
+        )
 
         llm_adapter_module = os.environ.get("VILLAGE_EXTENSIONS_LLM_ADAPTER_MODULE") or config.get(
             "EXTENSIONS.LLM_ADAPTER_MODULE"
@@ -378,6 +371,67 @@ class TaskBreakdownConfig:
 
 
 @dataclass
+class ACPAgentCapability:
+    """ACP agent capability definition."""
+
+    name: str
+    description: str = ""
+    parameters: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class ACPConfig:
+    """ACP server configuration."""
+
+    enabled: bool = False
+    server_host: str = "localhost"
+    server_port: int = 9876
+    protocol_version: int = 1
+    capabilities: list[ACPAgentCapability] = field(default_factory=list)
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "ACPConfig":
+        """Load ACP config from environment variables and config file."""
+        enabled_env = os.environ.get("VILLAGE_ACP_ENABLED", "").lower()
+        enabled_config = config.get("ACP.ENABLED", "").lower() or config.get("acp.enabled", "").lower()
+        enabled = enabled_env or enabled_config
+        acp_enabled = enabled in ("1", "true", "yes")
+
+        host_env = os.environ.get("VILLAGE_ACP_HOST")
+        host_config = config.get("ACP.HOST") or config.get("acp.host")
+        server_host = host_env or host_config or "localhost"
+
+        port_str = os.environ.get("VILLAGE_ACP_PORT") or config.get("ACP.PORT") or config.get("acp.port")
+        server_port = int(port_str) if port_str else 9876
+
+        version_str = os.environ.get("VILLAGE_ACP_VERSION") or config.get("ACP.VERSION") or config.get("acp.version")
+        protocol_version = int(version_str) if version_str else 1
+
+        # Parse capabilities from config
+        capabilities: list[ACPAgentCapability] = []
+        for key, value in config.items():
+            # Support both ACP.CAPABILITY_<name> and acp.capability_<name>
+            if key.startswith("ACP.CAPABILITY_") or key.startswith("acp.capability_"):
+                # Format: ACP.CAPABILITY_<name> = description
+                prefix = "ACP.CAPABILITY_" if key.startswith("ACP.CAPABILITY_") else "acp.capability_"
+                cap_name = key[len(prefix) :].lower()
+                capabilities.append(
+                    ACPAgentCapability(
+                        name=cap_name,
+                        description=value,
+                    )
+                )
+
+        return cls(
+            enabled=acp_enabled,
+            server_host=server_host,
+            server_port=server_port,
+            protocol_version=protocol_version,
+            capabilities=capabilities,
+        )
+
+
+@dataclass
 class Config:
     """Village configuration."""
 
@@ -403,6 +457,7 @@ class Config:
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
     extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
     task_breakdown: TaskBreakdownConfig = field(default_factory=TaskBreakdownConfig)
+    acp: ACPConfig = field(default_factory=ACPConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -441,6 +496,43 @@ def _parse_ppc_traits(value: str) -> list[str]:
     if not value:
         return []
     return [t.strip().lower() for t in value.split(",") if t.strip()]
+
+
+def _validate_acp_agent(agent_name: str, agent_config: AgentConfig) -> list[str]:
+    """
+    Validate ACP agent configuration.
+
+    Args:
+        agent_name: Agent name
+        agent_config: Agent configuration
+
+    Returns:
+        List of validation errors (empty if valid)
+    """
+    errors = []
+
+    if agent_config.type == "acp":
+        # ACP agents require acp_command
+        if not agent_config.acp_command:
+            errors.append(f"ACP agent '{agent_name}' missing required field 'acp_command'")
+
+        # Validate command is executable
+        if agent_config.acp_command:
+            cmd_parts = agent_config.acp_command.split()
+            if cmd_parts:
+                executable = cmd_parts[0]
+                # Check if it's a path or command name
+                if "/" not in executable:
+                    # It's a command name - we can't validate without running it
+                    pass
+                else:
+                    # It's a path - validate it exists
+                    from pathlib import Path
+
+                    if not Path(executable).exists():
+                        errors.append(f"ACP agent '{agent_name}' command executable not found: {executable}")
+
+    return errors
 
 
 def _parse_config_file(config_path: Path) -> dict[str, str]:
@@ -510,42 +602,28 @@ def get_config() -> Config:
         try:
             max_workers = int(max_workers_str)
             if max_workers < 1:
-                logger.warning(
-                    f"VILLAGE_MAX_WORKERS must be >=1, using default: {DEFAULT_MAX_WORKERS}"
-                )
+                logger.warning(f"VILLAGE_MAX_WORKERS must be >=1, using default: {DEFAULT_MAX_WORKERS}")
                 max_workers = DEFAULT_MAX_WORKERS
         except ValueError:
-            logger.warning(
-                f"Invalid VILLAGE_MAX_WORKERS value, using default: {DEFAULT_MAX_WORKERS}"
-            )
+            logger.warning(f"Invalid VILLAGE_MAX_WORKERS value, using default: {DEFAULT_MAX_WORKERS}")
 
     # Override queue_ttl_minutes from env var or config file
-    queue_ttl_str = os.environ.get("VILLAGE_QUEUE_TTL_MINUTES") or file_config.get(
-        "QUEUE_TTL_MINUTES"
-    )
+    queue_ttl_str = os.environ.get("VILLAGE_QUEUE_TTL_MINUTES") or file_config.get("QUEUE_TTL_MINUTES")
     queue_ttl_minutes = DEFAULT_QUEUE_TTL_MINUTES
     if queue_ttl_str:
         try:
             queue_ttl_minutes = int(queue_ttl_str)
             if queue_ttl_minutes < 0:
-                logger.warning(
-                    f"VILLAGE_QUEUE_TTL_MINUTES must be >=0, "
-                    f"using default: {DEFAULT_QUEUE_TTL_MINUTES}"
-                )
+                logger.warning(f"VILLAGE_QUEUE_TTL_MINUTES must be >=0, using default: {DEFAULT_QUEUE_TTL_MINUTES}")
                 queue_ttl_minutes = DEFAULT_QUEUE_TTL_MINUTES
         except ValueError:
-            logger.warning(
-                f"Invalid VILLAGE_QUEUE_TTL_MINUTES value, "
-                f"using default: {DEFAULT_QUEUE_TTL_MINUTES}"
-            )
+            logger.warning(f"Invalid VILLAGE_QUEUE_TTL_MINUTES value, using default: {DEFAULT_QUEUE_TTL_MINUTES}")
 
     # Override scm_kind from env var or config file
     scm_kind = os.environ.get("VILLAGE_SCM") or file_config.get("SCM_KIND") or DEFAULT_SCM_KIND
 
     # Override default_agent from env var or config file
-    default_agent = (
-        os.environ.get("VILLAGE_DEFAULT_AGENT") or file_config.get("DEFAULT_AGENT") or DEFAULT_AGENT
-    )
+    default_agent = os.environ.get("VILLAGE_DEFAULT_AGENT") or file_config.get("DEFAULT_AGENT") or DEFAULT_AGENT
 
     # Parse LLM configuration
     llm_config = LLMConfig.from_env_and_config(file_config)
@@ -577,6 +655,9 @@ def get_config() -> Config:
     # Parse task breakdown configuration
     task_breakdown_config = TaskBreakdownConfig.from_env_and_config(file_config)
 
+    # Parse ACP configuration
+    acp_config = ACPConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -607,6 +688,25 @@ def get_config() -> Config:
                 agents[agent_name].llm_provider = value.lower() if value else None
             elif field_name == "llm_model":
                 agents[agent_name].llm_model = value if value else None
+            elif field_name == "type":
+                agents[agent_name].type = value.lower() if value else "opencode"
+            elif field_name == "acp_command":
+                agents[agent_name].acp_command = value
+            elif field_name == "acp_capabilities":
+                # Parse comma-separated capabilities
+                agents[agent_name].acp_capabilities = [cap.strip().lower() for cap in value.split(",") if cap.strip()]
+
+    # Validate ACP agents
+    validation_errors = []
+    for agent_name, agent_config in agents.items():
+        errors = _validate_acp_agent(agent_name, agent_config)
+        validation_errors.extend(errors)
+
+    if validation_errors:
+        error_msg = "Agent configuration errors:\n" + "\n".join(f"  - {e}" for e in validation_errors)
+        logger.error(error_msg)
+        # Don't raise - just warn. Allow partial configs for development.
+        # raise ValueError(error_msg)
 
     logger.debug(f"Git root: {git_root}")
     logger.debug(f"Village dir: {village_dir}")
@@ -646,4 +746,5 @@ def get_config() -> Config:
         notifications=notifications_config,
         extensions=extensions_config,
         task_breakdown=task_breakdown_config,
+        acp=acp_config,
     )

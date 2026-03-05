@@ -736,26 +736,29 @@ class ACPBridge:
         elif cmd in ("queue", "resume", "cleanup", "claim", "release"):
             notification_type = "lifecycle"
 
+        # Build update dict
+        update: dict[str, Any] = {
+            "type": notification_type,
+            "cmd": cmd,
+            "ts": event.ts,
+        }
+
+        # Add optional fields
+        if event.result:
+            update["result"] = event.result
+        if event.error:
+            update["error"] = event.error
+        if event.pane:
+            update["pane"] = event.pane
+
         # Build notification
         notification = {
             "method": "session/update",
             "params": {
                 "sessionId": event.task_id or "",
-                "update": {
-                    "type": notification_type,
-                    "cmd": cmd,
-                    "ts": event.ts,
-                },
+                "update": update,
             },
         }
-
-        # Add optional fields
-        if event.result:
-            notification["params"]["update"]["result"] = event.result
-        if event.error:
-            notification["params"]["update"]["error"] = event.error
-        if event.pane:
-            notification["params"]["update"]["pane"] = event.pane
 
         return notification
 
