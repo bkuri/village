@@ -14,6 +14,7 @@ Modules:
 """
 
 from village.acp.agent import VillageACPAgent, run_village_agent
+from village.acp.bridge import ACPBridge
 from village.acp.external_client import VillageACPClient, spawn_acp_agent
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "run_village_agent",
     "VillageACPClient",
     "spawn_acp_agent",
+    "ACPBridge",
 ]
