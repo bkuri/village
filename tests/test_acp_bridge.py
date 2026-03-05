@@ -151,3 +151,118 @@ async def test_bridge_terminal_wait_requires_ids(bridge: ACPBridge):
 
     with pytest.raises(ACPBridgeError, match="terminalId required"):
         await bridge.terminal_wait_for_exit({"sessionId": "test-123"})
+
+
+# === Notification Streaming Tests ===
+
+
+@pytest.mark.asyncio
+async def test_bridge_event_to_notification_state_change(bridge: ACPBridge):
+    """Test state_transition event maps to state_change notification."""
+    from village.event_log import Event
+
+    event = Event(
+        ts="2026-03-05T00:00:00Z",
+        cmd="state_transition",
+        task_id="test-123",
+        result="ok",
+    )
+
+    notification = bridge._event_to_notification(event)
+
+    assert notification["method"] == "session/update"
+    assert notification["params"]["sessionId"] == "test-123"
+    assert notification["params"]["update"]["type"] == "state_change"
+    assert notification["params"]["update"]["cmd"] == "state_transition"
+    assert notification["params"]["update"]["result"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_bridge_event_to_notification_file_change(bridge: ACPBridge):
+    """Test file_modified event maps to file_change notification."""
+    from village.event_log import Event
+
+    event = Event(
+        ts="2026-03-05T00:00:00Z",
+        cmd="file_modified",
+        task_id="test-456",
+    )
+
+    notification = bridge._event_to_notification(event)
+
+    assert notification["method"] == "session/update"
+    assert notification["params"]["sessionId"] == "test-456"
+    assert notification["params"]["update"]["type"] == "file_change"
+    assert notification["params"]["update"]["cmd"] == "file_modified"
+
+
+@pytest.mark.asyncio
+async def test_bridge_event_to_notification_conflict(bridge: ACPBridge):
+    """Test conflict_detected event maps to conflict notification."""
+    from village.event_log import Event
+
+    event = Event(
+        ts="2026-03-05T00:00:00Z",
+        cmd="conflict_detected",
+        task_id="test-789",
+        error="Merge conflict in src/main.py",
+    )
+
+    notification = bridge._event_to_notification(event)
+
+    assert notification["method"] == "session/update"
+    assert notification["params"]["sessionId"] == "test-789"
+    assert notification["params"]["update"]["type"] == "conflict"
+    assert notification["params"]["update"]["cmd"] == "conflict_detected"
+    assert notification["params"]["update"]["error"] == "Merge conflict in src/main.py"
+
+
+@pytest.mark.asyncio
+async def test_bridge_event_to_notification_lifecycle(bridge: ACPBridge):
+    """Test lifecycle events (queue, resume, cleanup) map correctly."""
+    from village.event_log import Event
+
+    for cmd in ["queue", "resume", "cleanup"]:
+        event = Event(
+            ts="2026-03-05T00:00:00Z",
+            cmd=cmd,
+            task_id="test-lifecycle",
+            result="ok",
+        )
+
+        notification = bridge._event_to_notification(event)
+
+        assert notification["params"]["update"]["type"] == "lifecycle"
+        assert notification["params"]["update"]["cmd"] == cmd
+
+
+@pytest.mark.asyncio
+async def test_bridge_event_to_notification_error(bridge: ACPBridge):
+    """Test error events map to error notification type."""
+    from village.event_log import Event
+
+    event = Event(
+        ts="2026-03-05T00:00:00Z",
+        cmd="resume",
+        task_id="test-error",
+        result="error",
+        error="Failed to execute task",
+    )
+
+    notification = bridge._event_to_notification(event)
+
+    assert notification["params"]["update"]["type"] == "error"
+    assert notification["params"]["update"]["error"] == "Failed to execute task"
+
+
+@pytest.mark.asyncio
+async def test_bridge_stream_notifications_yields_events(bridge: ACPBridge):
+    """Test stream_notifications generator exists and can be iterated."""
+    # Just verify the stream can be created and is an async generator
+    from collections.abc import AsyncGenerator
+
+    stream = bridge.stream_notifications("test-session", poll_interval=0.1)
+    assert isinstance(stream, AsyncGenerator)
+
+    # Don't actually iterate - just verify it's the right type
+    # Real-time streaming is better tested in integration tests

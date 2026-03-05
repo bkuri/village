@@ -8,6 +8,7 @@ This module provides the critical integration layer that:
 """
 
 import logging
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -632,6 +633,63 @@ class ACPBridge:
 
     # === Notification Streaming ===
 
+    async def stream_notifications(
+        self,
+        session_id: str,
+        poll_interval: float = 0.5,
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        """Stream notifications for session in real-time.
+
+        Async generator that watches for new events and yields
+        ACP notifications as they occur.
+
+        Args:
+            session_id: Session ID to stream notifications for
+            poll_interval: How often to check for new events (seconds)
+
+        Yields:
+            ACP session/update notifications
+        """
+        import asyncio
+
+        last_event_ts = ""
+
+        logger.info(f"Starting notification stream for session {session_id}")
+
+        while True:
+            try:
+                # Read all events
+                all_events = read_events(self.config.village_dir)
+
+                # Filter for this session
+                session_events = [e for e in all_events if e.task_id == session_id]
+
+                # Find new events since last check
+                new_events = []
+                if last_event_ts:
+                    for event in session_events:
+                        if event.ts > last_event_ts:
+                            new_events.append(event)
+                else:
+                    # First run - get most recent event timestamp
+                    if session_events:
+                        last_event_ts = max(e.ts for e in session_events)
+
+                # Convert new events to notifications and yield
+                for event in new_events:
+                    notification = self._event_to_notification(event)
+                    last_event_ts = event.ts
+                    logger.debug(f"Streaming notification: {event.cmd} for {session_id}")
+                    yield notification
+
+                # Wait before next check
+                await asyncio.sleep(poll_interval)
+
+            except Exception as e:
+                logger.error(f"Error streaming notifications: {e}")
+                # Continue streaming despite errors
+                await asyncio.sleep(poll_interval)
+
     def _collect_recent_events(self, task_id: str, limit: int = 100) -> list[Event]:
         """Collect recent events for task.
 
@@ -649,51 +707,57 @@ class ACPBridge:
     def _event_to_notification(self, event: Event) -> dict[str, Any]:
         """Convert Village event to ACP notification.
 
+        Maps Village event types to ACP notification types:
+        - state_transition → state_change
+        - file_modified → file_change
+        - conflict_detected → conflict
+        - queue/resume/cleanup → lifecycle
+        - error → error
+
         Args:
             event: Village event
 
         Returns:
             ACP session/update notification
         """
-        # Map Village events to ACP notifications
-        # Note: Event doesn't have context attribute, we infer from cmd
-        if event.cmd == "state_transition":
-            # Parse from event data if available
-            return {
-                "method": "session/update",
-                "params": {
-                    "sessionId": event.task_id or "",
-                    "update": {
-                        "type": "state_change",
-                        "cmd": event.cmd,
-                        "result": event.result,
-                    },
+        # Map event commands to notification types
+        cmd = event.cmd
+        notification_type = "event"  # default
+
+        # Check error first (highest priority)
+        if event.result == "error":
+            notification_type = "error"
+        elif cmd == "state_transition":
+            notification_type = "state_change"
+        elif cmd in ("file_modified", "file_created", "file_deleted"):
+            notification_type = "file_change"
+        elif cmd in ("conflict_detected", "merge_conflict"):
+            notification_type = "conflict"
+        elif cmd in ("queue", "resume", "cleanup", "claim", "release"):
+            notification_type = "lifecycle"
+
+        # Build notification
+        notification = {
+            "method": "session/update",
+            "params": {
+                "sessionId": event.task_id or "",
+                "update": {
+                    "type": notification_type,
+                    "cmd": cmd,
+                    "ts": event.ts,
                 },
-            }
-        elif event.cmd == "file_modified":
-            return {
-                "method": "session/update",
-                "params": {
-                    "sessionId": event.task_id or "",
-                    "update": {
-                        "type": "file_change",
-                        "cmd": event.cmd,
-                    },
-                },
-            }
-        else:
-            # Generic event notification
-            return {
-                "method": "session/update",
-                "params": {
-                    "sessionId": event.task_id or "",
-                    "update": {
-                        "type": "event",
-                        "cmd": event.cmd,
-                        "result": event.result,
-                    },
-                },
-            }
+            },
+        }
+
+        # Add optional fields
+        if event.result:
+            notification["params"]["update"]["result"] = event.result
+        if event.error:
+            notification["params"]["update"]["error"] = event.error
+        if event.pane:
+            notification["params"]["update"]["pane"] = event.pane
+
+        return notification
 
     # === Helper Methods ===
 
