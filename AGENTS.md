@@ -105,6 +105,46 @@ uv run pytest --cov=village                # With coverage
 - Use descriptive test names
 - Keep tests focused and independent
 
+### ACP Testing
+- **Server tests**: `tests/test_acp_server.py` - Village as ACP agent
+- **Client tests**: `tests/test_acp_client.py` - Village as ACP client
+- **Bridge tests**: `tests/test_acp_bridge.py` - Protocol translation
+- **Integration tests**: `tests/test_acp_integration.py` - End-to-end flows
+- **Fixtures**: `tests/fixtures/acp_fixtures.py` - Mock agents and clients
+
+**Test commands:**
+```bash
+# Test ACP server
+pytest tests/test_acp_server.py -v
+
+# Test ACP client
+pytest tests/test_acp_client.py -v
+
+# Test bridge
+pytest tests/test_acp_bridge.py -v
+
+# Test integration
+pytest tests/test_acp_integration.py -v
+
+# Test all ACP
+pytest tests/ -k acp -v
+```
+
+**Manual testing:**
+```bash
+# Start ACP server
+village acp --server start
+
+# Test agent connection
+village acp --client test claude
+
+# Spawn agent
+village acp --client spawn claude
+
+# Check status
+village acp --server status
+```
+
 ## Project Structure
 
 ```
@@ -151,6 +191,27 @@ tests/
 - Run as subprocess in tmux pane
 - Inject contract via stdin or file
 - Worker = one tmux pane + one OpenCode instance
+
+### ACP Integration
+- **Server mode**: Village exposes ACP interface for editors (Zed, JetBrains)
+- **Client mode**: Village spawns external ACP agents (Claude Code, Gemini CLI)
+- **Bridge**: `village/acp/bridge.py` translates ACP ↔ Village operations
+- **Configuration**: `[acp]` section in `.village/config` and `type=acp` agents
+- **Testing**: Use `village acp --client test <agent-name>` to verify connections
+- **Commands**: See `village acp --help` for server/client operations
+
+**CLI Commands:**
+```bash
+# Server operations
+village acp --server start [--host HOST] [--port PORT]
+village acp --server stop
+village acp --server status
+
+# Client operations
+village acp --client list
+village acp --client spawn <agent-name>
+village acp --client test <agent-name>
+```
 
 ## Constraints
 

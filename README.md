@@ -123,6 +123,10 @@ Village runs as a **local service with auditable source code**:
 - **Observability**: Real-time dashboard, metrics export, event queries
 - **Safety guarantees**: Conflict detection, automatic rollback, resource quotas
 - **Task decomposition**: Complex tasks automatically broken into subtasks using ST → AoT Light strategy (Sequential Thinking analysis + Atom of Thoughts atomization)
+- **ACP integration**: Works with Agent Client Protocol for editor integration and external agents
+  - Use Village from Zed, JetBrains, and other ACP editors
+  - Orchestrate Claude Code, Gemini CLI, and other ACP agents
+  - Real-time notifications and streaming updates
 - **Extensibility framework**: 7 extension points for domain customization without forking
   - Custom readiness engines (replace Beads)
   - Custom SCM backends (Git, Jujutsu, or your own)
@@ -196,6 +200,75 @@ It does not predict intent.
 It does not require belief.
 
 It simply coordinates reality.
+
+---
+
+## ACP Integration
+
+Village supports **Agent Client Protocol (ACP)** for editor integration and external agent orchestration.
+
+### What is ACP?
+
+ACP is an open protocol for standardized communication between AI agents and clients (editors, IDEs, orchestrators). Village's hybrid architecture adds ACP compatibility without changing Village core.
+
+### Two Modes
+
+**1. Village as ACP Server** - Use Village from editors
+```bash
+# Start ACP server
+village acp --server start
+
+# Configure your editor to connect to localhost:9876
+```
+
+**2. Village as ACP Client** - Orchestrate external agents
+```bash
+# Configure external agent
+cat >> .village/config <<EOF
+[agent.claude]
+type = acp
+acp_command = claude-code
+acp_capabilities = filesystem,terminal
+EOF
+
+# Spawn external agent
+village acp --client spawn claude
+```
+
+### Supported Editors
+
+- ✅ **Zed Editor** - Native ACP support
+- ✅ **JetBrains IDEs** - Via ACP plugin
+- 🔄 **VS Code** - Planned (community plugin needed)
+
+### Supported External Agents
+
+- ✅ **Claude Code** - Anthropic's CLI
+- ✅ **Gemini CLI** - Google's CLI
+- ✅ **Custom agents** - Any ACP-compliant agent
+
+### Quick Start
+
+```bash
+# Enable ACP in config
+cat >> .village/config <<EOF
+[acp]
+enabled = true
+EOF
+
+# Start ACP server
+village acp --server start
+
+# List available agents
+village acp --client list
+```
+
+### Documentation
+
+- **[ACP Integration Guide](docs/ACP_INTEGRATION.md)** - Architecture and overview
+- **[ACP Configuration](docs/ACP_CONFIGURATION.md)** - Complete config reference
+- **[ACP Examples](docs/ACP_EXAMPLES.md)** - Real-world usage examples
+- **[ACP API Reference](docs/ACP_API_REFERENCE.md)** - Detailed API docs
 
 ---
 
