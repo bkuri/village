@@ -185,6 +185,10 @@ tests/
    
    Default mapping from scope: fix→patch, feature→minor, others→none.
    Override with explicit label if actual impact differs.
+
+   **ENFORCEMENT**: `village release` will BLOCK if any closed task has no bump label.
+   Every task — including docs-only changes — MUST have a bump label before release.
+   Use `bump:none` for tasks with no version impact. Use `--force` only in emergencies.
 5. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase

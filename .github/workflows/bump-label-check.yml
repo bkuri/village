@@ -1,0 +1,50 @@
+name: Bump Label Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches:
+      - main
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-bump-label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check bump label
+        shell: bash
+        env:
+          # Pass the labels JSON from the event payload into the environment.
+          # For push events this will be empty; the step handles that case.
+          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # For push-to-main events the label gate does not apply — just pass.
+          if [[ "$EVENT_NAME" == "push" ]]; then
+            echo "Push to main detected — bump label check skipped."
+            exit 0
+          fi
+
+          # Extract every label name that starts with "bump:" from the PR payload.
+          BUMP_LABEL=$(echo "$PR_LABELS_JSON" \
+            | jq -r '.[] | .name | select(startswith("bump:"))' \
+            | head -n1)
+
+          if [[ -z "$BUMP_LABEL" ]]; then
+            echo ""
+            echo "Error: This PR requires a bump label."
+            echo "Add one of: bump:major, bump:minor, bump:patch, bump:none"
+            echo ""
+            echo "bump:major  - Breaking changes, API removal"
+            echo "bump:minor  - New features, backwards-compatible"
+            echo "bump:patch  - Bug fixes, small improvements"
+            echo "bump:none   - Docs, tests, internal refactors"
+            exit 1
+          fi
+
+          echo "Bump label found: $BUMP_LABEL"

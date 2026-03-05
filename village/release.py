@@ -2,6 +2,8 @@
 
 import json
 import logging
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -349,3 +351,198 @@ def _format_time_ago(dt: datetime) -> str:
         mins = seconds // 60
         return f"{mins}m ago"
     return "just now"
+
+
+def compute_next_version(bump: BumpType) -> str:
+    """Compute next version string by applying bump to latest git tag.
+
+    Runs ``git describe --tags --abbrev=0`` to find the current version tag,
+    strips the leading "v", parses major.minor.patch and applies the bump.
+
+    Returns the new version WITHOUT a "v" prefix (e.g. "1.2.0").
+
+    Raises:
+        ValueError: If git describe fails for an unexpected reason.
+    """
+    result = subprocess.run(
+        ["git", "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        # No tags at all — start from scratch
+        if "No names found" in stderr or "No tags can describe" in stderr or "fatal: No names" in stderr:
+            defaults: dict[BumpType, str] = {
+                "major": "1.0.0",
+                "minor": "0.1.0",
+                "patch": "0.0.1",
+                "none": "0.0.0",
+            }
+            return defaults[bump]
+        # Some other git error
+        raise ValueError(f"git describe failed (rc={result.returncode}): {stderr}")
+
+    tag = result.stdout.strip().lstrip("v")
+    parts = tag.split(".")
+    if len(parts) != 3:
+        raise ValueError(f"Cannot parse version from tag '{result.stdout.strip()}': expected vMAJOR.MINOR.PATCH")
+
+    try:
+        major, minor, patch = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError as exc:
+        raise ValueError(f"Non-integer version component in tag '{result.stdout.strip()}': {exc}") from exc
+
+    if bump == "major":
+        return f"{major + 1}.0.0"
+    if bump == "minor":
+        return f"{major}.{minor + 1}.0"
+    if bump == "patch":
+        return f"{major}.{minor}.{patch + 1}"
+    # "none" — return current version unchanged
+    return f"{major}.{minor}.{patch}"
+
+
+def get_unlabeled_closed_tasks(since_version: str | None = None) -> list[dict[str, str]]:
+    """Return closed tasks that have no bump:* label.
+
+    Queries Beads for all closed tasks and for each bump category, then
+    returns the difference (tasks with no bump label at all).
+
+    Gracefully returns an empty list if ``bd`` is unavailable or returns
+    non-JSON output.
+
+    Args:
+        since_version: Unused currently; reserved for future filtering.
+    """
+    _ = since_version  # reserved for future use
+
+    def _bd_search(*extra_args: str) -> list[dict[str, str]] | None:
+        """Run bd search with given extra args; return list or None on error."""
+        try:
+            res = subprocess.run(
+                ["bd", "search", "--status", "closed", *extra_args, "--json"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError:
+            return None
+
+        if res.returncode != 0:
+            return []
+
+        try:
+            data = json.loads(res.stdout)
+        except json.JSONDecodeError:
+            return []
+
+        if not isinstance(data, list):
+            return []
+
+        return [
+            {
+                "id": str(item.get("id", "")),
+                "title": str(item.get("title", "")),
+            }
+            for item in data
+            if isinstance(item, dict)
+        ]
+
+    all_closed = _bd_search()
+    if all_closed is None:
+        # bd not available
+        return []
+
+    labeled_ids: set[str] = set()
+    for label in ("bump:major", "bump:minor", "bump:patch", "bump:none"):
+        labeled = _bd_search("--label", label)
+        if labeled is not None:
+            for task in labeled:
+                labeled_ids.add(task["id"])
+
+    return [t for t in all_closed if t["id"] and t["id"] not in labeled_ids]
+
+
+def is_no_op_release(bumps: list[BumpType]) -> bool:
+    """Return True when the aggregate of bumps results in no version change."""
+    return aggregate_bumps(bumps) == "none"
+
+
+def update_changelog(version: str, pending: list[PendingBump]) -> None:
+    """Insert a new changelog section for *version* above existing versioned sections.
+
+    Locates CHANGELOG.md relative to the git repository root.  The new
+    section is inserted after the last ``## [Unreleased]`` block (i.e. just
+    before the first ``## [X.Y.Z]`` line).  Tasks with bump type "none" are
+    excluded from the entry.
+
+    Falls back to appending at the end of the file if the expected structure
+    is not found, or creates the file if it doesn't exist.
+
+    The write is performed atomically (temp-file + rename).
+    """
+    # Find git root
+    git_root_result = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if git_root_result.returncode == 0:
+        git_root = Path(git_root_result.stdout.strip())
+    else:
+        git_root = Path.cwd()
+
+    changelog_path = git_root / "CHANGELOG.md"
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Build the new section
+    section_lines = [f"## [{version}] - {today}", ""]
+    non_trivial = [p for p in pending if p.bump != "none"]
+    if non_trivial:
+        section_lines.append("### Changed")
+        for p in non_trivial:
+            title = p.title or p.task_id
+            section_lines.append(f"- {title} (`{p.task_id}`)")
+        section_lines.append("")
+
+    new_section = "\n".join(section_lines) + "\n"
+
+    if not changelog_path.exists():
+        changelog_path.write_text(new_section, encoding="utf-8")
+        logger.info(f"Created {changelog_path} with version {version}")
+        return
+
+    content = changelog_path.read_text(encoding="utf-8")
+    lines = content.splitlines(keepends=True)
+
+    # Find the first versioned section header (## [X.Y.Z]) — insert before it
+    insert_at: int | None = None
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## [") and not stripped.startswith("## [Unreleased"):
+            insert_at = i
+            break
+
+    if insert_at is not None:
+        lines.insert(insert_at, new_section + "\n")
+    else:
+        # Append at the end
+        if lines and not lines[-1].endswith("\n"):
+            lines.append("\n")
+        lines.append("\n" + new_section)
+
+    new_content = "".join(lines)
+
+    # Atomic write via temp file + rename
+    dir_ = changelog_path.parent
+    with tempfile.NamedTemporaryFile("w", dir=dir_, delete=False, suffix=".tmp", encoding="utf-8") as tmp:
+        tmp.write(new_content)
+        tmp_path = Path(tmp.name)
+
+    tmp_path.replace(changelog_path)
+    logger.info(f"Updated {changelog_path} with version {version}")
