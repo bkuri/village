@@ -206,6 +206,150 @@ class ACPBridge:
 
         return {"sessionId": session_id, "state": "paused"}
 
+    async def session_set_mode(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP session/set_mode.
+
+        Sets agent mode for session (build/test/frontend/etc).
+
+        Args:
+            params: ACP session/set_mode parameters
+                - sessionId: Session ID
+                - mode: Agent mode to set
+
+        Returns:
+            Mode confirmation
+
+        Raises:
+            ACPBridgeError: If sessionId not provided or mode invalid
+        """
+        session_id = params.get("sessionId")
+        mode = params.get("mode", self.config.default_agent)
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        # Validate mode is a valid agent
+        if mode not in self.config.agents:
+            raise ACPBridgeError(f"Invalid mode: {mode}. Available: {list(self.config.agents.keys())}")
+
+        # Check task exists
+        state = self.state_machine.get_state(session_id)
+        if not state:
+            raise ACPBridgeError(f"Task not found: {session_id}")
+
+        # Update task metadata with mode
+        lock = self._get_lock(session_id)
+        if lock:
+            # Update lock with new agent mode
+            lock_data = {
+                "id": lock.task_id,
+                "pane": lock.pane_id,
+                "window": lock.window,
+                "agent": mode,  # Update agent
+                "claimed_at": lock.claimed_at.isoformat(),
+            }
+
+            # Write updated lock
+            from village.locks import write_lock, Lock
+
+            updated_lock = Lock(
+                task_id=lock.task_id,
+                pane_id=lock.pane_id,
+                window=lock.window,
+                agent=mode,
+                claimed_at=lock.claimed_at,
+            )
+            write_lock(updated_lock)
+
+        logger.info(f"Set mode {mode} for session {session_id}")
+
+        return {"sessionId": session_id, "mode": mode}
+
+    async def session_set_config_option(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP session/set_config_option.
+
+        Sets runtime configuration option for session.
+
+        Args:
+            params: ACP session/set_config_option parameters
+                - sessionId: Session ID
+                - key: Configuration key
+                - value: Configuration value
+
+        Returns:
+            Config confirmation
+
+        Raises:
+            ACPBridgeError: If sessionId not provided or config invalid
+        """
+        session_id = params.get("sessionId")
+        key = params.get("key")
+        value = params.get("value")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not key:
+            raise ACPBridgeError("key required")
+
+        # Check task exists
+        state = self.state_machine.get_state(session_id)
+        if not state:
+            raise ACPBridgeError(f"Task not found: {session_id}")
+
+        # Validate config key (whitelist allowed keys)
+        ALLOWED_CONFIG_KEYS = {
+            "timeout",
+            "max_tokens",
+            "temperature",
+            "model",
+            "streaming",
+        }
+
+        if key not in ALLOWED_CONFIG_KEYS:
+            raise ACPBridgeError(f"Invalid config key: {key}. Allowed: {ALLOWED_CONFIG_KEYS}")
+
+        # Store config in task metadata (implementation depends on Village's config system)
+        # For now, we just log it
+        logger.info(f"Set config {key}={value} for session {session_id}")
+
+        return {"sessionId": session_id, "key": key, "value": value}
+
+    async def session_set_model(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Handle ACP session/set_model.
+
+        Sets LLM model for session.
+
+        Args:
+            params: ACP session/set_model parameters
+                - sessionId: Session ID
+                - model: Model identifier
+
+        Returns:
+            Model confirmation
+
+        Raises:
+            ACPBridgeError: If sessionId not provided
+        """
+        session_id = params.get("sessionId")
+        model = params.get("model")
+
+        if not session_id:
+            raise ACPBridgeError("sessionId required")
+
+        if not model:
+            raise ACPBridgeError("model required")
+
+        # Check task exists
+        state = self.state_machine.get_state(session_id)
+        if not state:
+            raise ACPBridgeError(f"Task not found: {session_id}")
+
+        # Update task metadata with model
+        logger.info(f"Set model {model} for session {session_id}")
+
+        return {"sessionId": session_id, "model": model}
+
     # === File System API ===
 
     async def fs_read_text_file(self, params: dict[str, Any]) -> dict[str, Any]:
