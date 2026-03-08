@@ -2,3 +2,41 @@
 {"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:08:58Z","event_type":"label_added","id":2,"issue_id":"bd-9fn","new_value":null,"old_value":null}
 {"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:08:58Z","event_type":"label_added","id":3,"issue_id":"bd-9fn","new_value":null,"old_value":null}
 {"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:08:59Z","event_type":"label_added","id":4,"issue_id":"bd-9fn","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:09:24Z","event_type":"created","id":6,"issue_id":"bd-9fn.1","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:09:24Z","event_type":"created","id":7,"issue_id":"bd-9fn.2","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":10,"issue_id":"bd-9fn.1","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":11,"issue_id":"bd-9fn.2","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: permissions","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":12,"issue_id":"bd-9fn.1","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: docs","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":13,"issue_id":"bd-9fn.2","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: security","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":14,"issue_id":"bd-9fn.1","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":15,"issue_id":"bd-9fn.2","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":16,"issue_id":"bd-9fn.1","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":17,"issue_id":"bd-9fn.2","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:09:24Z","event_type":"label_added","id":18,"issue_id":"bd-9fn.1","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:09:42Z","event_type":"created","id":19,"issue_id":"bd-9fn.3","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:09:42Z","event_type":"label_added","id":23,"issue_id":"bd-9fn.3","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: llm","created_at":"2026-03-08T15:09:42Z","event_type":"label_added","id":24,"issue_id":"bd-9fn.3","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:09:42Z","event_type":"label_added","id":25,"issue_id":"bd-9fn.3","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:09:42Z","event_type":"label_added","id":26,"issue_id":"bd-9fn.3","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:10:00Z","event_type":"created","id":27,"issue_id":"bd-9fn.4","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:10:00Z","event_type":"label_added","id":28,"issue_id":"bd-9fn.4","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: cli","created_at":"2026-03-08T15:10:00Z","event_type":"label_added","id":29,"issue_id":"bd-9fn.4","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:10:00Z","event_type":"label_added","id":30,"issue_id":"bd-9fn.4","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:10:00Z","event_type":"label_added","id":31,"issue_id":"bd-9fn.4","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:10:12Z","event_type":"created","id":32,"issue_id":"bd-9fn.5","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:10:12Z","event_type":"label_added","id":34,"issue_id":"bd-9fn.5","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: config","created_at":"2026-03-08T15:10:12Z","event_type":"label_added","id":35,"issue_id":"bd-9fn.5","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:10:12Z","event_type":"label_added","id":36,"issue_id":"bd-9fn.5","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:10:12Z","event_type":"label_added","id":37,"issue_id":"bd-9fn.5","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:10:25Z","event_type":"created","id":38,"issue_id":"bd-9fn.6","new_value":"","old_value":""}
+{"actor":"Bernardo Kuri","comment":"Added label: acp","created_at":"2026-03-08T15:10:25Z","event_type":"label_added","id":39,"issue_id":"bd-9fn.6","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: testing","created_at":"2026-03-08T15:10:25Z","event_type":"label_added","id":40,"issue_id":"bd-9fn.6","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: enhancement","created_at":"2026-03-08T15:10:25Z","event_type":"label_added","id":41,"issue_id":"bd-9fn.6","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":"Added label: refactor","created_at":"2026-03-08T15:10:25Z","event_type":"label_added","id":42,"issue_id":"bd-9fn.6","new_value":null,"old_value":null}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":43,"issue_id":"bd-9fn.1","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":44,"issue_id":"bd-9fn.2","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":45,"issue_id":"bd-9fn.3","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":46,"issue_id":"bd-9fn.4","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":47,"issue_id":"bd-9fn.5","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":48,"issue_id":"bd-9fn.6","new_value":"ACP refactor completed","old_value":""}
+{"actor":"Bernardo Kuri","comment":null,"created_at":"2026-03-08T15:26:44Z","event_type":"closed","id":49,"issue_id":"bd-9fn","new_value":"all steps complete","old_value":""}
