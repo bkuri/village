@@ -48,6 +48,28 @@ class ACPBridge:
         """
         self.config = config or get_config()
         self.state_machine = TaskStateMachine(self.config)
+        self._session_cwds: dict[str, str] = {}
+        self._session_models: dict[str, str] = {}
+
+    def _get_session_config(self, session_id: str) -> Config:
+        """Get config for a session.
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Config for the session's cwd, or default config
+        """
+        from village.config import get_config_for_cwd
+
+        cwd = self._session_cwds.get(session_id)
+        if cwd:
+            try:
+                return get_config_for_cwd(cwd)
+            except Exception as e:
+                logger.warning(f"Failed to load config for cwd {cwd}: {e}, using default")
+                return self.config
+        return self.config
 
     # === Session Lifecycle ===
 
@@ -69,6 +91,10 @@ class ACPBridge:
         if not session_id:
             raise ACPBridgeError("sessionId required")
 
+        cwd = params.get("cwd")
+        if cwd:
+            self._session_cwds[session_id] = cwd
+
         # Initialize Village task state
         result = self.state_machine.initialize_state(
             session_id,
@@ -79,7 +105,7 @@ class ACPBridge:
         if not result.success:
             raise ACPBridgeError(f"Failed to create task: {result.message}")
 
-        logger.info(f"Created ACP session: {session_id}")
+        logger.info(f"Created ACP session: {session_id} (cwd={cwd})")
 
         return {
             "sessionId": session_id,
@@ -104,13 +130,18 @@ class ACPBridge:
         if not session_id:
             raise ACPBridgeError("sessionId required")
 
+        cwd = params.get("cwd")
+        if cwd:
+            self._session_cwds[session_id] = cwd
+
         # Check if task exists
         state = self.state_machine.get_state(session_id)
         if not state:
             raise ACPBridgeError(f"Task not found: {session_id}")
 
         # Get lock info if exists
-        lock = self._get_lock(session_id)
+        config = self._get_session_config(session_id)
+        lock = self._get_lock(session_id, config)
 
         logger.info(f"Loaded ACP session: {session_id} (state={state.value})")
 
@@ -119,6 +150,16 @@ class ACPBridge:
             "state": state.value,
             "lock": self._lock_to_dict(lock) if lock else None,
         }
+
+    def set_session_model(self, session_id: str, model_id: str) -> None:
+        """Store model override for a session.
+
+        Args:
+            session_id: Session ID
+            model_id: Model ID to use for this session
+        """
+        self._session_models[session_id] = model_id
+        logger.info(f"Set model override for session {session_id}: {model_id}")
 
     async def session_prompt(self, params: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         """Handle ACP session/prompt.
@@ -136,10 +177,17 @@ class ACPBridge:
         """
         session_id = params.get("sessionId")
         message = params.get("message", "")
-        agent = params.get("agent", self.config.default_agent)
 
         if not session_id:
             raise ACPBridgeError("sessionId required")
+
+        # Get config for this session's cwd
+        config = self._get_session_config(session_id)
+
+        # Determine agent: check model override first, then params, then default
+        agent = self._get_agent_for_session(session_id, config)
+        if not agent:
+            agent = params.get("agent", config.default_agent)
 
         # Check task exists and is in valid state
         state = self.state_machine.get_state(session_id)
@@ -157,11 +205,11 @@ class ACPBridge:
             resume_result = execute_resume(
                 task_id=session_id,
                 agent=agent,
-                config=self.config,
+                config=config,
             )
 
             # Collect events for notifications
-            events = self._collect_recent_events(session_id)
+            events = self._collect_recent_events(session_id, config=config)
             notifications = [self._event_to_notification(e) for e in events]
 
             # Build response
@@ -690,17 +738,19 @@ class ACPBridge:
                 # Continue streaming despite errors
                 await asyncio.sleep(poll_interval)
 
-    def _collect_recent_events(self, task_id: str, limit: int = 100) -> list[Event]:
+    def _collect_recent_events(self, task_id: str, config: Config | None = None, limit: int = 100) -> list[Event]:
         """Collect recent events for task.
 
         Args:
             task_id: Task ID
+            config: Config to use (uses self.config if not provided)
             limit: Maximum events to collect
 
         Returns:
             List of recent events
         """
-        events = read_events(self.config.village_dir)
+        cfg = config or self.config
+        events = read_events(cfg.village_dir)
         task_events = [e for e in events if e.task_id == task_id]
         return task_events[-limit:] if len(task_events) > limit else task_events
 
@@ -764,16 +814,44 @@ class ACPBridge:
 
     # === Helper Methods ===
 
-    def _get_lock(self, task_id: str) -> Lock | None:
+    def _get_agent_for_session(self, session_id: str, config: Config) -> str | None:
+        """Get agent name for session based on model override.
+
+        If session has a model override, finds agent with matching llm_model.
+        Returns None if no match found, allowing fallback to default.
+
+        Args:
+            session_id: Session ID
+            config: Config for this session
+
+        Returns:
+            Agent name if found, None otherwise
+        """
+        model_id = self._session_models.get(session_id)
+        if not model_id:
+            return None
+
+        # Search for agent with matching llm_model
+        for agent_name, agent_config in config.agents.items():
+            if agent_config.llm_model == model_id:
+                logger.debug(f"Found agent '{agent_name}' matching model '{model_id}'")
+                return agent_name
+
+        logger.warning(f"No agent found with llm_model='{model_id}', using default")
+        return None
+
+    def _get_lock(self, task_id: str, config: Config | None = None) -> Lock | None:
         """Get lock for task.
 
         Args:
             task_id: Task ID
+            config: Config to use (uses self.config if not provided)
 
         Returns:
             Lock if exists, None otherwise
         """
-        lock_path = self.config.locks_dir / f"{task_id}.lock"
+        cfg = config or self.config
+        lock_path = cfg.locks_dir / f"{task_id}.lock"
         return parse_lock(lock_path)
 
     def _lock_to_dict(self, lock: Lock) -> dict[str, Any]:
@@ -824,23 +902,25 @@ class ACPBridge:
 
         return None
 
-    def _is_task_active(self, task_id: str) -> bool:
+    def _is_task_active(self, task_id: str, config: Config | None = None) -> bool:
         """Check if task is active (has lock and pane).
 
         Args:
             task_id: Task ID
+            config: Config to use (uses self.config if not provided)
 
         Returns:
             True if task is active
         """
-        lock = self._get_lock(task_id)
+        cfg = config or self.config
+        lock = self._get_lock(task_id, cfg)
         if not lock:
             return False
 
         # Check if pane exists
         from village.locks import is_active
 
-        return is_active(lock, self.config.tmux_session)
+        return is_active(lock, cfg.tmux_session)
 
     def _format_resume_result(self, result: ResumeResult) -> str:
         """Format resume result for ACP response.

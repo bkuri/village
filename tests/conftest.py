@@ -9,6 +9,12 @@ import pytest
 
 from village.probes.tools import SubprocessError
 
+from tests.fixtures.acp_fixtures import (  # noqa: F401
+    acp_config,
+    sample_acp_events,
+    sample_acp_session,
+)
+
 
 @pytest.fixture
 def mock_git_root(tmp_path: Path):

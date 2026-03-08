@@ -1,14 +1,13 @@
 """State inspection commands: status, locks, events, state."""
 
 import json
-from datetime import datetime, timedelta, timezone
 
 import click
 
 from village.config import get_config
-from village.probes.tmux import session_exists
-from village.status import collect_workers, collect_full_status
 from village.logging import get_logger
+from village.probes.tmux import session_exists
+from village.status import collect_full_status, collect_workers
 
 logger = get_logger(__name__)
 
@@ -118,7 +117,7 @@ def events(
       village events --cmd resume --limit 50
       village events --json
     """
-    from village.event_log import Event, read_events
+    from village.event_log import read_events
 
     config = get_config()
 

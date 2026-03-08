@@ -13,6 +13,7 @@ from acp.interfaces import Agent, Client
 from acp.schema import (
     AllowedOutcome,
     CreateTerminalResponse,
+    DeniedOutcome,
     KillTerminalCommandResponse,
     ReadTextFileResponse,
     ReleaseTerminalResponse,
@@ -20,6 +21,11 @@ from acp.schema import (
     TerminalOutputResponse,
     WaitForTerminalExitResponse,
     WriteTextFileResponse,
+)
+
+from village.acp.permissions import (
+    PermissionDecision,
+    PermissionPolicy,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +40,31 @@ class VillageACPClient(Client):
     - File system operations
     - Terminal operations
     """
+
+    def __init__(self, policy: PermissionPolicy | None = None) -> None:
+        """Initialize client with optional permission policy.
+
+        Args:
+            policy: Permission policy to use (defaults to auto-approve)
+        """
+        self.policy = policy or PermissionPolicy.default_auto_approve()
+
+    def get_operation_name(self, tool_call: Any) -> str:
+        """Extract operation name from tool call.
+
+        Args:
+            tool_call: Tool call object from agent
+
+        Returns:
+            Operation name string (e.g., "filesystem.read")
+        """
+        if hasattr(tool_call, "tool_name"):
+            return str(tool_call.tool_name)
+        if hasattr(tool_call, "name"):
+            return str(tool_call.name)
+        if isinstance(tool_call, dict):
+            return str(tool_call.get("tool_name") or tool_call.get("name") or "unknown")
+        return "unknown"
 
     async def request_permission(
         self,
@@ -53,13 +84,27 @@ class VillageACPClient(Client):
         Returns:
             Permission response
         """
-        # For now, auto-approve (can be configured later)
-        logger.info(f"Auto-approving permission for {tool_call}")
+        operation = self.get_operation_name(tool_call)
+        decision = self.policy.check_permission(operation)
+
+        logger.info(f"Permission request for '{operation}': {decision.value}")
+
+        if decision == PermissionDecision.ALLOW:
+            return RequestPermissionResponse(
+                outcome=AllowedOutcome(
+                    option_id="default",
+                    outcome="selected",
+                ),
+            )
+
+        if decision == PermissionDecision.PROMPT:
+            logger.warning(f"Prompt mode not implemented, denying '{operation}'")
+            return RequestPermissionResponse(
+                outcome=DeniedOutcome(outcome="cancelled"),
+            )
+
         return RequestPermissionResponse(
-            outcome=AllowedOutcome(
-                option_id="default",
-                outcome="selected",
-            ),
+            outcome=DeniedOutcome(outcome="cancelled"),
         )
 
     async def session_update(
@@ -179,12 +224,14 @@ class VillageACPClient(Client):
 async def spawn_acp_agent(
     command: str,
     cwd: Path | None = None,
+    policy: PermissionPolicy | None = None,
 ) -> tuple[Any, Any]:
     """Spawn an ACP-compliant agent.
 
     Args:
         command: Command to spawn agent
         cwd: Working directory
+        policy: Optional permission policy
 
     Returns:
         Tuple of (connection, process)
@@ -193,7 +240,7 @@ async def spawn_acp_agent(
         This returns immediately. The connection is managed via async context manager
         internally by spawn_agent_process.
     """
-    client = VillageACPClient()
+    client = VillageACPClient(policy=policy)
 
     # Parse command
     parts = command.split()
@@ -220,8 +267,8 @@ async def spawn_acp_agent(
     return conn, proc
 
 
-async def test_acp_agent(command: str) -> bool:
-    """Test connection to ACP agent.
+async def verify_acp_agent(command: str) -> bool:
+    """Verify connection to ACP agent.
 
     Args:
         command: Command to spawn agent

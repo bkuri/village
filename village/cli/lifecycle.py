@@ -6,10 +6,10 @@ import click
 
 from village.config import get_config
 from village.event_log import Event, append_event
+from village.logging import get_logger
 from village.probes.tmux import session_exists
 from village.render.text import render_initialization_plan
 from village.runtime import collect_runtime_state, execute_initialization, plan_initialization
-from village.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -74,9 +74,9 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool) -> Non
         click.echo("\nCreated:")
         for item in result.created:
             click.echo(f"  - {item}")
-        click.echo(f"\nNext steps:")
+        click.echo("\nNext steps:")
         click.echo(f"  cd {name}")
-        click.echo(f"  village chat   # create your first task")
+        click.echo("  village chat   # create your first task")
     else:
         click.echo(f"Failed to create project: {result.error}", err=True)
         raise click.ClickException(result.error or "Unknown error")

@@ -388,6 +388,8 @@ class ACPConfig:
     server_port: int = 9876
     protocol_version: int = 1
     capabilities: list[ACPAgentCapability] = field(default_factory=list)
+    permission_mode: str = "auto"  # auto | policy
+    permission_policy_file: str | None = None
 
     @classmethod
     def from_env_and_config(cls, config: dict[str, str]) -> "ACPConfig":
@@ -407,12 +409,9 @@ class ACPConfig:
         version_str = os.environ.get("VILLAGE_ACP_VERSION") or config.get("ACP.VERSION") or config.get("acp.version")
         protocol_version = int(version_str) if version_str else 1
 
-        # Parse capabilities from config
         capabilities: list[ACPAgentCapability] = []
         for key, value in config.items():
-            # Support both ACP.CAPABILITY_<name> and acp.capability_<name>
             if key.startswith("ACP.CAPABILITY_") or key.startswith("acp.capability_"):
-                # Format: ACP.CAPABILITY_<name> = description
                 prefix = "ACP.CAPABILITY_" if key.startswith("ACP.CAPABILITY_") else "acp.capability_"
                 cap_name = key[len(prefix) :].lower()
                 capabilities.append(
@@ -422,12 +421,27 @@ class ACPConfig:
                     )
                 )
 
+        permission_mode = (
+            os.environ.get("VILLAGE_ACP_PERMISSION_MODE")
+            or config.get("ACP.PERMISSION_MODE")
+            or config.get("acp.permission_mode")
+            or "auto"
+        )
+
+        permission_policy_file = (
+            os.environ.get("VILLAGE_ACP_PERMISSION_POLICY_FILE")
+            or config.get("ACP.PERMISSION_POLICY_FILE")
+            or config.get("acp.permission_policy_file")
+        )
+
         return cls(
             enabled=acp_enabled,
             server_host=server_host,
             server_port=server_port,
             protocol_version=protocol_version,
             capabilities=capabilities,
+            permission_mode=permission_mode,
+            permission_policy_file=permission_policy_file,
         )
 
 
@@ -582,6 +596,53 @@ def get_config() -> Config:
     """
     git_root = find_git_root()
 
+    return _build_config(git_root)
+
+
+def get_config_for_cwd(cwd: str | Path) -> Config:
+    """
+    Get configuration for a specific working directory.
+
+    This is used by ACP when the editor provides a cwd for the project.
+
+    Args:
+        cwd: Working directory (should be a git repository)
+
+    Returns:
+        Config object with resolved paths and agent configs
+
+    Raises:
+        RuntimeError: If cwd is not in a git repository
+    """
+    import subprocess
+
+    cwd = Path(cwd).resolve()
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=cwd,
+        )
+        git_root = Path(result.stdout.strip())
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Not a git repository: {cwd}") from e
+
+    return _build_config(git_root)
+
+
+def _build_config(git_root: Path) -> Config:
+    """
+    Build Config object for a given git root.
+
+    Args:
+        git_root: Path to git repository root
+
+    Returns:
+        Config object with resolved paths and agent configs
+    """
     # Override paths from env vars if provided
     village_dir = Path(os.environ.get("VILLAGE_DIR", git_root / ".village"))
     worktrees_dir = Path(

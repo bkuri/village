@@ -787,3 +787,38 @@ async def test_bridge_event_to_notification_all_lifecycle_events(bridge: ACPBrid
         notification = bridge._event_to_notification(event)
 
         assert notification["params"]["update"]["type"] == "lifecycle"
+
+
+def test_bridge_set_session_model(bridge: ACPBridge):
+    """Test storing model override for session."""
+    bridge.set_session_model("test-session", "claude-3.5-sonnet")
+
+    assert bridge._session_models["test-session"] == "claude-3.5-sonnet"
+
+
+def test_bridge_get_agent_for_session_no_override(bridge: ACPBridge):
+    """Test _get_agent_for_session returns None when no override."""
+    result = bridge._get_agent_for_session("test-session", bridge.config)
+
+    assert result is None
+
+
+def test_bridge_get_agent_for_session_with_match(bridge: ACPBridge):
+    """Test _get_agent_for_session finds agent with matching model."""
+    from village.config import AgentConfig
+
+    bridge.config.agents["claude-agent"] = AgentConfig(llm_model="claude-3.5-sonnet")
+    bridge.set_session_model("test-session", "claude-3.5-sonnet")
+
+    result = bridge._get_agent_for_session("test-session", bridge.config)
+
+    assert result == "claude-agent"
+
+
+def test_bridge_get_agent_for_session_no_match(bridge: ACPBridge):
+    """Test _get_agent_for_session returns None when no agent matches."""
+    bridge.set_session_model("test-session", "unknown-model")
+
+    result = bridge._get_agent_for_session("test-session", bridge.config)
+
+    assert result is None

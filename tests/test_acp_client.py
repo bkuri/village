@@ -1,21 +1,33 @@
 """Tests for VillageACPClient - ACP Client implementation."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from village.acp.external_client import (
     VillageACPClient,
     spawn_acp_agent,
-    test_acp_agent,
+    verify_acp_agent,
 )
-from village.config import Config
+from village.acp.permissions import PermissionPolicy
 
 
 @pytest.fixture
 def client():
-    """Create VillageACPClient instance."""
+    """Create VillageACPClient instance with default auto-approve policy."""
     return VillageACPClient()
+
+
+@pytest.fixture
+def client_with_policy():
+    """Create VillageACPClient with custom policy."""
+    policy = PermissionPolicy(
+        allow=["filesystem.read"],
+        deny=["filesystem.write", "terminal.*"],
+        prompt=["network.*"],
+    )
+    return VillageACPClient(policy=policy)
 
 
 @pytest.mark.asyncio
@@ -34,7 +46,6 @@ class TestRequestPermission:
 
     async def test_request_permission_auto_approves(self, client: VillageACPClient):
         """Test request_permission auto-approves by default."""
-        from acp.schema import AllowedOutcome
 
         result = await client.request_permission(
             options={},
@@ -406,11 +417,11 @@ class TestSpawnACPAgent:
 
 
 @pytest.mark.asyncio
-class TestTestACPAgent:
-    """Test test_acp_agent function."""
+class TestVerifyACPAgent:
+    """Test verify_acp_agent function."""
 
-    async def test_test_acp_agent_success(self):
-        """Test test_acp_agent returns True on success."""
+    async def test_verify_acp_agent_success(self):
+        """Test verify_acp_agent returns True on success."""
         with patch("village.acp.external_client.spawn_agent_process") as mock_spawn:
             mock_conn = MagicMock()
             mock_conn.initialize = AsyncMock(return_value={})
@@ -422,24 +433,24 @@ class TestTestACPAgent:
             mock_cm.__aexit__ = AsyncMock(return_value=None)
             mock_spawn.return_value = mock_cm
 
-            result = await test_acp_agent("echo test")
+            result = await verify_acp_agent("echo test")
 
             assert result is True
 
-    async def test_test_acp_agent_failure(self):
-        """Test test_acp_agent returns False on failure."""
+    async def test_verify_acp_agent_failure(self):
+        """Test verify_acp_agent returns False on failure."""
         with patch("village.acp.external_client.spawn_agent_process") as mock_spawn:
             mock_cm = MagicMock()
             mock_cm.__aenter__ = AsyncMock(side_effect=Exception("Connection failed"))
             mock_cm.__aexit__ = AsyncMock(return_value=None)
             mock_spawn.return_value = mock_cm
 
-            result = await test_acp_agent("invalid-command")
+            result = await verify_acp_agent("invalid-command")
 
             assert result is False
 
-    async def test_test_acp_agent_parses_command(self):
-        """Test test_acp_agent parses command string."""
+    async def test_verify_acp_agent_parses_command(self):
+        """Test verify_acp_agent parses command string."""
         with patch("village.acp.external_client.spawn_agent_process") as mock_spawn:
             mock_conn = MagicMock()
             mock_conn.initialize = AsyncMock(return_value={})
@@ -451,15 +462,15 @@ class TestTestACPAgent:
             mock_cm.__aexit__ = AsyncMock(return_value=None)
             mock_spawn.return_value = mock_cm
 
-            await test_acp_agent("claude-code --model claude-3")
+            await verify_acp_agent("claude-code --model claude-3")
 
             call_args = mock_spawn.call_args
             assert call_args[0][1] == "claude-code"
             assert call_args[0][2] == "--model"
             assert call_args[0][3] == "claude-3"
 
-    async def test_test_acp_agent_sends_test_prompt(self):
-        """Test test_acp_agent sends test prompt."""
+    async def test_verify_acp_agent_sends_test_prompt(self):
+        """Test verify_acp_agent sends test prompt."""
         with patch("village.acp.external_client.spawn_agent_process") as mock_spawn:
             mock_conn = MagicMock()
             mock_conn.initialize = AsyncMock(return_value={})
@@ -471,7 +482,7 @@ class TestTestACPAgent:
             mock_cm.__aexit__ = AsyncMock(return_value=None)
             mock_spawn.return_value = mock_cm
 
-            await test_acp_agent("echo test")
+            await verify_acp_agent("echo test")
 
             mock_conn.prompt.assert_called_once()
             prompt_arg = mock_conn.prompt.call_args[1]["prompt"]
@@ -542,3 +553,135 @@ class TestClientSecurityModel:
             session_id="test",
             update={},
         )
+
+
+@pytest.mark.asyncio
+class TestClientWithPolicy:
+    """Test VillageACPClient with custom permission policy."""
+
+    async def test_client_with_policy_uses_policy(self, client_with_policy: VillageACPClient):
+        """Test client respects custom policy."""
+        assert client_with_policy.policy is not None
+        assert client_with_policy.policy.allow == ["filesystem.read"]
+
+    async def test_request_permission_allows_configured(self, client_with_policy: VillageACPClient):
+        """Test permission allowed by policy."""
+        from acp.schema import AllowedOutcome
+
+        tool_call = MagicMock()
+        tool_call.tool_name = "filesystem.read"
+
+        result = await client_with_policy.request_permission(
+            options={},
+            session_id="test-session",
+            tool_call=tool_call,
+        )
+
+        assert isinstance(result.outcome, AllowedOutcome)
+
+    async def test_request_permission_denies_configured(self, client_with_policy: VillageACPClient):
+        """Test permission denied by policy."""
+        from acp.schema import DeniedOutcome
+
+        tool_call = MagicMock()
+        tool_call.tool_name = "filesystem.write"
+
+        result = await client_with_policy.request_permission(
+            options={},
+            session_id="test-session",
+            tool_call=tool_call,
+        )
+
+        assert isinstance(result.outcome, DeniedOutcome)
+
+    async def test_request_permission_prompt_falls_back_to_deny(self, client_with_policy: VillageACPClient):
+        """Test prompt mode falls back to deny (not implemented)."""
+        from acp.schema import DeniedOutcome
+
+        tool_call = MagicMock()
+        tool_call.tool_name = "network.fetch"
+
+        result = await client_with_policy.request_permission(
+            options={},
+            session_id="test-session",
+            tool_call=tool_call,
+        )
+
+        assert isinstance(result.outcome, DeniedOutcome)
+
+
+@pytest.mark.asyncio
+class TestGetOperationName:
+    """Test get_operation_name helper method."""
+
+    async def test_tool_name_attribute(self, client: VillageACPClient):
+        """Test extracting tool_name attribute."""
+        tool_call = MagicMock()
+        tool_call.tool_name = "filesystem.read"
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "filesystem.read"
+
+    async def test_name_attribute(self, client: VillageACPClient):
+        """Test extracting name attribute."""
+        tool_call = MagicMock()
+        delattr(tool_call, "tool_name")
+        tool_call.name = "filesystem.write"
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "filesystem.write"
+
+    async def test_dict_with_tool_name(self, client: VillageACPClient):
+        """Test extracting tool_name from dict."""
+        tool_call = {"tool_name": "terminal.create"}
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "terminal.create"
+
+    async def test_dict_with_name(self, client: VillageACPClient):
+        """Test extracting name from dict."""
+        tool_call = {"name": "network.fetch"}
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "network.fetch"
+
+    async def test_dict_without_name(self, client: VillageACPClient):
+        """Test dict without name fields."""
+        tool_call = {"command": "test"}
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "unknown"
+
+    async def test_unknown_object(self, client: VillageACPClient):
+        """Test unknown object type."""
+        tool_call = object()
+
+        name = client.get_operation_name(tool_call)
+
+        assert name == "unknown"
+
+
+@pytest.mark.asyncio
+class TestSpawnWithPolicy:
+    """Test spawn_acp_agent with permission policy."""
+
+    async def test_spawn_with_policy(self):
+        """Test spawn_acp_agent passes policy to client."""
+        policy = PermissionPolicy(allow=["test.*"])
+
+        with patch("village.acp.external_client.spawn_agent_process") as mock_spawn:
+            mock_cm = AsyncMock()
+            mock_cm.__aenter__ = AsyncMock(return_value=(MagicMock(), MagicMock()))
+            mock_cm.__aexit__ = AsyncMock(return_value=None)
+            mock_spawn.return_value = mock_cm
+
+            await spawn_acp_agent("echo test", policy=policy)
+
+            client_arg = mock_spawn.call_args[0][0]
+            assert isinstance(client_arg, VillageACPClient)
+            assert client_arg.policy == policy

@@ -20,7 +20,7 @@ Complete configuration guide for ACP integration in Village.
 
 ACP configuration is split into two parts:
 
-1. **Server config** - How Village exposes itself via ACP
+1. **Server config** - How Village exposes itself via ACP (stdio)
 2. **Agent config** - External ACP agents Village can spawn
 
 Both are configured in `.village/config` (INI format).
@@ -31,24 +31,28 @@ Both are configured in `.village/config` (INI format).
 
 ### [acp] Section
 
-Controls Village's ACP server behavior.
+Controls Village's ACP agent behavior.
 
 ```ini
 [acp]
 enabled = true
-host = localhost
-port = 9876
-version = 1
+permission_mode = policy
+permission_policy_file = .village/acp-permissions.json
 ```
 
 ### Server Settings
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable ACP server |
-| `host` | string | `localhost` | Server bind address |
-| `port` | integer | `9876` | Server port |
-| `version` | integer | `1` | ACP protocol version |
+| `enabled` | boolean | `false` | Enable ACP agent |
+| `permission_mode` | string | `auto` | Permission mode: `auto`, `ask`, or `policy` |
+| `permission_policy_file` | string | - | Path to permission policy JSON file |
+
+### Permission Modes
+
+- **`auto`** - Auto-approve all operations (development mode)
+- **`ask`** - Prompt user for each permission request
+- **`policy`** - Use policy file for rules-based decisions
 
 ### Capability Definitions
 
@@ -75,9 +79,8 @@ capability_notifications = Stream real-time task updates
 ```ini
 [acp]
 enabled = true
-host = localhost
-port = 9876
-version = 1
+permission_mode = policy
+permission_policy_file = .village/acp-permissions.json
 capability_filesystem = Read and write files in worktrees
 capability_terminal = Execute commands in tmux panes
 capability_notifications = Real-time task state updates
@@ -183,17 +186,16 @@ All ACP settings can be overridden via environment variables.
 | Variable | Config Key | Example |
 |----------|------------|---------|
 | `VILLAGE_ACP_ENABLED` | `acp.enabled` | `true` |
-| `VILLAGE_ACP_HOST` | `acp.host` | `0.0.0.0` |
-| `VILLAGE_ACP_PORT` | `acp.port` | `9999` |
-| `VILLAGE_ACP_VERSION` | `acp.version` | `1` |
+| `VILLAGE_ACP_PERMISSION_MODE` | `acp.permission_mode` | `policy` |
+| `VILLAGE_ACP_PERMISSION_POLICY_FILE` | `acp.permission_policy_file` | `.village/policy.json` |
 
 **Example:**
 ```bash
-# Override port
-VILLAGE_ACP_PORT=9999 village acp --server start
+# Override permission mode
+VILLAGE_ACP_PERMISSION_MODE=ask village acp
 
 # Enable ACP via environment
-VILLAGE_ACP_ENABLED=true village acp --server start
+VILLAGE_ACP_ENABLED=true village acp
 ```
 
 ### Priority Order
@@ -206,13 +208,13 @@ VILLAGE_ACP_ENABLED=true village acp --server start
 ```ini
 # .village/config
 [acp]
-port = 9876
+permission_mode = auto
 ```
 
 ```bash
 # Environment overrides config
-VILLAGE_ACP_PORT=9999 village acp --server start
-# Server starts on port 9999
+VILLAGE_ACP_PERMISSION_MODE=ask village acp
+# Agent runs in 'ask' mode
 ```
 
 ---
@@ -228,19 +230,18 @@ enabled = true
 ```
 
 **Result:**
-- Server runs on `localhost:9876`
-- Protocol version 1
+- ACP agent enabled
+- Permission mode: `auto` (auto-approve)
 - No capabilities declared
 
-### Example 2: Production Server
+### Example 2: Production Server with Permissions
 
 ```ini
 # .village/config
 [acp]
 enabled = true
-host = 0.0.0.0
-port = 9876
-version = 1
+permission_mode = policy
+permission_policy_file = .village/acp-permissions.json
 capability_filesystem = Read/write worktree files
 capability_terminal = Execute terminal commands
 capability_notifications = Stream task updates
@@ -293,8 +294,7 @@ acp_capabilities = filesystem,terminal,testing
 # .village/config
 [acp]
 enabled = true
-host = localhost
-port = 9876
+permission_mode = ask
 
 [agent.dev]
 type = acp
@@ -306,51 +306,33 @@ type = opencode
 opencode_args = --mode patch --verbose
 ```
 
-### Example 5: Remote Server
-
-```ini
-# .village/config
-[acp]
-enabled = true
-host = 0.0.0.0  # Listen on all interfaces
-port = 9876
-
-# Security: Use firewall to restrict access
-```
-
-**Warning:** Binding to `0.0.0.0` exposes ACP server to network. Use firewall rules to restrict access.
-
 ---
 
 ## Validation
 
 ### Automatic Validation
 
-Village validates ACP configuration on startup:
+Village validates ACP configuration when running:
 
 ```bash
-village acp --server start
+village acp
 ```
 
 **Validates:**
 1. `type=acp` agents have `acp_command` set
 2. `acp_command` is executable (if absolute path)
-3. Port is available (server mode)
-4. Protocol version is supported
+3. Permission policy file exists (if `permission_mode = policy`)
 
 ### Manual Validation
 
 Check configuration:
 
 ```bash
-# View ACP server config
-village acp --server status
-
 # View ACP agents
-village acp --client list
+village acp --list-agents
 
 # Test an agent
-village acp --client test claude
+village acp --test claude
 ```
 
 ### Common Validation Errors
@@ -379,27 +361,14 @@ acp_command = /full/path/to/agent  # Use absolute path
 
 ## Troubleshooting
 
-### Server Not Starting
+### Agent Not Starting
 
-**Issue:** `ACP server is disabled`
+**Issue:** `ACP is disabled`
 
 **Fix:** Enable in config:
 ```ini
 [acp]
 enabled = true
-```
-
-**Issue:** `Address already in use`
-
-**Fix:** Change port:
-```ini
-[acp]
-port = 9999
-```
-
-Or kill existing process:
-```bash
-lsof -ti:9876 | xargs kill
 ```
 
 ### Agent Not Spawning
@@ -408,7 +377,7 @@ lsof -ti:9876 | xargs kill
 
 **Fix:** Check agent exists in config:
 ```bash
-village acp --client list
+village acp --list-agents
 ```
 
 **Issue:** `Agent 'name' is not an ACP agent`
@@ -429,36 +398,37 @@ type = acp
 acp_command = claude-code  # <-- Add this
 ```
 
-### Connection Issues
+### Editor Connection Issues
 
 **Issue:** Editor can't connect
 
-**Fix:** Check server is running:
+**Fix:** Verify the command works directly:
 ```bash
-village acp --server status
-village acp --server start
+# Test the command
+village acp
+
+# Should start and wait for ACP protocol input
 ```
 
-**Issue:** `Connection refused`
+**Issue:** Permission policy not found
 
-**Fix:** Check host/port:
+**Fix:** Create policy file:
 ```bash
-# Check server is listening
-netstat -an | grep 9876
-
-# Check firewall
-sudo ufw status
+mkdir -p .village
+echo '{"rules": []}' > .village/acp-permissions.json
 ```
 
 ### Configuration Not Loading
 
 **Issue:** Config changes not applied
 
-**Fix:** Restart server:
+**Fix:** Restart the editor or run fresh:
 ```bash
-# Stop server (Ctrl+C)
-# Restart
-village acp --server start
+# Kill any running village acp processes
+pkill -f "village acp"
+
+# Run fresh
+village acp
 ```
 
 **Issue:** Environment variables ignored
@@ -469,7 +439,7 @@ village acp --server start
 echo $VILLAGE_ACP_ENABLED
 
 # Set explicitly
-VILLAGE_ACP_ENABLED=true village acp --server start
+VILLAGE_ACP_ENABLED=true village acp
 ```
 
 ---
@@ -527,19 +497,16 @@ type = acp
 acp_command = /usr/local/bin/my-agent-wrapper
 ```
 
-### Multiple Server Instances
+### Multiple Editor Instances
 
-Run multiple ACP servers (different ports):
+Run Village ACP from multiple editors simultaneously:
 
 ```bash
-# Terminal 1
-VILLAGE_ACP_PORT=9876 village acp --server start
-
-# Terminal 2
-VILLAGE_ACP_PORT=9877 village acp --server start
+# Each editor starts its own village acp process
+# No configuration needed - stdio handles this automatically
 ```
 
-**Use case:** Separate servers for different projects/environments.
+**Use case:** Different editors for different projects.
 
 ---
 
@@ -549,12 +516,11 @@ Before using ACP, ensure:
 
 - [ ] `[acp]` section exists in `.village/config`
 - [ ] `enabled = true` is set
-- [ ] Port is available (default: 9876)
 - [ ] ACP agents have `type = acp`
 - [ ] ACP agents have `acp_command` set
 - [ ] Commands are executable (check with `which`)
 - [ ] Environment variables are set (if needed)
-- [ ] Firewall allows connections (if remote)
+- [ ] Permission policy file exists (if `permission_mode = policy`)
 
 ---
 

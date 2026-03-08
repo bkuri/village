@@ -11,7 +11,6 @@ from acp.interfaces import Client
 from acp.schema import (
     AgentCapabilities,
     AuthenticateResponse,
-    CancelNotification,
     ClientCapabilities,
     ForkSessionResponse,
     Implementation,
@@ -22,8 +21,8 @@ from acp.schema import (
     PromptResponse,
     ResumeSessionResponse,
     SetSessionConfigOptionResponse,
-    SetSessionModeResponse,
     SetSessionModelResponse,
+    SetSessionModeResponse,
 )
 
 from village.acp.bridge import ACPBridge
@@ -76,7 +75,7 @@ class VillageACPAgent:
         **kwargs: Any,
     ) -> NewSessionResponse:
         """Handle ACP session/new request."""
-        result = await self.bridge.session_new(kwargs)
+        result = await self.bridge.session_new({"cwd": cwd, **kwargs})
 
         return NewSessionResponse(
             session_id=result["sessionId"],
@@ -90,7 +89,7 @@ class VillageACPAgent:
         **kwargs: Any,
     ) -> LoadSessionResponse | None:
         """Handle ACP session/load request."""
-        result = await self.bridge.session_load({"sessionId": session_id})
+        _ = await self.bridge.session_load({"sessionId": session_id, "cwd": cwd})
 
         return LoadSessionResponse()
 
@@ -121,8 +120,8 @@ class VillageACPAgent:
         **kwargs: Any,
     ) -> SetSessionModelResponse | None:
         """Handle ACP session/set_model request."""
-        # Village doesn't support model selection yet
-        return None
+        self.bridge.set_session_model(session_id, model_id)
+        return SetSessionModelResponse()
 
     async def set_config_option(
         self,
@@ -192,8 +191,7 @@ class VillageACPAgent:
         **kwargs: Any,
     ) -> ResumeSessionResponse:
         """Handle ACP session/resume request."""
-        # Load existing session
-        result = await self.bridge.session_load({"sessionId": session_id})
+        _ = await self.bridge.session_load({"sessionId": session_id})
 
         return ResumeSessionResponse()
 
@@ -247,7 +245,7 @@ class VillageACPAgent:
 async def run_village_agent(config: Config | None = None) -> None:
     """Run Village as an ACP agent.
 
-    Entry point for: village acp server start
+    Entry point for: village acp
 
     Args:
         config: Village config (uses default if not provided)

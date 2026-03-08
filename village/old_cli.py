@@ -197,9 +197,9 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool) -> Non
         click.echo("\nCreated:")
         for item in result.created:
             click.echo(f"  - {item}")
-        click.echo(f"\nNext steps:")
+        click.echo("\nNext steps:")
         click.echo(f"  cd {name}")
-        click.echo(f"  village chat   # create your first task")
+        click.echo("  village chat   # create your first task")
     else:
         click.echo(f"Failed to create project: {result.error}", err=True)
         raise click.ClickException(result.error or "Unknown error")

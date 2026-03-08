@@ -46,67 +46,48 @@ Village uses a **hybrid approach** that adds ACP compatibility without changing 
 
 ---
 
-## Two Modes of Operation
+## Usage
 
-### 1. Village as ACP Server
+### Running Village as an ACP Agent
 
-Village exposes its coordination capabilities to ACP-compatible editors.
+Village runs as a stdio-based ACP agent for editor integration:
 
-**Use when:**
-- You want to use Village from Zed, JetBrains, or other ACP editors
-- You want editor integration for task management
-- You want to trigger Village operations from your IDE
+```bash
+village acp                    # Run stdio agent (for editors)
+village acp --list-agents      # List configured ACP agents
+village acp --test <agent>     # Test connection to external agent
+```
 
 **How it works:**
 ```
-Editor (Zed/JetBrains) → ACP → Village Server → Village Core
-                                              ↓
-                                          tmux/git/locks
+Editor (Zed/JetBrains) → stdin/stdout → Village ACP Agent → Village Core
+                                                        ↓
+                                                    tmux/git/locks
 ```
+
+### External ACP Agents
+
+Village can also spawn and orchestrate external ACP-compliant agents (Claude Code, Gemini CLI, etc.):
 
 **Example:**
 ```bash
-# Start Village as ACP server
-village acp --server start
-
-# Configure your editor to connect to localhost:9876
-```
-
-### 2. Village as ACP Client
-
-Village spawns and orchestrates external ACP-compliant agents.
-
-**Use when:**
-- You want to use Claude Code, Gemini CLI, or other ACP agents
-- You want Village to coordinate multiple external agents
-- You want specialized agents for specific tasks
-
-**How it works:**
-```
-Village Core → ACP Client → External Agent (Claude Code)
-     ↓                           ↓
- tmux/git                  Agent's tools/models
-```
-
-**Example:**
-```bash
-# Spawn an external ACP agent
-village acp --client spawn claude
-
 # List configured agents
-village acp --client list
+village acp --list-agents
+
+# Test connection to an external agent
+village acp --test claude
 ```
 
 ---
 
 ## Architecture Components
 
-### 1. ACP Server (`village/acp/agent.py`)
+### 1. ACP Agent (`village/acp/agent.py`)
 
-Implements the ACP Agent protocol to expose Village to editors.
+Implements the ACP Agent protocol over stdio to expose Village to editors.
 
 **Key responsibilities:**
-- Initialize handshake with editors
+- Initialize handshake with editors via stdio
 - Create/load ACP sessions (maps to Village tasks)
 - Handle prompt requests (maps to Village resume)
 - Stream notifications to editors
@@ -291,20 +272,18 @@ async for notification in bridge.stream_notifications(session_id):
 
 **Setup:**
 1. Install Zed (0.120+)
-2. Configure ACP agent in Zed settings:
+2. Configure ACP agent in Zed settings (`~/.config/zed/settings.json`):
    ```json
    {
      "assistant": {
        "default_model": {
          "provider": "custom",
-         "name": "village",
-         "url": "http://localhost:9876"
+         "command": ["village", "acp"]
        }
      }
    }
    ```
-3. Start Village ACP server: `village acp --server start`
-4. Open Zed, use Assistant panel
+3. Open Zed, use Assistant panel - Village will start automatically via stdio
 
 ### JetBrains IDEs
 
@@ -312,9 +291,8 @@ async for notification in bridge.stream_notifications(session_id):
 
 **Setup:**
 1. Install ACP plugin for JetBrains
-2. Configure plugin to connect to `localhost:9876`
-3. Start Village ACP server: `village acp --server start`
-4. Use AI assistant panel in IDE
+2. Configure plugin to use custom agent command: `village acp`
+3. Use AI assistant panel in IDE - Village will start automatically via stdio
 
 ### VS Code
 
@@ -344,7 +322,7 @@ acp_capabilities = filesystem,terminal,web
 
 **Usage:**
 ```bash
-village acp --client spawn claude
+village acp --test claude
 ```
 
 ### Gemini CLI (Google)
@@ -361,7 +339,7 @@ acp_capabilities = filesystem,terminal
 
 **Usage:**
 ```bash
-village acp --client spawn gemini
+village acp --test gemini
 ```
 
 ### Custom ACP Agents
@@ -454,18 +432,16 @@ type = acp
 acp_command = gemini-cli
 ```
 
-### Workflow 3: Real-Time Monitoring
+### Workflow 3: Editor-Based Task Management
 
 ```
-Start ACP server
+Start work from editor
   ↓
-village acp --server start
+[Zed/JetBrains] → village acp → Village Core
   ↓
-Connect monitoring dashboard
+Queue and monitor tasks
   ↓
-Dashboard → ACP → stream_notifications()
-  ↓
-Real-time task updates
+Real-time notifications in editor
 ```
 
 ---
@@ -486,12 +462,20 @@ Real-time task updates
 
 ### Permission Model
 
-**Current:** Auto-approve (development mode)
+Village supports configurable permission modes for ACP operations:
 
-**Planned:**
-- Configurable permission policies
-- Per-agent permission profiles
-- Interactive approval prompts
+**Modes:**
+- `auto` - Auto-approve all operations (development mode)
+- `ask` - Prompt user for each permission request
+- `policy` - Use policy file for rules-based decisions
+
+**Configuration:**
+```ini
+[acp]
+enabled = true
+permission_mode = policy
+permission_policy_file = .village/acp-permissions.json
+```
 
 ---
 
@@ -510,8 +494,8 @@ Real-time task updates
 
 ### Scalability
 
-- **Server mode:** Supports multiple editor connections
-- **Client mode:** Spawns agents on-demand
+- **Stdio mode:** One Village process per editor session
+- **External agents:** Spawns agents on-demand
 - **Bridge:** Stateless, horizontally scalable
 
 ---
@@ -520,40 +504,35 @@ Real-time task updates
 
 ### Current Limitations
 
-1. **No daemon mode** - ACP server runs in foreground
-2. **Auto-approve permissions** - No interactive approval yet
-3. **No session forking** - ACP fork not implemented
-4. **Limited model selection** - Uses agent's default model
+1. **No session forking** - ACP fork not implemented
+2. **Limited model selection** - Uses agent's default model
 
 ### Planned Improvements
 
-1. **Daemon mode** - Background ACP server with PID file
-2. **Permission policies** - Configurable approval workflows
-3. **Session forking** - Clone task state
-4. **Model selection** - Override agent models
+1. **Session forking** - Clone task state
+2. **Model selection** - Override agent models
 
 ---
 
 ## Getting Started
 
-### Quick Start: Server Mode
+### Quick Start: Editor Integration
 
 ```bash
 # 1. Enable ACP in config
 cat >> .village/config <<EOF
 [acp]
 enabled = true
-host = localhost
-port = 9876
 EOF
 
-# 2. Start ACP server
-village acp --server start
+# 2. Configure your editor (see Zed/JetBrains sections above)
+# Village starts automatically when editor launches the agent
 
-# 3. Configure your editor to connect to localhost:9876
+# 3. Use from command line to verify
+village acp
 ```
 
-### Quick Start: Client Mode
+### Quick Start: External Agents
 
 ```bash
 # 1. Define an ACP agent
@@ -565,10 +544,10 @@ acp_capabilities = filesystem,terminal
 EOF
 
 # 2. List available agents
-village acp --client list
+village acp --list-agents
 
-# 3. Spawn an agent
-village acp --client spawn claude
+# 3. Test connection
+village acp --test claude
 ```
 
 ---
@@ -583,7 +562,7 @@ village acp --client spawn claude
 
 ## Troubleshooting
 
-### "ACP server is disabled"
+### "ACP is disabled"
 
 **Fix:** Enable ACP in config:
 ```ini
@@ -595,24 +574,26 @@ enabled = true
 
 **Fix:** Check agent configuration:
 ```bash
-village acp --client list
+village acp --list-agents
 cat .village/config
 ```
 
-### "Connection refused"
-
-**Fix:** Ensure server is running:
-```bash
-village acp --server status
-village acp --server start
-```
-
-### "Permission denied"
+### "Agent command not found"
 
 **Fix:** Check agent command is executable:
 ```bash
 which claude-code
 chmod +x /path/to/agent
+```
+
+### Editor not connecting
+
+**Fix:** Verify the command in editor settings:
+```bash
+# Test the command directly
+village acp
+
+# Should start and wait for ACP protocol input on stdin
 ```
 
 ---

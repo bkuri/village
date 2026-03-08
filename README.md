@@ -205,34 +205,57 @@ It simply coordinates reality.
 
 ## ACP Integration
 
-Village supports **Agent Client Protocol (ACP)** for editor integration and external agent orchestration.
+Village supports **Agent Client Protocol (ACP)** for editor integration via stdio.
 
 ### What is ACP?
 
-ACP is an open protocol for standardized communication between AI agents and clients (editors, IDEs, orchestrators). Village's hybrid architecture adds ACP compatibility without changing Village core.
+ACP is an open protocol for standardized communication between AI agents and clients (editors, IDEs). Village runs as a stdio-based ACP agent that editors can launch directly.
 
-### Two Modes
+### Quick Start
 
-**1. Village as ACP Server** - Use Village from editors
 ```bash
-# Start ACP server
-village acp --server start
+# Enable ACP in config
+cat >> .village/config <<EOF
+[acp]
+enabled = true
+EOF
 
-# Configure your editor to connect to localhost:9876
+# Run Village as an ACP agent (for editors)
+village acp
+
+# List configured external agents
+village acp --list-agents
+
+# Test connection to external agent
+village acp --test claude
 ```
 
-**2. Village as ACP Client** - Orchestrate external agents
-```bash
-# Configure external agent
-cat >> .village/config <<EOF
+### Editor Configuration
+
+**Zed Editor** (`~/.config/zed/settings.json`):
+```json
+{
+  "assistant": {
+    "default_model": {
+      "provider": "custom",
+      "command": ["village", "acp"]
+    }
+  }
+}
+```
+
+**JetBrains IDEs:**
+1. Install ACP plugin
+2. Configure custom agent command: `village acp`
+
+### External Agents
+
+Configure external ACP agents (Claude Code, Gemini CLI):
+```ini
 [agent.claude]
 type = acp
 acp_command = claude-code
 acp_capabilities = filesystem,terminal
-EOF
-
-# Spawn external agent
-village acp --client spawn claude
 ```
 
 ### Supported Editors
@@ -246,22 +269,6 @@ village acp --client spawn claude
 - ✅ **Claude Code** - Anthropic's CLI
 - ✅ **Gemini CLI** - Google's CLI
 - ✅ **Custom agents** - Any ACP-compliant agent
-
-### Quick Start
-
-```bash
-# Enable ACP in config
-cat >> .village/config <<EOF
-[acp]
-enabled = true
-EOF
-
-# Start ACP server
-village acp --server start
-
-# List available agents
-village acp --client list
-```
 
 ### Documentation
 

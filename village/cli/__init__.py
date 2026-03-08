@@ -33,12 +33,15 @@ def village(ctx: click.Context, verbose: bool) -> None:
 
 
 # Import command groups
-from village.cli import lifecycle, state, acp
+from village.cli import acp, lifecycle, state
 
-# Register command groups (for now, just the new ones)
-village.add_command(lifecycle.lifecycle_group)
+# Register lifecycle commands directly (more intuitive: village up vs village lifecycle up)
+for cmd_name in ["new", "up", "down"]:
+    village.add_command(lifecycle.lifecycle_group.commands[cmd_name])
+
+# Register other command groups
 village.add_command(state.state_group)
-village.add_command(acp.acp_command)  # ACP is a single command with flags, not a group
+village.add_command(acp.acp_command)
 
 # TODO: Migrate remaining commands from old cli.py:
 # - tasks (queue, resume, pause, resume-task, ready)

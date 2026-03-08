@@ -1,10 +1,8 @@
 """Chat commands: chat, drafts."""
 
-import sys
 
 import click
 
-from village.config import get_config
 from village.logging import get_logger
 
 logger = get_logger(__name__)

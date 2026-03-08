@@ -1,7 +1,8 @@
 """Tests for VillageACPAgent - ACP Agent implementation."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from village.acp.agent import VillageACPAgent, run_village_agent
 from village.config import Config
@@ -145,12 +146,12 @@ class TestLoadSession:
         with patch.object(agent.bridge, "session_load", new_callable=AsyncMock) as mock_load:
             mock_load.return_value = {"sessionId": "test-load-2", "state": "queued"}
 
-            result = await agent.load_session(
+            await agent.load_session(
                 cwd="/tmp/test",
                 session_id="test-load-2",
             )
 
-            mock_load.assert_called_once_with({"sessionId": "test-load-2"})
+            mock_load.assert_called_once_with({"sessionId": "test-load-2", "cwd": "/tmp/test"})
 
     async def test_load_session_with_mcp_servers(self, agent: VillageACPAgent):
         """Test load_session accepts MCP servers."""
@@ -206,14 +207,15 @@ class TestSetSessionMode:
 class TestSetSessionModel:
     """Test ACP set_session_model method."""
 
-    async def test_set_session_model_returns_none(self, agent: VillageACPAgent):
-        """Test set_session_model returns None (not implemented)."""
+    async def test_set_session_model_stores_override(self, agent: VillageACPAgent):
+        """Test set_session_model stores model override and returns response."""
         result = await agent.set_session_model(
             model_id="claude-3",
             session_id="test-session",
         )
 
-        assert result is None
+        assert result is not None
+        assert agent.bridge._session_models.get("test-session") == "claude-3"
 
 
 @pytest.mark.asyncio
@@ -467,7 +469,7 @@ class TestRunVillageAgent:
 
     async def test_run_village_agent_creates_agent(self, acp_config: Config):
         """Test run_village_agent creates VillageACPAgent."""
-        with patch("village.acp.agent.run_agent") as mock_run:
+        with patch("acp.run_agent") as mock_run:
             await run_village_agent(acp_config)
 
             mock_run.assert_called_once()
@@ -476,7 +478,7 @@ class TestRunVillageAgent:
 
     async def test_run_village_agent_uses_config(self, acp_config: Config):
         """Test run_village_agent uses provided config."""
-        with patch("village.acp.agent.run_agent") as mock_run:
+        with patch("acp.run_agent") as mock_run:
             await run_village_agent(acp_config)
 
             agent_arg = mock_run.call_args[0][0]
@@ -484,7 +486,7 @@ class TestRunVillageAgent:
 
     async def test_run_village_agent_default_config(self):
         """Test run_village_agent uses default config if not provided."""
-        with patch("village.acp.agent.run_agent") as mock_run:
+        with patch("acp.run_agent"):
             with patch("village.acp.agent.get_config") as mock_get_config:
                 mock_config = MagicMock()
                 mock_get_config.return_value = mock_config

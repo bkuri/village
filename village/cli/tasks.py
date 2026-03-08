@@ -1,12 +1,8 @@
 """Task management commands: queue, resume, pause, resume-task, ready."""
 
-import sys
-from datetime import datetime, timezone
 
 import click
 
-from village.config import get_config
-from village.errors import EXIT_SUCCESS
 from village.logging import get_logger
 
 logger = get_logger(__name__)
