@@ -46,3 +46,7 @@ htmlcov/
 
 # Exception: Track tmux configuration
 !.village/tmux.conf
+
+# Dolt database files (added by bd init)
+.dolt/
+*.db
