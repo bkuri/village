@@ -77,12 +77,13 @@ def _format_text(results: list[AnalyzerResult]) -> str:
     return "\n".join(lines)
 
 
-def interactive_select(results: list[AnalyzerResult], select_all: bool = False) -> list[Finding]:
+def interactive_select(results: list[AnalyzerResult], preselect: str | None = None) -> list[Finding]:
     """Interactive selection of findings using questionary.
 
     Args:
         results: Analysis results containing findings
-        select_all: If True, pre-select all findings by default
+        preselect: Which findings to pre-select: None, "all", "high", or "medium"
+                   "medium" includes both medium and high severity
     """
     all_findings = []
     for result in results:
@@ -92,6 +93,15 @@ def interactive_select(results: list[AnalyzerResult], select_all: bool = False) 
         questionary.print("No findings to select.")
         return []
 
+    severity_levels = {"high": 3, "medium": 2, "low": 1}
+    preselect_threshold = 0
+    if preselect == "all":
+        preselect_threshold = 0
+    elif preselect == "high":
+        preselect_threshold = 3
+    elif preselect == "medium":
+        preselect_threshold = 2
+
     choices = []
     for f in all_findings:
         label = f"[{f.severity.upper()}] {f.title}"
@@ -100,7 +110,15 @@ def interactive_select(results: list[AnalyzerResult], select_all: bool = False) 
             if f.line:
                 label += f":{f.line}"
             label += ")"
-        choices.append(questionary.Choice(title=label, value=f, checked=select_all))
+
+        checked = False
+        if preselect and preselect_threshold > 0:
+            finding_level = severity_levels.get(f.severity, 0)
+            checked = finding_level >= preselect_threshold
+        elif preselect == "all":
+            checked = True
+
+        choices.append(questionary.Choice(title=label, value=f, checked=checked))
 
     selected = questionary.checkbox(
         "Select findings to create as tasks:",

@@ -22,7 +22,12 @@ logger = get_logger(__name__)
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.option("--output", type=click.Path(), help="Write report to file")
 @click.option("--prescribe", is_flag=True, help="Interactively create tasks from findings")
-@click.option("--preselect", is_flag=True, help="Pre-select all findings in interactive mode")
+@click.option(
+    "--preselect",
+    type=click.Choice(["all", "high", "medium"]),
+    default=None,
+    help="Pre-select findings by severity: all, high, or medium (includes high)",
+)
 @click.option("--only", type=str, help="Only run specified analyzers (comma-separated)")
 @click.option("--sequential", is_flag=True, help="Run analyzers sequentially (not in parallel)")
 @click.pass_context
@@ -31,7 +36,7 @@ def doctor_command(
     json_output: bool,
     output: str | None,
     prescribe: bool,
-    preselect: bool,
+    preselect: str | None,
     only: str | None,
     sequential: bool,
 ) -> None:
@@ -44,7 +49,9 @@ def doctor_command(
         village doctor                  # Run all analyzers
         village doctor --json           # JSON output
         village doctor --prescribe      # Select findings to create as tasks
-        village doctor --prescribe --preselect   # Pre-select all findings
+        village doctor --prescribe --preselect all     # Pre-select all findings
+        village doctor --prescribe --preselect high    # Pre-select high severity
+        village doctor --prescribe --preselect medium  # Pre-select medium+high
         village doctor --only tests     # Only run test analyzer
     """
     config = ctx.obj.get("config") if ctx.obj else get_config()
@@ -79,7 +86,7 @@ def doctor_command(
         click.echo(report)
 
     if prescribe:
-        selected = interactive_select(results, select_all=preselect)
+        selected = interactive_select(results, preselect=preselect)
         if selected:
             click.echo(f"\nCreating {len(selected)} tasks...")
             created = asyncio.run(create_tasks_from_findings(selected, config))
