@@ -349,18 +349,42 @@ def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
 
 
 @village.command()
-@click.argument("task_id")
+@click.argument("task_id", default=None, required=False, type=str)
 @click.option("--force", is_flag=True, help="Force unlock even if pane is active")
-def unlock(task_id: str, force: bool) -> None:
+@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
+def unlock(task_id: str | None, force: bool, select_mode: bool) -> None:
     """
     Unlock a task (remove lock file).
 
     Raises:
         click.ClickException: If lock is ACTIVE and --force not provided
     """
+    import sys
+
+    from village.interactive import select_from_list
     from village.locks import is_active, parse_lock
+    from village.status import collect_workers
 
     config = get_config()
+
+    if task_id is None or select_mode:
+        workers = collect_workers(config.tmux_session)
+        if not workers:
+            click.echo("No locks found")
+            if task_id is None:
+                sys.exit(0)
+            return
+
+        selected = select_from_list(
+            workers,
+            "Select task to unlock:",
+            formatter=lambda w: f"{w.task_id} ({w.status})",
+        )
+        if selected is None:
+            click.echo("Canceled")
+            sys.exit(0)
+        task_id = selected.task_id
+
     lock_path = config.locks_dir / f"{task_id}.lock"
 
     if not lock_path.exists():
@@ -473,18 +497,26 @@ def ready(json_output: bool) -> None:
     is_flag=True,
     help="Preview mode without making changes",
 )
+@click.option(
+    "--select",
+    "select_mode",
+    is_flag=True,
+    help="Select from ready tasks interactively",
+)
 def resume(
     task_id: str | None,
     agent: str | None,
     detached: bool,
     html: bool,
     dry_run: bool,
+    select_mode: bool,
 ) -> None:
     """
     Resume a task (explicit or planner).
 
     If task_id provided: Explicit resume of specific task
     If no task_id: Use planner to suggest next action
+    If --select: Select from ready tasks interactively
 
     Agent Selection:
       - If --agent provided: Use specified agent
@@ -495,6 +527,7 @@ def resume(
       --detached: Run without attaching to tmux pane
       --html: Output HTML with embedded JSON metadata
       --dry-run: Preview mode (no mutations)
+      --select: Select from ready tasks interactively
 
     Planning Logic (when no task_id):
       1. Ensure runtime via 'village up'
@@ -508,12 +541,53 @@ def resume(
       village resume --agent build       # Use specific agent
       village resume bd-a3f8 --detached # Detached mode
       village resume                    # Use planner
+      village resume --select           # Interactive selection
       village resume --html            # HTML output
       village resume --dry-run          # Preview mode
     """
+    import sys
+
     config = get_config()
 
-    # If no task_id provided, use planner
+    if select_mode and task_id is None:
+        from village.interactive import select_from_list
+        from village.queue import generate_queue_plan
+        from village.state_machine import TaskState, TaskStateMachine
+        from village.status import collect_workers
+
+        workers = collect_workers(config.tmux_session)
+        state_machine = TaskStateMachine(config)
+
+        in_progress = [w for w in workers if state_machine.get_state(w.task_id) == TaskState.IN_PROGRESS]
+
+        queue_plan = generate_queue_plan(config.tmux_session, config.max_workers, config)
+
+        ready_tasks = queue_plan.ready_tasks
+
+        if not in_progress and not ready_tasks:
+            click.echo("No tasks to resume")
+            sys.exit(0)
+
+        choices = []
+        for w in in_progress:
+            choices.append((w.task_id, w.status, "in_progress"))
+        for t in ready_tasks:
+            choices.append((t.task_id, "READY", t.agent))
+
+        if not choices:
+            click.echo("No tasks to resume")
+            sys.exit(0)
+
+        selected = select_from_list(
+            choices,
+            "Select task to resume:",
+            formatter=lambda c: f"{c[0]} ({c[1]})",
+        )
+        if selected is None:
+            click.echo("Canceled")
+            sys.exit(0)
+        task_id = selected[0]
+
     if task_id is None:
         action = plan_resume(config=config)
 
@@ -1087,9 +1161,10 @@ def state(task_id: str, json_output: bool) -> None:
 
 
 @village.command()
-@click.argument("task_id")
+@click.argument("task_id", default=None, required=False, type=str)
 @click.option("--force", is_flag=True, help="Force pause without validation")
-def pause(task_id: str, force: bool) -> None:
+@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
+def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
     """
     Pause an in-progress task.
 
@@ -1101,18 +1176,46 @@ def pause(task_id: str, force: bool) -> None:
     Examples:
         village pause bd-a3f8
         village pause bd-a3f8 --force
+        village pause --select
 
     Options:
         --force: Skip state validation (bypass IN_PROGRESS check)
+        --select: Select from in-progress tasks interactively
 
     Exit codes:
         0: Task paused successfully
         4: Task not in IN_PROGRESS state
         5: Task not found
     """
+    import sys
+
+    from village.interactive import select_from_list
     from village.state_machine import TaskState, TaskStateMachine
+    from village.status import collect_workers
 
     config = get_config()
+
+    if task_id is None or select_mode:
+        workers = collect_workers(config.tmux_session)
+        state_machine = TaskStateMachine(config)
+
+        in_progress = [w for w in workers if state_machine.get_state(w.task_id) == TaskState.IN_PROGRESS]
+        if not in_progress:
+            click.echo("No in-progress tasks found")
+            if task_id is None:
+                sys.exit(0)
+            return
+
+        selected = select_from_list(
+            in_progress,
+            "Select task to pause:",
+            formatter=lambda w: f"{w.task_id} ({w.status})",
+        )
+        if selected is None:
+            click.echo("Canceled")
+            sys.exit(0)
+        task_id = selected.task_id
+
     state_machine = TaskStateMachine(config)
 
     current_state = state_machine.get_state(task_id)
@@ -1139,9 +1242,10 @@ def pause(task_id: str, force: bool) -> None:
 
 
 @village.command("resume-task")
-@click.argument("task_id")
+@click.argument("task_id", default=None, required=False, type=str)
 @click.option("--force", is_flag=True, help="Force resume without validation")
-def resume_task(task_id: str, force: bool) -> None:
+@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
+def resume_task(task_id: str | None, force: bool, select_mode: bool) -> None:
     """
     Resume a paused task.
 
@@ -1156,18 +1260,46 @@ def resume_task(task_id: str, force: bool) -> None:
     Examples:
         village resume-task bd-a3f8
         village resume-task bd-a3f8 --force
+        village resume-task --select
 
     Options:
         --force: Skip state validation (bypass PAUSED check)
+        --select: Select from paused tasks interactively
 
     Exit codes:
         0: Task resumed successfully
         4: Task not in PAUSED state
         5: Task not found
     """
+    import sys
+
+    from village.interactive import select_from_list
     from village.state_machine import TaskState, TaskStateMachine
+    from village.status import collect_workers
 
     config = get_config()
+
+    if task_id is None or select_mode:
+        workers = collect_workers(config.tmux_session)
+        state_machine = TaskStateMachine(config)
+
+        paused = [w for w in workers if state_machine.get_state(w.task_id) == TaskState.PAUSED]
+        if not paused:
+            click.echo("No paused tasks found")
+            if task_id is None:
+                sys.exit(0)
+            return
+
+        selected = select_from_list(
+            paused,
+            "Select task to resume:",
+            formatter=lambda w: f"{w.task_id} ({w.status})",
+        )
+        if selected is None:
+            click.echo("Canceled")
+            sys.exit(0)
+        task_id = selected.task_id
+
     state_machine = TaskStateMachine(config)
 
     current_state = state_machine.get_state(task_id)

@@ -1,9 +1,8 @@
 """Tests for ACP bridge."""
 
 import subprocess
-import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -431,7 +430,15 @@ async def test_bridge_fs_write_empty_content(bridge_with_worktree: tuple):
     write_lock(lock)
 
     file_path = worktree_path / "empty.txt"
-    result = await bridge.fs_write_text_file({"path": str(file_path), "content": ""})
+
+    # Mock worktree info since test doesn't create real git worktree
+    mock_info = MagicMock()
+    mock_info.task_id = task_id
+    mock_info.path = worktree_path
+
+    with patch.object(bridge, "_find_worktree_for_path", return_value=mock_info):
+        with patch("village.locks.is_active", return_value=True):
+            result = await bridge.fs_write_text_file({"path": str(file_path), "content": ""})
 
     assert result["success"]
     assert file_path.read_text() == ""
@@ -451,18 +458,19 @@ async def test_bridge_terminal_create_with_args(bridge_with_lock: tuple):
     bridge.state_machine.transition(task_id, TaskState.IN_PROGRESS)
 
     with patch("village.probes.tmux.create_window") as mock_create:
-        mock_create.return_value = True
+        with patch("village.locks.is_active", return_value=True):
+            mock_create.return_value = True
 
-        result = await bridge.terminal_create(
-            {
-                "sessionId": task_id,
-                "command": "python",
-                "args": ["-m", "pytest"],
-            }
-        )
+            result = await bridge.terminal_create(
+                {
+                    "sessionId": task_id,
+                    "command": "python",
+                    "args": ["-m", "pytest"],
+                }
+            )
 
-        assert "terminalId" in result
-        assert result["terminalId"].startswith("term-")
+            assert "terminalId" in result
+            assert result["terminalId"].startswith("term-")
 
 
 @pytest.mark.asyncio
@@ -476,17 +484,18 @@ async def test_bridge_terminal_create_with_env(bridge_with_lock: tuple):
     bridge.state_machine.transition(task_id, TaskState.IN_PROGRESS)
 
     with patch("village.probes.tmux.create_window") as mock_create:
-        mock_create.return_value = True
+        with patch("village.locks.is_active", return_value=True):
+            mock_create.return_value = True
 
-        result = await bridge.terminal_create(
-            {
-                "sessionId": task_id,
-                "command": "echo",
-                "env": [{"name": "TEST", "value": "value"}],
-            }
-        )
+            result = await bridge.terminal_create(
+                {
+                    "sessionId": task_id,
+                    "command": "echo",
+                    "env": [{"name": "TEST", "value": "value"}],
+                }
+            )
 
-        assert "terminalId" in result
+            assert "terminalId" in result
 
 
 @pytest.mark.asyncio
@@ -500,10 +509,11 @@ async def test_bridge_terminal_create_failure(bridge_with_lock: tuple):
     bridge.state_machine.transition(task_id, TaskState.IN_PROGRESS)
 
     with patch("village.probes.tmux.create_window") as mock_create:
-        mock_create.return_value = False
+        with patch("village.locks.is_active", return_value=True):
+            mock_create.return_value = False
 
-        with pytest.raises(ACPBridgeError, match="Failed to create terminal"):
-            await bridge.terminal_create({"sessionId": task_id, "command": "ls"})
+            with pytest.raises(ACPBridgeError, match="Failed to create terminal"):
+                await bridge.terminal_create({"sessionId": task_id, "command": "ls"})
 
 
 @pytest.mark.asyncio

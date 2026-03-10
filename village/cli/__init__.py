@@ -33,7 +33,7 @@ def village(ctx: click.Context, verbose: bool) -> None:
 
 
 # Import command groups
-from village.cli import acp, lifecycle, state
+from village.cli import acp, doctor, lifecycle, state
 
 # Register lifecycle commands directly (more intuitive: village up vs village lifecycle up)
 for cmd_name in ["new", "up", "down"]:
@@ -41,7 +41,13 @@ for cmd_name in ["new", "up", "down"]:
 
 # Register other command groups
 village.add_command(state.state_group)
+
+# Register acp with village-themed alias 'gate'
+village.add_command(acp.acp_command, name="gate")
 village.add_command(acp.acp_command)
+
+# Register doctor command
+village.add_command(doctor.doctor_command)
 
 # TODO: Migrate remaining commands from old cli.py:
 # - tasks (queue, resume, pause, resume-task, ready)
@@ -57,10 +63,30 @@ village.add_command(old_cli.resume)
 village.add_command(old_cli.pause)
 village.add_command(old_cli.resume_task)
 village.add_command(old_cli.ready)
+
+# Register dashboard with village-themed alias 'square'
+village.add_command(old_cli.dashboard, name="square")
 village.add_command(old_cli.dashboard)
+
 village.add_command(old_cli.metrics)
+
+# Register cleanup with village-themed alias 'sweep'
+village.add_command(old_cli.cleanup, name="sweep")
 village.add_command(old_cli.cleanup)
+
 village.add_command(old_cli.unlock)
 village.add_command(old_cli.release)
+
+# Register chat with village-themed alias 'council'
+village.add_command(old_cli.chat, name="council")
 village.add_command(old_cli.chat)
+
 village.add_command(old_cli.drafts)
+
+# Register status with village-themed alias 'census'
+village.add_command(old_cli.status, name="census")
+village.add_command(old_cli.status)
+
+# Register state with village-themed alias 'archives'
+village.add_command(old_cli.state, name="archives")
+village.add_command(old_cli.state)
