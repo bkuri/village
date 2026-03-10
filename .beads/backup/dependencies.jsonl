@@ -4,3 +4,6 @@
 {"created_at":"2026-03-08T15:10:00Z","created_by":"Bernardo Kuri","depends_on_id":"bd-9fn","issue_id":"bd-9fn.4","type":"parent-child"}
 {"created_at":"2026-03-08T15:10:12Z","created_by":"Bernardo Kuri","depends_on_id":"bd-9fn","issue_id":"bd-9fn.5","type":"parent-child"}
 {"created_at":"2026-03-08T15:10:25Z","created_by":"Bernardo Kuri","depends_on_id":"bd-9fn","issue_id":"bd-9fn.6","type":"parent-child"}
+{"created_at":"2026-03-10T14:00:20Z","created_by":"Bernardo Kuri","depends_on_id":"bd-v7t","issue_id":"bd-gu4","type":"blocks"}
+{"created_at":"2026-03-10T14:00:20Z","created_by":"Bernardo Kuri","depends_on_id":"bd-v7t","issue_id":"bd-m18","type":"blocks"}
+{"created_at":"2026-03-10T14:00:20Z","created_by":"Bernardo Kuri","depends_on_id":"bd-v7t","issue_id":"bd-pa2","type":"blocks"}
