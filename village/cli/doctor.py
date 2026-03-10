@@ -22,11 +22,18 @@ logger = get_logger(__name__)
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 @click.option("--output", type=click.Path(), help="Write report to file")
 @click.option("--prescribe", is_flag=True, help="Interactively create tasks from findings")
+@click.option("--select-all", is_flag=True, help="Pre-select all findings in interactive mode")
 @click.option("--only", type=str, help="Only run specified analyzers (comma-separated)")
 @click.option("--no-parallel", is_flag=True, help="Run analyzers sequentially")
 @click.pass_context
 def doctor_command(
-    ctx: click.Context, json_output: bool, output: str | None, prescribe: bool, only: str | None, no_parallel: bool
+    ctx: click.Context,
+    json_output: bool,
+    output: str | None,
+    prescribe: bool,
+    select_all: bool,
+    only: str | None,
+    no_parallel: bool,
 ) -> None:
     """Run project health diagnostics.
 
@@ -37,6 +44,7 @@ def doctor_command(
         village doctor                  # Run all analyzers
         village doctor --json           # JSON output
         village doctor --prescribe      # Select findings to create as tasks
+        village doctor --prescribe --select-all  # Pre-select all findings
         village doctor --only tests     # Only run test analyzer
     """
     config = ctx.obj.get("config") if ctx.obj else get_config()
@@ -71,7 +79,7 @@ def doctor_command(
         click.echo(report)
 
     if prescribe:
-        selected = interactive_select(results)
+        selected = interactive_select(results, select_all=select_all)
         if selected:
             click.echo(f"\nCreating {len(selected)} tasks...")
             created = asyncio.run(create_tasks_from_findings(selected, config))

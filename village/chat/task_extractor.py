@@ -234,7 +234,7 @@ async def _create_single_draft(
         cmd.extend(["--estimate", estimate_minutes])
 
     if spec.batch_id:
-        cmd.extend(["--tag", f"batch:{spec.batch_id}"])
+        cmd.extend(["--label", f"batch:{spec.batch_id}"])
 
     if spec.bump and spec.bump != "none":
         cmd.extend(["--label", f"bump:{spec.bump}"])
@@ -245,7 +245,7 @@ async def _create_single_draft(
     if spec.custom_fields.get("tags"):
         for tag in spec.custom_fields["tags"].split(","):
             if tag.strip():
-                cmd.extend(["--tag", tag.strip()])
+                cmd.extend(["--label", tag.strip()])
 
     result = run_command_output(cmd)
 

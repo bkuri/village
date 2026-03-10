@@ -77,8 +77,13 @@ def _format_text(results: list[AnalyzerResult]) -> str:
     return "\n".join(lines)
 
 
-def interactive_select(results: list[AnalyzerResult]) -> list[Finding]:
-    """Interactive selection of findings using questionary."""
+def interactive_select(results: list[AnalyzerResult], select_all: bool = False) -> list[Finding]:
+    """Interactive selection of findings using questionary.
+
+    Args:
+        results: Analysis results containing findings
+        select_all: If True, pre-select all findings by default
+    """
     all_findings = []
     for result in results:
         all_findings.extend(result.findings)
@@ -95,10 +100,12 @@ def interactive_select(results: list[AnalyzerResult]) -> list[Finding]:
             if f.line:
                 label += f":{f.line}"
             label += ")"
-        choices.append(questionary.Choice(title=label, value=f))
+        choices.append(questionary.Choice(title=label, value=f, checked=select_all))
 
     selected = questionary.checkbox(
-        "Select findings to create as tasks:", choices=choices, instruction="(Use space to select, enter to confirm)"
+        "Select findings to create as tasks:",
+        choices=choices,
+        instruction="(Space=toggle, a=all, n=none, enter=confirm)",
     ).ask()
 
     return selected or []
