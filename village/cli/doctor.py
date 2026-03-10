@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 @click.option("--prescribe", is_flag=True, help="Interactively create tasks from findings")
 @click.option("--preselect", is_flag=True, help="Pre-select all findings in interactive mode")
 @click.option("--only", type=str, help="Only run specified analyzers (comma-separated)")
-@click.option("--no-parallel", is_flag=True, help="Run analyzers sequentially")
+@click.option("--sequential", is_flag=True, help="Run analyzers sequentially (not in parallel)")
 @click.pass_context
 def doctor_command(
     ctx: click.Context,
@@ -33,7 +33,7 @@ def doctor_command(
     prescribe: bool,
     preselect: bool,
     only: str | None,
-    no_parallel: bool,
+    sequential: bool,
 ) -> None:
     """Run project health diagnostics.
 
@@ -67,7 +67,7 @@ def doctor_command(
 
     click.echo(f"Running {len(analyzers)} analyzers...")
 
-    results = run_analyzers(analyzers, parallel=not no_parallel)
+    results = run_analyzers(analyzers, parallel=not sequential)
 
     fmt = "json" if json_output else "text"
     report = format_report(results, format=fmt)
