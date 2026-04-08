@@ -169,6 +169,45 @@ tests/
 └── test_*.py
 ```
 
+## Village Elder — Knowledge Base
+
+### Commands
+```bash
+village elder see <url|file>         # Ingest knowledge source
+village elder fetch <url|file>       # Alias for see
+village elder ask "question"         # Query knowledge base
+village elder curate                 # Health check + regenerate VOICE.md
+village elder upkeep                 # Alias for curate
+village elder stats                  # Show wiki statistics
+village elder monitor                # Watch wiki/ingest/ for new files
+```
+
+### Architecture
+```
+wiki/
+├── ingest/              # Drop sources here
+├── processed/           # Moved after ingestion
+├── pages/               # Wiki pages (markdown + YAML frontmatter)
+├── index.md             # Auto-generated catalog
+└── log.md               # Chronological record
+
+.village/memory/         # Agent cross-session memory (same format)
+VOICE.md                 # Distilled project knowledge for agents
+```
+
+### Village Voice
+Current project knowledge is maintained in `VOICE.md` at the repository root.
+Read it first for project context, conventions, and known issues.
+
+### Manual testing
+```bash
+village elder see ./docs/guide.md
+village elder see https://docs.example.com/api
+village elder ask "how do I configure auth?"
+village elder curate
+village elder stats
+```
+
 ## Key Integration Points
 
 ### tmux

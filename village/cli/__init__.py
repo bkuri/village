@@ -30,12 +30,13 @@ def village(ctx: click.Context, verbose: bool) -> None:
 
 
 from village import old_cli  # noqa: E402
-from village.cli import acp, doctor, lifecycle, state  # noqa: E402
+from village.cli import acp, doctor, elder, lifecycle, state  # noqa: E402
 
 for cmd_name in ["new", "up", "down"]:
     village.add_command(lifecycle.lifecycle_group.commands[cmd_name])
 
 village.add_command(state.state_group)
+village.add_command(elder.elder_group, name="elder")
 village.add_command(acp.acp_command, name="gate")
 village.add_command(acp.acp_command)
 village.add_command(doctor.doctor_command)
