@@ -34,6 +34,7 @@ class DraftTask:
     tags: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     llm_notes: list[str] = field(default_factory=list)
+    search_hints: dict[str, list[str]] = field(default_factory=dict)
 
 
 def _get_drafts_dir(config: _Config) -> Path:

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
@@ -42,6 +42,7 @@ class TaskBreakdownItem:
     blockers: list[str]
     dependencies: list[int]
     tags: list[str]
+    search_hints: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.tags is None:
@@ -184,11 +185,19 @@ Return a JSON object with the following structure:
     {
       "title": "Task title (inferred by LLM based on breakdown logic)",
       "description": "Detailed description (what to do)",
+      // Description should be keyword-rich for searchability:
+      // - Include specific module names and file paths
+      // - Name specific error types, function names, or class names
+      // - Describe the behavioral change precisely
+      // Example: "Add retry logic with exponential backoff to
+      //   queue.py task processing. Handle ConnectionError and
+      //   TimeoutError from subprocess.run() calls in resume.py."
       "estimated_effort": "X hours|days|weeks",
       "success_criteria": ["criterion 1", "criterion 2"],
       "blockers": ["blocker 1"],
       "dependencies": [0, 1],
-      "tags": ["tag1", "tag2"]
+      "tags": ["tag1", "tag2"],
+      "search_hints": {"modules": ["file.py"], "concepts": ["retry", "backoff"], "patterns": ["subprocess failure"]}
     }
   ],
   "summary": "Brief summary of breakdown"
@@ -248,6 +257,7 @@ def _parse_task_breakdown(output: str) -> TaskBreakdown:
                 blockers=item_data.get("blockers", []),
                 dependencies=item_data.get("dependencies", []),
                 tags=item_data.get("tags", []),
+                search_hints=item_data.get("search_hints", {}),
             )
             items.append(item)
         except Exception as e:
@@ -429,10 +439,18 @@ Return a JSON object with the following structure:
     {
       "title": "Atomic task title",
       "description": "Detailed description of what to do",
+      // Description should be keyword-rich for searchability:
+      // - Include specific module names and file paths
+      // - Name specific error types, function names, or class names
+      // - Describe the behavioral change precisely
+      // Example: "Add retry logic with exponential backoff to
+      //   queue.py task processing. Handle ConnectionError and
+      //   TimeoutError from subprocess.run() calls in resume.py."
       "estimated_effort": "X hours",
       "success_criteria": ["success criterion 1", "success criterion 2"],
       "dependencies": [0, 1],
-      "tags": ["tag1", "tag2"]
+      "tags": ["tag1", "tag2"],
+      "search_hints": {"modules": ["file.py"], "concepts": ["retry", "backoff"], "patterns": ["subprocess failure"]}
     }
   ],
   "summary": "Brief summary of task breakdown"

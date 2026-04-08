@@ -446,6 +446,46 @@ class ACPConfig:
 
 
 @dataclass
+class MemvidConfig:
+    """Memvid memory storage configuration."""
+
+    enabled: bool = False
+    memory_path: str = ".village/memory.mv2"
+    embedding_model: str = "BGE_SMALL"
+    drain_on_close: bool = True
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "MemvidConfig":
+        """Load memvid config from environment variables and config file."""
+        enabled_env = os.environ.get("VILLAGE_MEMVID_ENABLED", "").lower()
+        enabled_config = config.get("MEMVID.ENABLED", "").lower() or config.get("memvid.enabled", "").lower()
+        enabled = enabled_env or enabled_config
+        memvid_enabled = enabled in ("1", "true", "yes")
+
+        path_env = os.environ.get("VILLAGE_MEMVID_PATH")
+        path_config = config.get("MEMVID.PATH") or config.get("memvid.path")
+        memory_path = path_env or path_config or ".village/memory.mv2"
+
+        model_env = os.environ.get("VILLAGE_MEMVID_EMBEDDING_MODEL")
+        model_config = config.get("MEMVID.EMBEDDING_MODEL") or config.get("memvid.embedding_model")
+        embedding_model = model_env or model_config or "BGE_SMALL"
+
+        drain_env = os.environ.get("VILLAGE_MEMVID_DRAIN_ON_CLOSE", "").lower()
+        drain_config = (
+            config.get("MEMVID.DRAIN_ON_CLOSE", "").lower() or config.get("memvid.drain_on_close", "").lower()
+        )
+        drain = drain_env or drain_config
+        drain_on_close = drain not in ("0", "false", "no") if drain else True
+
+        return cls(
+            enabled=memvid_enabled,
+            memory_path=memory_path,
+            embedding_model=embedding_model,
+            drain_on_close=drain_on_close,
+        )
+
+
+@dataclass
 class Config:
     """Village configuration."""
 
@@ -472,6 +512,7 @@ class Config:
     extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
     task_breakdown: TaskBreakdownConfig = field(default_factory=TaskBreakdownConfig)
     acp: ACPConfig = field(default_factory=ACPConfig)
+    memvid: MemvidConfig = field(default_factory=MemvidConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -719,6 +760,9 @@ def _build_config(git_root: Path) -> Config:
     # Parse ACP configuration
     acp_config = ACPConfig.from_env_and_config(file_config)
 
+    # Parse memvid configuration
+    memvid_config = MemvidConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -808,4 +852,5 @@ def _build_config(git_root: Path) -> Config:
         extensions=extensions_config,
         task_breakdown=task_breakdown_config,
         acp=acp_config,
+        memvid=memvid_config,
     )

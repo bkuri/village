@@ -29,6 +29,8 @@ class QueueTask:
     task_id: str
     agent: str
     agent_metadata: dict[str, str] = field(default_factory=dict)
+    title: str = ""
+    description: str = ""
     skip_reason: Optional[str] = None
     lock_exists: bool = False
     lock_pane_id: Optional[str] = None
@@ -124,10 +126,14 @@ def extract_ready_tasks(config: Config) -> list[QueueTask]:
 
             task_id = match.group(1)
 
-            # Extract agent from metadata
+            title = ""
+            title_match = re.search(r"\[task\]\s+[a-zA-Z0-9_-]+:\s*(.+)$", line)
+            if title_match:
+                title = title_match.group(1).strip()
+
             agent = extract_agent_from_metadata(line, config)
 
-            tasks.append(QueueTask(task_id=task_id, agent=agent, agent_metadata={}))
+            tasks.append(QueueTask(task_id=task_id, agent=agent, agent_metadata={}, title=title))
 
         logger.debug(f"Extracted {len(tasks)} ready tasks from Beads")
         return tasks
@@ -320,7 +326,8 @@ def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
     if plan.available_tasks:
         lines.append("Available tasks (will start):")
         for task in plan.available_tasks:
-            lines.append(f"  - {task.task_id} (agent: {task.agent})")
+            title_display = f" - {task.title}" if task.title else ""
+            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display}")
         lines.append("")
     else:
         lines.append("No tasks available to start")
@@ -330,7 +337,8 @@ def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
     if plan.blocked_tasks:
         lines.append("Blocked tasks:")
         for task in plan.blocked_tasks:
-            lines.append(f"  - {task.task_id} (agent: {task.agent}) - {task.skip_reason}")
+            title_display = f" - {task.title}" if task.title else ""
+            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display} - {task.skip_reason}")
         lines.append("")
 
     return "\n".join(lines)
@@ -352,6 +360,8 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
         return {
             "task_id": task.task_id,
             "agent": task.agent,
+            "title": task.title,
+            "description": task.description,
             "skip_reason": task.skip_reason,
             "agent_metadata": task.agent_metadata,
             "lock_exists": task.lock_exists,

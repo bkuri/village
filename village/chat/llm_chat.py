@@ -77,6 +77,7 @@ class ChatSession:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
         return self.current_task
 
@@ -111,6 +112,7 @@ class ChatSession:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
         return True
 
@@ -377,6 +379,7 @@ class LLMChat:
             success_criteria=task_spec_dict["success_criteria"],
             estimate=task_spec_dict["estimate"],
             confidence=task_spec_dict["confidence"],
+            search_hints=task_spec_dict.get("search_hints", {}),
         )
 
         # Store in session
@@ -632,6 +635,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             success_criteria=refined_dict["success_criteria"],
             estimate=refined_dict["estimate"],
             confidence=refined_dict["confidence"],
+            search_hints=refined_dict.get("search_hints", {}),
         )
 
         # Add refinement to session
@@ -773,6 +777,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
                 success_criteria=item.success_criteria or ["Task completed"],
                 estimate=item.estimated_effort,
                 confidence="medium",
+                search_hints=item.search_hints,
             )
 
             context = {
@@ -994,6 +999,7 @@ Return JSON in same breakdown format:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
             lines.append(f"  #{ref['iteration']}: {task_spec.title}")
             lines.append(f"     User: {ref['user_input']}")
@@ -1147,6 +1153,13 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
             f"Blocked by: {', '.join(spec.blocked_by) if spec.blocked_by else '(none)'}",
             f"Success Criteria: {', '.join(spec.success_criteria) if spec.success_criteria else '(none)'}",
         ]
+        if spec.search_hints:
+            hints_parts = []
+            for key, values in spec.search_hints.items():
+                if values:
+                    hints_parts.append(f"{key}: {', '.join(values)}")
+            if hints_parts:
+                lines.append(f"Search Hints: {'; '.join(hints_parts)}")
         return "\n".join(lines)
 
     def _get_prompt(self) -> str:
@@ -1200,13 +1213,20 @@ If user says "blocks it" without specifying which task:
 ### Valid Task Spec
 {
   "title": "Task title",
-  "description": "Detailed description",
+  "description": "Keyword-rich description including: specific module names, file paths "
+  "affected, error types, function/class names, and behavioral changes. "
+  "Be precise enough that this description could be used as a search query to find related past work.",
   "scope": "fix|feature|config|docs|test|refactor",
   "blocks": ["task-id-1", "task-id-2"],
   "blocked_by": ["task-id-3", "task-id-4"],
   "success_criteria": ["Criterion 1", "Criterion 2", "Criterion 3"],
   "estimate": "X-Y hours|days|weeks",
-  "confidence": "high|medium|low"
+  "confidence": "high|medium|low",
+  "search_hints": {
+    "modules": ["affected/file.py", "another/module.py"],
+    "concepts": ["key term", "another concept"],
+    "patterns": ["error pattern", "behavioral pattern"]
+  }
 }
 
 ### Ambiguous Input (Needs Clarification)
@@ -1226,5 +1246,17 @@ If user says "blocks it" without specifying which task:
 1. What dependencies you extracted
 2. Why you interpreted it that way
 3. If you're unsure, ask for clarification
+
+## Description Quality Requirements
+
+Write task descriptions that are both human-readable AND search-friendly:
+- Always mention specific modules, files, or components affected
+- Include error types, function names, or class names where relevant
+- Describe the specific behavioral change, not just the general intent
+- Use terms that a developer would search for when looking for similar work
+
+Good: "Add retry logic with exponential backoff to queue.py task processing. "
+"Handle ConnectionError and TimeoutError from subprocess.run() calls."
+Bad: "Handle the retry case properly."
 
 Be concise and focused on task specification only."""

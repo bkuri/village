@@ -18,6 +18,10 @@ FALLBACK_CONTRACT_TEMPLATE = """# Task: {task_id} ({agent})
 ## Goal
 Work on task `{task_id}` in isolated workspace.
 
+## Task
+- Title: {task_title}
+- Description: {task_description}
+
 ## Constraints
 - Keep changes isolated to this worktree.
 - Prefer small commits / coherent diffs.
@@ -44,6 +48,8 @@ class ContractEnvelope:
     ppc_profile: Optional[str] = None
     ppc_version: Optional[str] = None
     created_at: str = ""
+    task_title: str = ""
+    task_description: str = ""
 
     def to_json(self) -> str:
         """Serialize to JSON envelope."""
@@ -58,6 +64,8 @@ class ContractEnvelope:
                 "ppc_profile": self.ppc_profile,
                 "ppc_version": self.ppc_version,
                 "created_at": self.created_at,
+                "task_title": self.task_title,
+                "task_description": self.task_description,
             },
             sort_keys=True,
         )
@@ -70,6 +78,8 @@ def generate_fallback_contract(
     git_root: Path,
     window_name: str,
     created_at: datetime,
+    task_title: str = "",
+    task_description: str = "",
 ) -> str:
     """
     Generate minimal fallback contract (Markdown).
@@ -83,6 +93,8 @@ def generate_fallback_contract(
         git_root: Git repository root
         window_name: Tmux window name
         created_at: Contract creation timestamp
+        task_title: Task title from Beads
+        task_description: Task description from Beads
 
     Returns:
         Markdown contract string
@@ -94,6 +106,8 @@ def generate_fallback_contract(
         git_root=str(git_root),
         window_name=window_name,
         created_at=created_at.isoformat(),
+        task_title=task_title,
+        task_description=task_description,
     )
 
 
@@ -131,6 +145,23 @@ def generate_contract(
     ppc_profile: Optional[str] = None
     ppc_version: Optional[str] = None
 
+    task_title = ""
+    task_description = ""
+
+    try:
+        from village.probes.beads import beads_available
+        from village.probes.tools import run_command_output
+
+        beads_status = beads_available()
+        if beads_status.command_available and beads_status.repo_initialized:
+            show_output = run_command_output(["bd", "show", task_id, "--json"])
+            if show_output:
+                task_info = json.loads(show_output)
+                task_title = task_info.get("title", "")
+                task_description = task_info.get("description", "")
+    except Exception as e:
+        logger.debug(f"Could not fetch task details from Beads: {e}")
+
     # Resolve agent config
     agent_config = config.agents.get(agent, AgentConfig())
 
@@ -156,9 +187,7 @@ def generate_contract(
             ppc_status = detect_ppc(config)
             if ppc_status.version:
                 ppc_version = ppc_status.version
-            ppc_mode = (
-                agent_config.ppc_mode if agent_config and agent_config.ppc_mode else "explore"
-            )
+            ppc_mode = agent_config.ppc_mode if agent_config and agent_config.ppc_mode else "explore"
             ppc_profile = f"ppc:{ppc_mode}"
         elif ppc_error:
             warnings.append(ppc_error)
@@ -172,6 +201,8 @@ def generate_contract(
             config.git_root,
             window_name,
             datetime.fromisoformat(created_at),
+            task_title=task_title,
+            task_description=task_description,
         )
         ppc_profile = "fallback"
 
@@ -185,4 +216,6 @@ def generate_contract(
         ppc_profile=ppc_profile,
         ppc_version=ppc_version,
         created_at=created_at,
+        task_title=task_title,
+        task_description=task_description,
     )

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from village.chat.baseline import BaselineReport, generate_batch_id
@@ -42,6 +42,7 @@ class BeadsTaskSpec:
     parent_task_id: Optional[str]
     custom_fields: dict[str, str]
     bump: BumpType = "patch"
+    search_hints: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.depends_on is None:
@@ -95,6 +96,7 @@ def extract_beads_specs(
                 "source": "village-brainstorm",
             },
             bump=bump,
+            search_hints=item.search_hints,
         )
 
         if item.tags:
