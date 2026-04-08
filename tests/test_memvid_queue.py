@@ -3,8 +3,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from village.memvid_queue import (
     MEMORY_TYPE_CONVENTION,
     MEMORY_TYPE_DISCOVERY,

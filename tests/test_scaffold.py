@@ -4,8 +4,6 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from village.scaffold import (
-    ScaffoldPlan,
-    ScaffoldResult,
     execute_scaffold,
     is_inside_git_repo,
     plan_scaffold,
@@ -154,7 +152,7 @@ def test_execute_scaffold_bd_init_failure_skipped(tmp_path: Path):
         return Mock(returncode=0)
 
     with (
-        patch("subprocess.run", side_effect=mock_run) as mock_subprocess,
+        patch("subprocess.run", side_effect=mock_run),
         patch("village.probes.tmux.create_session") as mock_create_session,
         patch("village.probes.tmux.session_exists") as mock_session_exists,
         patch("village.probes.tmux.list_windows") as mock_list_windows,

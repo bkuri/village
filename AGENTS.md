@@ -379,3 +379,68 @@ For more details, see README.md and docs/QUICKSTART.md.
 - If push fails, resolve and retry until it succeeds
 
 <!-- END BEADS INTEGRATION -->
+
+## Changelog Management
+
+**All notable changes are documented in CHANGELOG.md following [Keep a Changelog](https://keepachangelog.com/).**
+
+### Categorization
+
+Changes are automatically categorized during `village release` based on task metadata:
+
+- **Added**: New features (`feature` tasks in Beads)
+- **Changed**: Enhancements, refactors (`task`/`chore` tasks)
+- **Fixed**: Bug fixes (`bug` tasks)
+- **Breaking**: Breaking changes (tasks with `bump:major` label)
+
+### During Development
+
+When completing a task:
+
+1. **Apply bump label**: `bd label add <task-id> bump:<type>`
+   - `major` for breaking changes
+   - `minor` for new features
+   - `patch` for bug fixes
+   - `none` for docs/tests/internal work
+2. **Ensure task title is clear and user-facing** (will appear in changelog)
+   - ✅ "Add retry logic to queue processing"
+   - ✅ "Fix deadlock in lock acquisition"
+   - ❌ "Refactor _internal_helper function"
+3. **Close task**: `bd close <task-id> --reason "Completed"`
+
+### During Release
+
+`village release` automatically:
+
+1. Queries Beads for task types
+2. Groups closed tasks by changelog category
+3. Updates CHANGELOG.md with new version section
+4. Creates git tag
+
+**No manual changelog editing required.**
+
+### Example Changelog Entry
+
+```markdown
+## [1.2.0] - 2026-03-11
+
+### Breaking
+- Remove deprecated `--old-flag` CLI option (`bd-a3f8`)
+
+### Added
+- Automatic task decomposition with LLM analysis (`bd-b4c9`)
+- Extensibility framework for custom processors (`bd-d2e7`)
+
+### Fixed
+- Beads CLI compatibility with missing `--status` flag (`bd-c1d6`)
+
+### Changed
+- Improved error messages for lock conflicts (`bd-e5f2`)
+```
+
+### Edge Cases
+
+- **Missing task type**: Defaults to "Changed" category
+- **Beads unavailable**: Gracefully falls back to generic categorization
+- **Empty categories**: Skipped in final changelog entry
+- **bump:none tasks**: Excluded from changelog entirely

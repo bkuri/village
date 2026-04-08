@@ -47,8 +47,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
@@ -73,8 +73,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--plan", "--json"])
 
                 assert result.exit_code == 0
@@ -83,9 +83,7 @@ class TestQueueCLIPlan:
                 assert data["blocked_tasks"][0]["task_id"] == "bd-b7d2"
                 assert data["blocked_tasks"][0]["skip_reason"] == "active_lock"
 
-    def test_queue_plan_with_blocked_tasks(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_plan_with_blocked_tasks(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test queue plan shows blocked tasks with reasons."""
         tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
         blocked = [
@@ -100,17 +98,15 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
                 assert "Blocked tasks:" in result.output
                 assert "bd-b7d2 (agent: test) - active_lock" in result.output
 
-    def test_queue_plan_no_available_tasks(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_plan_no_available_tasks(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test queue plan when no tasks available."""
         plan = QueuePlan(
             ready_tasks=[],
@@ -121,8 +117,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
@@ -149,7 +145,6 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        # Mock successful execution
         def mock_execute(plan, session_name, config, force):
             return [
                 ResumeResult(
@@ -163,9 +158,9 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                with patch("village.cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
+                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "2"])
 
                     assert result.exit_code == 0
@@ -173,9 +168,7 @@ class TestQueueCLIExecution:
                     assert "Tasks started: 2" in result.output
                     assert "Tasks failed: 0" in result.output
 
-    def test_queue_partial_success_exit_code(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_partial_success_exit_code(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test partial success returns exit code 4."""
         from village.resume import ResumeResult
 
@@ -192,7 +185,6 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        # Mock mixed results
         def mock_execute(plan, session_name, config, force=False):
             return [
                 ResumeResult(
@@ -214,9 +206,9 @@ class TestQueueCLIExecution:
                 ),
             ]
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                with patch("village.cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
+                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "2"])
 
                     assert result.exit_code == 4  # Partial success
@@ -238,7 +230,6 @@ class TestQueueCLIExecution:
             concurrency_limit=1,
         )
 
-        # Mock all failed
         def mock_execute(plan, session_name, config, force=False):
             return [
                 ResumeResult(
@@ -253,18 +244,16 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                with patch("village.cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
+                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "1"])
 
                     assert result.exit_code == 1  # All failed
                     assert "Tasks started: 0" in result.output
                     assert "Tasks failed: 1" in result.output
 
-    def test_queue_json_execution_output(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_json_execution_output(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test JSON execution output."""
         import json
 
@@ -295,9 +284,9 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                with patch("village.cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
+                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "1", "--json"])
 
                     assert result.exit_code == 0
@@ -308,9 +297,7 @@ class TestQueueCLIExecution:
                     assert data["results"][0]["task_id"] == "bd-a3f8"
                     assert data["results"][0]["success"] is True
 
-    def test_queue_no_tasks_available_exit_code(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_no_tasks_available_exit_code(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test exit code 1 when no tasks available."""
 
         plan = QueuePlan(
@@ -322,15 +309,13 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1"])
 
                 assert result.exit_code == EXIT_BLOCKED
 
-    def test_queue_no_tasks_available_json(
-        self, runner: click.testing.CliRunner, mock_config: Config
-    ):
+    def test_queue_no_tasks_available_json(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test JSON output when no tasks available."""
         import json
 
@@ -343,8 +328,8 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1", "--json"])
 
                 assert result.exit_code == EXIT_BLOCKED
@@ -373,15 +358,12 @@ class TestQueueCLIFilters:
             concurrency_limit=3,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                # Filter to only build tasks
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--agent", "build"])
 
                 assert result.exit_code == 0
-                # Should show only bd-a3f8
                 assert "bd-a3f8 (agent: build)" in result.output
-                # Should not show test or worker tasks
                 assert "bd-b7d2 (agent: test)" not in result.output
                 assert "bd-c4e1 (agent: worker)" not in result.output
 
@@ -400,18 +382,14 @@ class TestQueueCLIFilters:
             concurrency_limit=2,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
+        with patch("village.old_cli.generate_queue_plan", return_value=plan) as mock_gen:
+            with patch("village.old_cli.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--max-workers", "2"])
 
                 assert result.exit_code == 0
-                # Should pass max_workers=2 to generate_queue_plan
-                from village.cli import generate_queue_plan
-
-                generate_queue_plan.assert_called_once()
-                # Extract call args
-                call_args = generate_queue_plan.call_args
-                assert call_args[0][1] == 2  # max_workers argument
+                mock_gen.assert_called_once()
+                call_args = mock_gen.call_args
+                assert call_args[0][1] == 2
 
     def test_queue_dry_run(self, runner: click.testing.CliRunner, mock_config: Config):
         """Test --dry-run previews execution."""
@@ -427,12 +405,11 @@ class TestQueueCLIFilters:
             concurrency_limit=1,
         )
 
-        with patch("village.cli.generate_queue_plan", return_value=plan):
-            with patch("village.cli.get_config", return_value=mock_config):
-                with patch("village.cli.execute_queue_plan") as mock_execute:
+        with patch("village.old_cli.generate_queue_plan", return_value=plan):
+            with patch("village.old_cli.get_config", return_value=mock_config):
+                with patch("village.old_cli.execute_queue_plan") as mock_execute:
                     result = runner.invoke(village, ["queue", "--dry-run", "--n", "1"])
 
                     assert result.exit_code == 0
                     assert "(dry-run: previewing execution)" in result.output
-                    # Should not actually execute
                     mock_execute.assert_not_called()

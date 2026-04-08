@@ -4,24 +4,20 @@ End-to-end tests with real bridge operations, filesystem operations,
 and session lifecycle management.
 """
 
-import asyncio
-import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from tests.fixtures.acp_fixtures import (
+    create_test_worktree,
+)
 from village.acp.bridge import ACPBridge, ACPBridgeError
 from village.config import Config
 from village.event_log import Event, append_event
+from village.locks import Lock, write_lock
 from village.state_machine import TaskState
-from village.locks import write_lock, Lock
-from tests.fixtures.acp_fixtures import (
-    create_test_file,
-    create_test_worktree,
-    ACPSessionBuilder,
-    ACPTerminalBuilder,
-)
-from datetime import datetime, timezone
 
 
 def _create_test_lock(task_id: str, bridge: ACPBridge) -> Lock:
@@ -108,7 +104,8 @@ class TestSessionLifecycle:
         # Create in QUEUED state
         await bridge.session_new({"sessionId": session_id})
 
-        # Manually transition to IN_PROGRESS (simulating prompt start)
+        # Transition through valid path: QUEUED -> CLAIMED -> IN_PROGRESS
+        bridge.state_machine.transition(session_id, TaskState.CLAIMED)
         result = bridge.state_machine.transition(session_id, TaskState.IN_PROGRESS)
         assert result.success
 
@@ -148,6 +145,14 @@ class TestSessionLifecycle:
 @pytest.mark.integration
 class TestFileSystemOperations:
     """Test file system operations with real worktrees."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_active_check(self, request):
+        if "require_active_task" in request.node.name:
+            yield
+            return
+        with patch("village.acp.bridge.ACPBridge._is_task_active", return_value=True):
+            yield
 
     async def test_fs_read_file_in_worktree(self, bridge_with_worktree: tuple[ACPBridge, str, Path]):
         """Test reading file from worktree."""

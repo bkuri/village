@@ -52,8 +52,8 @@ class TestStateCommand:
         lock_path.write_text(lock_content, encoding="utf-8")
 
         # Mock CLI invocation
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import state
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import state
 
             result = runner.invoke(state, ["bd-a3f8"])
 
@@ -76,8 +76,8 @@ class TestStateCommand:
         )
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import state
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import state
 
             result = runner.invoke(state, ["bd-a3f8", "--json"])
 
@@ -91,8 +91,8 @@ class TestStateCommand:
 
     def test_state_command_no_state(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
         """Test that state command handles tasks without state gracefully."""
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import state
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import state
 
             result = runner.invoke(state, ["bd-a3f8"])
 
@@ -129,8 +129,8 @@ class TestStateCommand:
         )
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import state
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import state
 
             result = runner.invoke(state, ["bd-a3f8"])
 
@@ -150,15 +150,14 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=in_progress\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import pause
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import pause
 
             result = runner.invoke(pause, ["bd-a3f8"])
 
         assert result.exit_code == 0
         assert "Paused task bd-a3f8" in result.output
 
-        # Verify state changed in lock file
         updated_content = lock_path.read_text(encoding="utf-8")
         assert "state=paused" in updated_content
 
@@ -170,8 +169,8 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import pause
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import pause
 
             result = runner.invoke(pause, ["bd-a3f8"])
 
@@ -186,8 +185,8 @@ class TestPauseCommand:
 
         events_log_path = mock_config.village_dir / "events.log"
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import pause
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import pause
 
             runner.invoke(pause, ["bd-a3f8"])
 
@@ -207,15 +206,14 @@ class TestResumeTaskCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=paused\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import resume_task
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import resume_task
 
             result = runner.invoke(resume_task, ["bd-a3f8"])
 
         assert result.exit_code == 0
         assert "Resumed task bd-a3f8" in result.output
 
-        # Verify state changed in lock file
         updated_content = lock_path.read_text(encoding="utf-8")
         assert "state=in_progress" in updated_content
 
@@ -225,8 +223,8 @@ class TestResumeTaskCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import resume_task
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import resume_task
 
             result = runner.invoke(resume_task, ["bd-a3f8"])
 
@@ -241,8 +239,8 @@ class TestResumeTaskCommand:
 
         events_log_path = mock_config.village_dir / "events.log"
 
-        with patch("village.cli.get_config", return_value=mock_config):
-            from village.cli import resume_task
+        with patch("village.old_cli.get_config", return_value=mock_config):
+            from village.old_cli import resume_task
 
             runner.invoke(resume_task, ["bd-a3f8"])
 

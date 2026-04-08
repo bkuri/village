@@ -880,24 +880,23 @@ class ACPBridge:
         Returns:
             Worktree info if found, None otherwise
         """
+        import types
+
         from village.worktrees import get_worktree_info
 
-        # Check all worktrees
         for worktree_dir in self.config.worktrees_dir.iterdir():
             if worktree_dir.is_dir():
                 try:
-                    # Check if path is under this worktree
                     path.relative_to(worktree_dir)
-                    # Found it - extract task_id from directory name
                     task_id = worktree_dir.name
                     try:
                         info = get_worktree_info(task_id, self.config)
-                        return info
+                        if info is not None:
+                            return info
                     except Exception:
-                        # Worktree might not be valid
-                        continue
+                        pass
+                    return types.SimpleNamespace(task_id=task_id, path=worktree_dir)
                 except ValueError:
-                    # Path not under this worktree
                     continue
 
         return None

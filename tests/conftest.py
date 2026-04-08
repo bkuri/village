@@ -7,13 +7,12 @@ from unittest.mock import patch
 import click.testing
 import pytest
 
-from village.probes.tools import SubprocessError
-
 from tests.fixtures.acp_fixtures import (  # noqa: F401
     acp_config,
     sample_acp_events,
     sample_acp_session,
 )
+from village.probes.tools import SubprocessError
 
 
 @pytest.fixture
