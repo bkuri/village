@@ -4,9 +4,12 @@
 {"issue_id":"bd-3iz","label":"bump:patch"}
 {"issue_id":"bd-53m","label":"batch:doctor-quality"}
 {"issue_id":"bd-53m","label":"bump:patch"}
+{"issue_id":"bd-53y","label":"bump:minor"}
 {"issue_id":"bd-67g","label":"batch:doctor-quality"}
 {"issue_id":"bd-67g","label":"bump:patch"}
+{"issue_id":"bd-6ch","label":"epic"}
 {"issue_id":"bd-6u3","label":"bump:minor"}
+{"issue_id":"bd-735","label":"bump:minor"}
 {"issue_id":"bd-9fn","label":"acp"}
 {"issue_id":"bd-9fn","label":"bump:minor"}
 {"issue_id":"bd-9fn","label":"enhancement"}
@@ -36,6 +39,9 @@
 {"issue_id":"bd-9fn.6","label":"enhancement"}
 {"issue_id":"bd-9fn.6","label":"refactor"}
 {"issue_id":"bd-9fn.6","label":"testing"}
+{"issue_id":"bd-amp","label":"bump:patch"}
+{"issue_id":"bd-ax5","label":"bump:minor"}
+{"issue_id":"bd-d5w","label":"bump:minor"}
 {"issue_id":"bd-dae","label":"batch:doctor-quality"}
 {"issue_id":"bd-dae","label":"bump:patch"}
 {"issue_id":"bd-dxg","label":"batch:doctor-quality"}
@@ -43,10 +49,12 @@
 {"issue_id":"bd-fsw","label":"batch:doctor-quality"}
 {"issue_id":"bd-fsw","label":"bump:patch"}
 {"issue_id":"bd-gu4","label":"bump:minor"}
+{"issue_id":"bd-hrb","label":"bump:patch"}
 {"issue_id":"bd-hyw","label":"batch:doctor-quality"}
 {"issue_id":"bd-hyw","label":"bump:patch"}
 {"issue_id":"bd-khq","label":"batch:doctor-quality"}
 {"issue_id":"bd-khq","label":"bump:patch"}
+{"issue_id":"bd-oev","label":"bump:patch"}
 {"issue_id":"bd-pa2","label":"bump:minor"}
 {"issue_id":"bd-qc2","label":"bump:minor"}
 {"issue_id":"bd-rlo","label":"batch:doctor-test"}
