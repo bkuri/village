@@ -86,6 +86,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `village/llm/tools.py`: Added ATOM_OF_THOUGHTS mappings and tool definition
 - `village/chat/sequential_thinking.py`: Added prompt builders and strategy router
 
+## [1.4.0] - 2026-04-07
+
+### Changed
+- Surface task title/description in agent contracts (`bd-oev`)
+- Preserve task text in queue scheduling (`bd-hrb`)
+- Improve LLM task description prompts for searchability (`bd-735`)
+- Add memvid configuration to Village config (`bd-amp`)
+- Add search_hints structured field to task specs (`bd-d5w`)
+- Implement MemvidChatContext adapter (`bd-53y`)
+- Implement memvid write-behind queue (`bd-ax5`)
+
+
 ## [1.2.0] - 2026-01-24
 
 ### Added

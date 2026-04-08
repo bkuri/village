@@ -24,6 +24,53 @@ SCOPE_TO_BUMP: dict[str, BumpType] = {
     "refactor": "none",
 }
 
+ChangelogCategory = Literal["Added", "Changed", "Fixed", "Breaking"]
+TASK_TYPE_TO_CATEGORY: dict[str, ChangelogCategory] = {
+    "bug": "Fixed",
+    "feature": "Added",
+    "task": "Changed",
+    "chore": "Changed",
+    "epic": "Changed",
+}
+
+
+def get_changelog_category(task_type: str, bump: BumpType) -> ChangelogCategory:
+    """Map task type and bump to changelog category.
+
+    Breaking changes (bump:major) always go to Breaking section.
+    Otherwise, use task type mapping.
+    """
+    if bump == "major":
+        return "Breaking"
+    return TASK_TYPE_TO_CATEGORY.get(task_type, "Changed")
+
+
+def get_task_type_from_beads(task_id: str) -> str:
+    """Fetch task type from Beads.
+
+    Returns empty string if Beads unavailable or task not found.
+    """
+    try:
+        result = subprocess.run(
+            ["bd", "show", task_id, "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                if isinstance(data, list) and data:
+                    data = data[0]
+                if isinstance(data, dict):
+                    return str(data.get("type", ""))
+            except (json.JSONDecodeError, KeyError):
+                pass
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
 
 @dataclass
 class PendingBump:
@@ -33,6 +80,7 @@ class PendingBump:
     bump: BumpType
     completed_at: datetime
     title: str = ""
+    task_type: str = ""
 
 
 @dataclass
@@ -132,12 +180,16 @@ def get_pending_bumps() -> list[PendingBump]:
         except (KeyError, ValueError):
             completed_at = datetime.now(timezone.utc)
 
+        task_id = item.get("task_id", "")
+        task_type = get_task_type_from_beads(task_id) if task_id else ""
+
         bumps.append(
             PendingBump(
-                task_id=item.get("task_id", ""),
+                task_id=task_id,
                 bump=cast(BumpType, item.get("bump", "patch")),
                 completed_at=completed_at,
                 title=item.get("title", ""),
+                task_type=task_type,
             )
         )
 
@@ -472,19 +524,24 @@ def is_no_op_release(bumps: list[BumpType]) -> bool:
 
 
 def update_changelog(version: str, pending: list[PendingBump]) -> None:
-    """Insert a new changelog section for *version* above existing versioned sections.
+    """Insert a new changelog section for *version* with categorized entries.
 
     Locates CHANGELOG.md relative to the git repository root.  The new
     section is inserted after the last ``## [Unreleased]`` block (i.e. just
     before the first ``## [X.Y.Z]`` line).  Tasks with bump type "none" are
     excluded from the entry.
 
+    Entries are categorized into:
+    - Added: New features
+    - Changed: Enhancements, refactors
+    - Fixed: Bug fixes
+    - Breaking: Breaking changes (bump:major)
+
     Falls back to appending at the end of the file if the expected structure
     is not found, or creates the file if it doesn't exist.
 
     The write is performed atomically (temp-file + rename).
     """
-    # Find git root
     git_root_result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         capture_output=True,
@@ -500,15 +557,37 @@ def update_changelog(version: str, pending: list[PendingBump]) -> None:
 
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Filter out bump:none and categorize
+    non_trivial = [p for p in pending if p.bump != "none"]
+
+    if not non_trivial:
+        logger.info(f"No non-trivial changes for version {version}, skipping changelog update")
+        return
+
+    # Group by category
+    categories: dict[ChangelogCategory, list[PendingBump]] = {
+        "Breaking": [],
+        "Added": [],
+        "Changed": [],
+        "Fixed": [],
+    }
+
+    for p in non_trivial:
+        category = get_changelog_category(p.task_type, p.bump)
+        categories[category].append(p)
+
     # Build the new section
     section_lines = [f"## [{version}] - {today}", ""]
-    non_trivial = [p for p in pending if p.bump != "none"]
-    if non_trivial:
-        section_lines.append("### Changed")
-        for p in non_trivial:
-            title = p.title or p.task_id
-            section_lines.append(f"- {title} (`{p.task_id}`)")
-        section_lines.append("")
+
+    category_order: list[ChangelogCategory] = ["Breaking", "Added", "Changed", "Fixed"]
+    for category in category_order:
+        items = categories[category]
+        if items:
+            section_lines.append(f"### {category}")
+            for p in items:
+                title = p.title or p.task_id
+                section_lines.append(f"- {title} (`{p.task_id}`)")
+            section_lines.append("")
 
     new_section = "\n".join(section_lines) + "\n"
 
