@@ -24,9 +24,7 @@ def test_ensure_beads_initialized_no_beads_dir(tmp_path: Path, mock_config: Conf
         mock_run.assert_not_called()
 
 
-def test_ensure_beads_initialized_config_has_draft_status(
-    tmp_path: Path, mock_config: Config
-) -> None:
+def test_ensure_beads_initialized_config_has_draft_status(tmp_path: Path, mock_config: Config) -> None:
     """
     Test that function returns early when status.custom already contains 'draft'.
 
@@ -58,9 +56,7 @@ def test_ensure_beads_initialized_config_has_draft_status(
 
         # Verify bd config set was NOT called
         set_calls = [
-            call
-            for call in mock_run.call_args_list
-            if call[0][0] == ["bd", "config", "set", "status.custom", "draft"]
+            call for call in mock_run.call_args_list if call[0][0] == ["bd", "config", "set", "status.custom", "draft"]
         ]
         assert len(set_calls) == 0
 
@@ -96,9 +92,7 @@ def test_ensure_beads_initialized_config_missing_draft(tmp_path: Path, mock_conf
         mock_run.assert_any_call(["bd", "config", "set", "status.custom", "draft"])
 
 
-def test_ensure_beads_initialized_config_has_other_status(
-    tmp_path: Path, mock_config: Config
-) -> None:
+def test_ensure_beads_initialized_config_has_other_status(tmp_path: Path, mock_config: Config) -> None:
     """
     Test that function configures draft status when status.custom has other values.
 
@@ -135,9 +129,7 @@ def test_ensure_beads_initialized_config_has_other_status(
         mock_run.assert_any_call(["bd", "config", "set", "status.custom", "draft"])
 
 
-def test_ensure_beads_initialized_config_has_draft_in_list(
-    tmp_path: Path, mock_config: Config
-) -> None:
+def test_ensure_beads_initialized_config_has_draft_in_list(tmp_path: Path, mock_config: Config) -> None:
     """
     Test that function returns early when 'draft' is among multiple statuses.
 
@@ -169,9 +161,7 @@ def test_ensure_beads_initialized_config_has_draft_in_list(
 
         # Verify bd config set was NOT called
         set_calls = [
-            call
-            for call in mock_run.call_args_list
-            if call[0][0] == ["bd", "config", "set", "status.custom", "draft"]
+            call for call in mock_run.call_args_list if call[0][0] == ["bd", "config", "set", "status.custom", "draft"]
         ]
         assert len(set_calls) == 0
 

@@ -40,9 +40,7 @@ class TestBuildSequentialThinkingPrompt:
 
         assert "1. Break down into 3-7 concrete, actionable tasks" in prompt
         assert "2. Evaluate if the user's title is precise and descriptive enough" in prompt
-        assert (
-            "3. If the title is vague, suggest a more specific/recognizable alternative" in prompt
-        )
+        assert "3. If the title is vague, suggest a more specific/recognizable alternative" in prompt
         assert "4. Each task should be independently completable" in prompt
         assert "5. Identify dependencies between tasks (by index)" in prompt
         assert "6. Provide success criteria for each task" in prompt

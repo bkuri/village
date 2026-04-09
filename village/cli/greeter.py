@@ -1,5 +1,3 @@
-"""Help (ephemeral Q&A) and drafts commands."""
-
 from __future__ import annotations
 
 import asyncio
@@ -32,15 +30,8 @@ async def _initialize_extensions_and_mcp(
 
 
 @click.command()
-def help_cmd() -> None:
-    """
-    Start ephemeral LLM Q&A session.
-
-    Interactive LLM session for asking questions about your project.
-    No slash commands, no archival — just ask and get answers.
-
-    Type /exit or /quit to end the session.
-    """
+def greeter() -> None:
+    """Start ephemeral LLM Q&A session."""
     from village.chat.beads_client import BeadsClient, BeadsError
     from village.chat.llm_chat import LLMChat
     from village.llm.factory import get_llm_client
@@ -76,7 +67,7 @@ def help_cmd() -> None:
     except Exception:
         pass
 
-    click.echo("Village Help — Ask anything about your project. /exit to quit.\n")
+    click.echo("Village Greeter — How can I help? /exit to quit.\n")
 
     try:
         while True:
@@ -102,20 +93,7 @@ def help_cmd() -> None:
 @click.option("--scope", type=str, help="Filter by scope (feature|fix|investigation|refactoring)")
 @click.option("--total", is_flag=True, help="Return draft count (for statusbar)")
 def drafts(scope: str | None, total: bool) -> None:
-    """
-    List or count draft tasks.
-
-    Default: Show 2-column table (ID, Title)
-
-    Examples:
-      village drafts
-      village drafts --scope feature
-      village drafts --total
-
-    Flags:
-      --scope: Filter by scope
-      --total: Return count only (machine-readable)
-    """
+    """List or count draft tasks."""
     from village.chat.drafts import list_drafts
     from village.render.text import render_drafts_table
 

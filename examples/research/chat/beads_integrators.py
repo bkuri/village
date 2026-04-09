@@ -82,9 +82,7 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
             bead: Created bead
             context: Original context
         """
-        research_field = (
-            bead.metadata.get("research_field", "Unknown") if bead.metadata else "Unknown"
-        )
+        research_field = bead.metadata.get("research_field", "Unknown") if bead.metadata else "Unknown"
         print(f"[RESEARCH] Created bead {bead.bead_id} for {research_field} research")
 
     async def on_bead_updated(self, bead_id: str, updates: dict) -> None:

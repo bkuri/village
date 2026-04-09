@@ -14,9 +14,7 @@ class TestQueryRefinement:
 
     def test_query_refinement_initialization(self):
         """Test QueryRefinement initialization with required fields."""
-        refinement = QueryRefinement(
-            original_query="test query", refined_steps=["step 1", "step 2"]
-        )
+        refinement = QueryRefinement(original_query="test query", refined_steps=["step 1", "step 2"])
         assert refinement.original_query == "test query"
         assert refinement.refined_steps == ["step 1", "step 2"]
         assert refinement.context_hints == {}
@@ -74,9 +72,7 @@ class TestDefaultThinkingRefiner:
     async def test_should_refine_with_complex_query(self):
         """Test should_refine with complex query."""
         refiner = DefaultThinkingRefiner()
-        result = await refiner.should_refine(
-            "Compare aggressive vs balanced strategies from last week"
-        )
+        result = await refiner.should_refine("Compare aggressive vs balanced strategies from last week")
         assert result is False
 
     @pytest.mark.asyncio

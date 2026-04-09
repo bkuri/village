@@ -152,9 +152,7 @@ def _collect_optional_fields(title: str, max_followups: int) -> dict[str, Any]:
             followups_asked += 1
 
     if followups_asked < max_followups:
-        tags_input = click.prompt(
-            "Batch tags (comma-separated, leave empty): ", show_default=False, default=""
-        )
+        tags_input = click.prompt("Batch tags (comma-separated, leave empty): ", show_default=False, default="")
         if tags_input:
             optional_fields["tags"] = [t.strip() for t in tags_input.split(",") if t.strip()]
             followups_asked += 1

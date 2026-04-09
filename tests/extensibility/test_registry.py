@@ -671,9 +671,7 @@ class TestExtensionRegistryMockBehavior:
     async def test_mock_beads_integrator_create_bead_spec(self) -> None:
         """MockBeadsIntegrator create_bead_spec works as expected."""
         integrator = MockBeadsIntegrator()
-        result = await integrator.create_bead_spec(
-            {"title": "Test Bead", "description": "Test desc"}
-        )
+        result = await integrator.create_bead_spec({"title": "Test Bead", "description": "Test desc"})
         assert result.title == "Test Bead"
         assert result.description == "Test desc"
 

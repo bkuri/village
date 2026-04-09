@@ -21,14 +21,70 @@ def lifecycle_group() -> None:
     pass
 
 
+def _prompt(question: str) -> str:
+    """Prompt for a single answer, handling abort gracefully.
+
+    Returns:
+        The trimmed answer, or empty string if aborted.
+    """
+    try:
+        return str(click.prompt(f"  {question}")).strip()
+    except (click.exceptions.Abort, EOFError, KeyboardInterrupt):
+        click.echo("")
+        return ""
+
+
+def _slugify(description: str) -> str:
+    """Derive a working directory name from a description.
+
+    Takes the first few meaningful words and joins them with hyphens.
+    Falls back to 'new-project' if nothing useful can be derived.
+
+    Args:
+        description: A short project description.
+
+    Returns:
+        A slug-style directory name.
+    """
+    import re
+
+    words = re.split(r"\s+", description.strip().lower())
+    keep = [w for w in words if re.match(r"^[a-z][a-z0-9]*$", w)]
+    keep = keep[:3]
+    return "-".join(keep) or "new-project"
+
+
+def _run_create_project_workflow() -> str:
+    """Interactive reverse-prompt workflow for creating a new project.
+
+    Asks what the user is building, then derives a working directory name
+    from the description. Naming is deferred to the ``name-design``
+    workflow or ``village onboard``.
+
+    Returns:
+        A working directory name, or empty string if aborted.
+    """
+    click.echo("Let's set up a new project.\n")
+
+    description = _prompt("What are you building?")
+    if not description:
+        click.echo("Aborted.")
+        return ""
+
+    slug = _slugify(description)
+    click.echo(f"  Working directory: {slug}")
+    click.echo("")
+    return slug
+
+
 @lifecycle_group.command("new")
-@click.argument("name")
+@click.argument("name", required=False)
 @click.option("--path", "path", type=click.Path(), default=".", help="Parent directory (default: current directory)")
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
 @click.option("--skip-onboard", is_flag=True, help="Skip onboarding interview, write placeholder files")
-def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
+def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
     """
     Create a new project with village support.
 
@@ -40,9 +96,13 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_o
       - bd init (if beads available)
       - tmux session + dashboard window
 
+    When called without a name, starts an interactive create-project workflow
+    that prompts for the project name and other details before scaffolding.
+
     Errors if already inside a git repository (use `village up` instead).
 
     Examples:
+      village new
       village new myproject
       village new myproject --path ~/projects
       village new myproject --dry-run
@@ -54,6 +114,14 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_o
         plan_scaffold,
     )
 
+    if is_inside_git_repo():
+        raise click.ClickException("Already inside a git repository. Use `village up` instead.")
+
+    if name is None:
+        name = _run_create_project_workflow()
+        if not name:
+            raise click.ClickException("Project name is required.")
+
     if dry_run or plan:
         parent_dir = Path(path).resolve()
         scaffold_plan = plan_scaffold(name, parent_dir)
@@ -62,9 +130,6 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_o
         for step in scaffold_plan.steps:
             click.echo(f"  - {step}")
         return
-
-    if is_inside_git_repo():
-        raise click.ClickException("Already inside a git repository. Use `village up` instead.")
 
     parent_dir = Path(path).resolve()
     result = execute_scaffold(name, parent_dir, dashboard=dashboard, onboard=not skip_onboard)

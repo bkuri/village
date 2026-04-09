@@ -52,17 +52,13 @@ def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
     if provider == "anthropic":
         api_key = os.getenv(config.llm.api_key_env)
         if not api_key:
-            raise ValueError(
-                f"Anthropic API key not found. Set {config.llm.api_key_env} environment variable."
-            )
+            raise ValueError(f"Anthropic API key not found. Set {config.llm.api_key_env} environment variable.")
         return AnthropicClient(api_key=api_key, model=model)
 
     elif provider == "openrouter":
         api_key = os.getenv(config.llm.api_key_env)
         if not api_key:
-            raise ValueError(
-                f"OpenRouter API key not found. Set {config.llm.api_key_env} environment variable."
-            )
+            raise ValueError(f"OpenRouter API key not found. Set {config.llm.api_key_env} environment variable.")
         return OpenRouterClient(api_key=api_key, model=model)
 
     elif provider == "ollama":
@@ -75,9 +71,7 @@ def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
         raise ValueError(f"Unknown LLM provider: {provider}")
 
 
-def get_mcp_client(
-    config: Config, discovered_servers: list["MCPServer"] | None = None
-) -> MCPClient | None:
+def get_mcp_client(config: Config, discovered_servers: list["MCPServer"] | None = None) -> MCPClient | None:
     """
     Factory to get MCP client based on config.
 
@@ -96,8 +90,7 @@ def get_mcp_client(
 
     if discovered_servers is not None:
         logger.info(
-            f"Discovered {len(discovered_servers)} MCP servers: "
-            f"{', '.join(s.name for s in discovered_servers)}"
+            f"Discovered {len(discovered_servers)} MCP servers: {', '.join(s.name for s in discovered_servers)}"
         )
 
     if config.mcp.client_type == "mcp-use":

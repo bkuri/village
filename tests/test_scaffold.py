@@ -3,6 +3,9 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from click.testing import CliRunner
+
+from village.cli.lifecycle import _run_create_project_workflow, _slugify, lifecycle_group
 from village.scaffold import (
     execute_scaffold,
     is_inside_git_repo,
@@ -329,3 +332,108 @@ def test_execute_scaffold_onboard_pipeline_failure_fallback(tmp_path: Path):
         assert result.success is True
         assert "README.md" in result.created
         assert "AGENTS.md" in result.created
+
+
+def test_slugify_from_description():
+    """Test slug derivation from a description."""
+    assert _slugify("A task queue for Python") == "a-task-queue"
+    assert _slugify("CLI tool that manages git worktrees") == "cli-tool-that"
+    assert _slugify("   fast api   server  ") == "fast-api-server"
+    assert _slugify("it's a test") == "a-test"
+
+
+def test_slugify_fallback():
+    """Test slug fallback when description has no slug-friendly words."""
+    assert _slugify("") == "new-project"
+    assert _slugify("123 456") == "new-project"
+    assert _slugify("!@# $%^") == "new-project"
+
+
+def test_create_project_workflow_returns_slug():
+    """Test workflow returns a slug derived from the description."""
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="a task queue for python"),
+        patch("village.cli.lifecycle.click.echo"),
+    ):
+        name = _run_create_project_workflow()
+    assert name == "a-task-queue"
+
+
+def test_create_project_workflow_aborted():
+    """Test workflow returns empty when prompt is aborted."""
+    with patch("village.cli.lifecycle.click.prompt", side_effect=KeyboardInterrupt):
+        with patch("village.cli.lifecycle.click.echo"):
+            name = _run_create_project_workflow()
+    assert name == ""
+
+
+def test_create_project_workflow_fallback_slug():
+    """Test workflow falls back to 'new-project' for unslugifiable input."""
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="!@# $%^"),
+        patch("village.cli.lifecycle.click.echo"),
+    ):
+        name = _run_create_project_workflow()
+    assert name == "new-project"
+
+
+def test_new_command_without_name_prompts(tmp_path: Path):
+    """Test village new (no name) triggers prompt and scaffolds."""
+    runner = CliRunner()
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="a task queue"),
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "a-task-queue",
+            created=[".gitignore", ".village/"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "a-task-queue" in result.output
+        mock_exec.assert_called_once_with(
+            "a-task-queue",
+            tmp_path.resolve(),
+            dashboard=True,
+            onboard=True,
+        )
+
+
+def test_new_command_with_name_skips_prompt(tmp_path: Path):
+    """Test village new <name> does not prompt."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+        patch("village.cli.lifecycle._run_create_project_workflow") as mock_workflow,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "direct-project",
+            created=[".gitignore"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "direct-project", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_workflow.assert_not_called()
+        mock_exec.assert_called_once_with(
+            "direct-project",
+            tmp_path.resolve(),
+            dashboard=True,
+            onboard=True,
+        )
+
+
+def test_new_command_without_name_aborted(tmp_path: Path):
+    """Test village new with aborted prompt shows error."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.cli.lifecycle._run_create_project_workflow", return_value=""),
+    ):
+        result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Project name is required" in result.output

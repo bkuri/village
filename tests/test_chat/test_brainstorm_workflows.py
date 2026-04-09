@@ -126,9 +126,7 @@ class TestBrainstormCommandInvocation:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
             patch("village.chat.conversation.ensure_beads_initialized"),
             patch("village.chat.conversation.run_command_output", return_value=None),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
@@ -138,16 +136,11 @@ class TestBrainstormCommandInvocation:
             mock_generate.return_value = mock_task_breakdown
             mock_create.return_value = mock_created_task_ids
 
-            state = anyio.run(
-                lambda: _handle_brainstorm(["Add user authentication"], state, integration_config)
-            )
+            state = anyio.run(lambda: _handle_brainstorm(["Add user authentication"], state, integration_config))
 
             assert state.session_snapshot is not None
             assert state.session_snapshot.brainstorm_baseline is not None
-            assert (
-                state.session_snapshot.brainstorm_baseline["baseline_title"]
-                == "Add user authentication"
-            )
+            assert state.session_snapshot.brainstorm_baseline["baseline_title"] == "Add user authentication"
             assert len(state.session_snapshot.brainstorm_created_ids) == 3
             assert len(state.pending_enables) == 3
 
@@ -179,9 +172,7 @@ class TestBrainstormValidation:
             assert state.session_snapshot is None
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
             assert "Error:" in error_messages[0].content
 
@@ -210,9 +201,7 @@ class TestBrainstormSessionSnapshot:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
             patch("village.chat.conversation.ensure_beads_initialized"),
             patch("village.chat.conversation.run_command_output", return_value=None),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
@@ -257,9 +246,7 @@ class TestBrainstormDraftTasks:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
             patch("village.chat.conversation.ensure_beads_initialized"),
             patch("village.chat.conversation.run_command_output", return_value=None),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
@@ -309,9 +296,7 @@ class TestBrainstormBeadsIntegration:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
             patch("village.chat.conversation.ensure_beads_initialized"),
             patch("village.chat.conversation.run_command_output", return_value=existing_beads_json),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
@@ -366,9 +351,7 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
 
     def test_brainstorm_error_handling_subprocess_failure(
@@ -405,14 +388,9 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
-            assert (
-                "Sequential Thinking" in error_messages[-1].content
-                or "Try:" in error_messages[-1].content
-            )
+            assert "Sequential Thinking" in error_messages[-1].content or "Try:" in error_messages[-1].content
 
     def test_brainstorm_error_handling_unexpected_failure(
         self,
@@ -446,11 +424,6 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
-            assert (
-                "Unexpected" in error_messages[-1].content
-                or "Try: /brainstorm again" in error_messages[-1].content
-            )
+            assert "Unexpected" in error_messages[-1].content or "Try: /brainstorm again" in error_messages[-1].content

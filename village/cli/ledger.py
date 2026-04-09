@@ -1,5 +1,3 @@
-"""Task audit trail commands."""
-
 import json
 import sys
 
@@ -14,22 +12,22 @@ logger = get_logger(__name__)
 
 
 @click.group()
-def trace_group() -> None:
-    """Task audit trail commands."""
+def ledger_group() -> None:
+    """Task audit ledger commands."""
     pass
 
 
-@trace_group.command("show")
+@ledger_group.command("show")
 @click.argument("task_id")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def show_trace(task_id: str, as_json: bool) -> None:
-    """View audit trail for a task."""
+def show_ledger(task_id: str, as_json: bool) -> None:
+    """View audit ledger for a task."""
     config = get_config()
     reader = TraceReader(config.traces_dir)
     events = reader.read(task_id)
 
     if not events:
-        click.echo(f"No trace events for {task_id}")
+        click.echo(f"No ledger events for {task_id}")
         sys.exit(EXIT_ERROR)
 
     if as_json:
@@ -50,16 +48,16 @@ def show_trace(task_id: str, as_json: bool) -> None:
         click.echo(format_trace(events))
 
 
-@trace_group.command("list")
+@ledger_group.command("list")
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def list_traces(as_json: bool) -> None:
-    """List tasks with traces."""
+def list_ledgers(as_json: bool) -> None:
+    """List tasks with audit ledgers."""
     config = get_config()
     reader = TraceReader(config.traces_dir)
     task_ids = reader.list_traced_tasks()
 
     if not task_ids:
-        click.echo("No traces found")
+        click.echo("No ledgers found")
         return
 
     if as_json:

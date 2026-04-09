@@ -210,9 +210,7 @@ def _generate_testing_checklist(changes: dict[str, list[str]]) -> list[str]:
         checklist.append("- [ ] Unit tests passing")
         checklist.append("- [ ] Integration tests passing")
 
-        has_python = any(
-            f.endswith(".py") for f in changes.get("added", []) + changes.get("modified", [])
-        )
+        has_python = any(f.endswith(".py") for f in changes.get("added", []) + changes.get("modified", []))
         if has_python:
             checklist.append("- [ ] Type checking passed (mypy)")
             checklist.append("- [ ] Linting passed (ruff)")
@@ -389,9 +387,7 @@ def create_pr(
         pr_body += "\n\n## Related Tasks\n" + "\n".join(f"- {t}" for t in description.related_tasks)
 
     if description.commit_suggestions:
-        pr_body += "\n\n## Commit Suggestions\n" + "\n".join(
-            f"- {s}" for s in description.commit_suggestions
-        )
+        pr_body += "\n\n## Commit Suggestions\n" + "\n".join(f"- {s}" for s in description.commit_suggestions)
 
     try:
         output = _run_gh_command(

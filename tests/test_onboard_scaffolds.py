@@ -1,4 +1,3 @@
-
 from village.onboard.detector import ProjectInfo
 from village.onboard.scaffolds import all_scaffolds, get_scaffold
 

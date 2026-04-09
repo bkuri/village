@@ -125,9 +125,7 @@ class MetricsCollector:
         if not durations:
             return 0.0, 0.0
 
-        completion_rate = len([e for e in completed_events if e.result == "ok"]) / len(
-            completed_events
-        )
+        completion_rate = len([e for e in completed_events if e.result == "ok"]) / len(completed_events)
 
         return completion_rate, 0.0
 
@@ -168,9 +166,7 @@ class MetricsCollector:
 
         lines.append("# HELP village_average_task_duration_seconds Average task duration")
         lines.append("# TYPE village_average_task_duration_seconds gauge")
-        lines.append(
-            f"village_average_task_duration_seconds {report.average_task_duration_seconds}"
-        )
+        lines.append(f"village_average_task_duration_seconds {report.average_task_duration_seconds}")
 
         return PrometheusMetrics(metrics=lines)
 
@@ -189,9 +185,7 @@ class MetricsCollector:
         lines.append(f"village.stale_locks:{report.stale_locks}|g")
         lines.append(f"village.orphans_count:{report.orphans_count}|g")
         lines.append(f"village.task_completion_rate:{report.task_completion_rate}|g")
-        lines.append(
-            f"village.average_task_duration_seconds:{report.average_task_duration_seconds}|g"
-        )
+        lines.append(f"village.average_task_duration_seconds:{report.average_task_duration_seconds}|g")
 
         return StatsDMetrics(metrics=lines)
 

@@ -94,8 +94,7 @@ def create_worktree(
     if not scm.check_clean(config.git_root):
         logger.warning(f"Git repository is dirty: {config.git_root}")
         raise RuntimeError(
-            "Cannot create workspace: repository has uncommitted changes. "
-            "Please commit or stash changes first."
+            "Cannot create workspace: repository has uncommitted changes. Please commit or stash changes first."
         )
 
     branch_name = f"worktree-{task_id}"

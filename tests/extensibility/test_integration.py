@@ -245,9 +245,7 @@ class TestLLMChatIntegration:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio
@@ -302,9 +300,7 @@ class TestLLMChatIntegration:
         assert "POST:" in response
 
     @pytest.mark.asyncio
-    async def test_all_extension_registration_methods_work_with_llmchat(
-        self, mock_llm_client
-    ) -> None:
+    async def test_all_extension_registration_methods_work_with_llmchat(self, mock_llm_client) -> None:
         """All extension registration methods work with LLMChat."""
         registry = ExtensionRegistry()
 
@@ -460,9 +456,7 @@ class TestEndToEndScenarios:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "desc": "Test desc", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "desc": "Test desc", "scope": "feature"}')
         return client
 
     @pytest.fixture
@@ -519,9 +513,7 @@ class TestEndToEndScenarios:
         assert len(tracking_processor.post_calls) == 1
 
     @pytest.mark.asyncio
-    async def test_extensions_can_disable_features(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_extensions_can_disable_features(self, mock_llm_client, full_domain_registry) -> None:
         """Extensions can disable features (e.g., should_invoke returns False)."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -565,9 +557,7 @@ class TestEndToEndScenarios:
         assert len(refiner.refine_calls) == 1  # Only "refine" message triggers
 
     @pytest.mark.asyncio
-    async def test_session_context_persists_across_messages(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_session_context_persists_across_messages(self, mock_llm_client, full_domain_registry) -> None:
         """SessionContext persists across messages."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -588,9 +578,7 @@ class TestEndToEndScenarios:
         assert len(context.save_calls) == 2
 
     @pytest.mark.asyncio
-    async def test_query_refinement_cleared_after_task_creation(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_query_refinement_cleared_after_task_creation(self, mock_llm_client, full_domain_registry) -> None:
         """QueryRefinement is cleared after task creation."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -731,9 +719,7 @@ class TestSessionManagement:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio
@@ -918,9 +904,7 @@ class TestExtensionFlowVerification:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio

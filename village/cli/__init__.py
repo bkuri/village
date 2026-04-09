@@ -31,20 +31,20 @@ def village(ctx: click.Context, verbose: bool) -> None:
 
 from village.cli import (  # noqa: E402
     acp,
+    builder,
     council,
     dashboard,
     doctor,
     elder,
-    goals,
+    greeter,
+    ledger,
     lifecycle,
     maintenance,
+    planner,
     release,
     state,
-    trace,
     work,
-    workflow,
 )
-from village.cli import help as help_mod  # noqa: E402
 
 # Lifecycle commands
 for cmd_name in ["new", "up", "down"]:
@@ -65,9 +65,6 @@ village.add_command(work.pause)
 village.add_command(work.resume_task)
 village.add_command(work.ready)
 
-# Goals
-village.add_command(goals.goals)
-
 # Maintenance commands
 village.add_command(maintenance.cleanup)
 village.add_command(maintenance.unlock)
@@ -79,9 +76,9 @@ village.add_command(dashboard.metrics)
 # Release
 village.add_command(release.release)
 
-# Help and drafts
-village.add_command(help_mod.help_cmd, name="help")
-village.add_command(help_mod.drafts)
+# Greeter and drafts
+village.add_command(greeter.greeter, name="greeter")
+village.add_command(greeter.drafts)
 
 # Elder
 village.add_command(elder.elder_group, name="elder")
@@ -93,18 +90,26 @@ village.add_command(acp.acp_command)
 # Doctor
 village.add_command(doctor.doctor_command)
 
-# Workflow
-village.add_command(workflow.workflow)
+# Planner (workflow design)
+village.add_command(planner.planner_group, name="planner")
+
+# Builder (workflow execution)
+village.add_command(builder.builder_group, name="builder")
 
 # Council
 village.add_command(council.council_group, name="council")
 
-# Trace
-village.add_command(trace.trace_group, name="trace")
+# Ledger (audit trail)
+village.add_command(ledger.ledger_group, name="ledger")
 
-# Aliases
+# Backward-compatible aliases
+village.add_command(planner.planner_group, name="workflow")
+village.add_command(ledger.ledger_group, name="trace")
+village.add_command(greeter.greeter, name="help")
+village.add_command(greeter.greeter, name="chat")
+
+# Other aliases
 village.add_command(dashboard.dashboard, name="square")
 village.add_command(maintenance.cleanup, name="sweep")
-village.add_command(help_mod.help_cmd, name="chat")
 village.add_command(state.status, name="census")
 village.add_command(state.state, name="archives")

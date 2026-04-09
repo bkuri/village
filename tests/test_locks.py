@@ -18,13 +18,7 @@ def test_parse_lock_valid():
             worktrees_dir=Path("/tmp/test/.worktrees"),
         )
 
-    content = (
-        "id=bd-a3f8\n"
-        "pane=%12\n"
-        "window=build-1-bd-a3f8\n"
-        "agent=build\n"
-        "claimed_at=2026-01-22T10:41:12\n"
-    )
+    content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=2026-01-22T10:41:12\n"
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
         f.write(content)
@@ -206,9 +200,7 @@ def test_parse_lock_empty_pane_id():
             worktrees_dir=Path("/tmp/test/.worktrees"),
         )
 
-    content = (
-        "id=bd-a3f8\npane=\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=2026-01-22T10:41:12\n"
-    )
+    content = "id=bd-a3f8\npane=\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=2026-01-22T10:41:12\n"
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
         f.write(content)
@@ -228,9 +220,7 @@ def test_parse_lock_invalid_datetime_format():
             worktrees_dir=Path("/tmp/test/.worktrees"),
         )
 
-    content = (
-        "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=not-a-datetime\n"
-    )
+    content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nclaimed_at=not-a-datetime\n"
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".lock", delete=False) as f:
         f.write(content)

@@ -64,9 +64,7 @@ class TestRunGhCommand:
     @patch("village.github_integration.subprocess.run")
     def test_raises_on_command_failure(self, mock_run):
         """Test exception raised on command failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, ["gh", "pr", "view"], stderr="PR not found"
-        )
+        mock_run.side_effect = subprocess.CalledProcessError(1, ["gh", "pr", "view"], stderr="PR not found")
 
         with pytest.raises(GitHubError, match="gh command failed"):
             _run_gh_command(["pr", "view", "123"])
@@ -108,9 +106,7 @@ class TestGetGitDiff:
     @patch("village.github_integration.subprocess.run")
     def test_raises_on_git_failure(self, mock_run, mock_worktree_path):
         """Test exception raised on git failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, ["git", "diff"], stderr="Not a git repository"
-        )
+        mock_run.side_effect = subprocess.CalledProcessError(1, ["git", "diff"], stderr="Not a git repository")
 
         with pytest.raises(GitHubError, match="git diff failed"):
             _get_git_diff(mock_worktree_path)
@@ -593,9 +589,7 @@ class TestSyncResult:
 
     def test_creates_failed_result(self):
         """Test creating failed SyncResult."""
-        result = SyncResult(
-            success=False, pr_number=123, pr_status="error", message="Error occurred"
-        )
+        result = SyncResult(success=False, pr_number=123, pr_status="error", message="Error occurred")
 
         assert result.success is False
         assert result.pr_status == "error"

@@ -264,7 +264,7 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "show", "bd-a3f8"])
             assert result.exit_code == 0
             assert "task_checkout" in result.output
@@ -275,7 +275,7 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "show", "bd-a3f8", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
@@ -285,10 +285,10 @@ class TestTraceCLI:
     def test_trace_show_missing_task(self, runner: click.testing.CliRunner, mock_config: Config) -> None:
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "show", "bd-nonexistent"])
             assert result.exit_code != 0
-            assert "No trace events" in result.output
+            assert "No ledger events" in result.output
 
     def test_trace_list_text(self, runner: click.testing.CliRunner, mock_config: Config) -> None:
         writer = TraceWriter("bd-a3f8", mock_config.traces_dir)
@@ -299,7 +299,7 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "list"])
             assert result.exit_code == 0
             assert "bd-a3f8" in result.output
@@ -311,7 +311,7 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "list", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
@@ -320,7 +320,7 @@ class TestTraceCLI:
     def test_trace_list_empty(self, runner: click.testing.CliRunner, mock_config: Config) -> None:
         from unittest.mock import patch
 
-        with patch("village.cli.trace.get_config", return_value=mock_config):
+        with patch("village.cli.ledger.get_config", return_value=mock_config):
             result = runner.invoke(village, ["trace", "list"])
             assert result.exit_code == 0
-            assert "No traces found" in result.output
+            assert "No ledgers found" in result.output
