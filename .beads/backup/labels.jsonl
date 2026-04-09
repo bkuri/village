@@ -1,5 +1,14 @@
+{"issue_id":"bd-jv0","label":"bump:minor"}
+{"issue_id":"bd-jv0.1","label":"bump:minor"}
 {"issue_id":"bd-jv0.2","label":"bump:minor"}
+{"issue_id":"bd-jv0.3","label":"bump:minor"}
 {"issue_id":"bd-jv0.4","label":"bump:minor"}
 {"issue_id":"bd-jv0.5","label":"bump:minor"}
 {"issue_id":"bd-jv0.6","label":"bump:minor"}
 {"issue_id":"bd-jv0.7","label":"bump:docs"}
+{"issue_id":"bd-jv0.7","label":"bump:none"}
+{"issue_id":"bd-jv0.8","label":"bump:none"}
+{"issue_id":"bd-sve","label":"bump:minor"}
+{"issue_id":"bd-sve.1","label":"bump:none"}
+{"issue_id":"bd-sve.2","label":"bump:minor"}
+{"issue_id":"bd-sve.3","label":"bump:minor"}
