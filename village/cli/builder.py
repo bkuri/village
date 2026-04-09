@@ -1,6 +1,7 @@
 import click
 
 from village.logging import get_logger
+from village.roles import run_role_chat
 from village.workflow.builder import Builder
 from village.workflow.loader import WorkflowLoader, WorkflowLoadError
 
@@ -15,17 +16,33 @@ def _get_loader() -> WorkflowLoader:
 @click.pass_context
 def builder_group(ctx: click.Context) -> None:
     """Execute and manage workflow runs."""
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+    if ctx.invoked_subcommand is not None:
+        return
+    run_role_chat("builder")
 
 
 @builder_group.command("run")
-@click.argument("name")
+@click.argument("name", required=False)
 @click.option("--input", "-i", multiple=True, help="Input as KEY=VALUE")
 @click.option("--dry-run", is_flag=True, help="Show plan without executing")
-def run_workflow(name: str, input: tuple[str, ...], dry_run: bool) -> None:
+def run_workflow(name: str | None, input: tuple[str, ...], dry_run: bool) -> None:
     """Execute a workflow."""
     loader = _get_loader()
+
+    if name is None:
+        names = loader.list_workflows()
+        if not names:
+            click.echo("No workflows found.")
+            return
+        click.echo("Available workflows:")
+        for i, n in enumerate(names, 1):
+            click.echo(f"  {i}. {n}")
+        choice = click.prompt("Which workflow?", type=int)
+        if choice < 1 or choice > len(names):
+            raise click.ClickException("Invalid selection")
+        name = names[choice - 1]
+
+    assert name is not None
     try:
         wf = loader.load(name)
     except WorkflowLoadError as e:
@@ -61,25 +78,34 @@ def run_workflow(name: str, input: tuple[str, ...], dry_run: bool) -> None:
 
 
 @builder_group.command("status")
-@click.argument("run_id")
-def run_status(run_id: str) -> None:
+@click.argument("run_id", required=False)
+def run_status(run_id: str | None) -> None:
     """Show run status."""
+    if run_id is None:
+        click.echo("No runs tracked yet.")
+        return
     click.echo(f"Run status for: {run_id}")
     click.echo("Status tracking not yet implemented.")
 
 
 @builder_group.command("stop")
-@click.argument("run_id")
-def stop_run(run_id: str) -> None:
+@click.argument("run_id", required=False)
+def stop_run(run_id: str | None) -> None:
     """Stop a running workflow."""
+    if run_id is None:
+        click.echo("No active runs to stop.")
+        return
     click.echo(f"Stopping run: {run_id}")
     click.echo("Run cancellation not yet implemented.")
 
 
 @builder_group.command("cancel", hidden=True)
-@click.argument("run_id")
-def cancel_run(run_id: str) -> None:
+@click.argument("run_id", required=False)
+def cancel_run(run_id: str | None) -> None:
     """Alias for stop."""
+    if run_id is None:
+        click.echo("No active runs to cancel.")
+        return
     from click import Context
 
     ctx = Context(stop_run)
@@ -100,8 +126,11 @@ def show_logs(run_id: str | None, follow: bool) -> None:
 
 
 @builder_group.command("resume")
-@click.argument("run_id")
-def resume_run(run_id: str) -> None:
+@click.argument("run_id", required=False)
+def resume_run(run_id: str | None) -> None:
     """Resume a failed run."""
+    if run_id is None:
+        click.echo("No failed runs to resume.")
+        return
     click.echo(f"Resuming run: {run_id}")
     click.echo("Run resume not yet implemented.")

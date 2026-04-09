@@ -6,24 +6,43 @@ import click
 from village.config import get_config
 from village.errors import EXIT_ERROR
 from village.logging import get_logger
+from village.roles import run_role_chat
 from village.trace import TraceReader, format_trace
 
 logger = get_logger(__name__)
 
 
-@click.group()
-def ledger_group() -> None:
+@click.group(invoke_without_command=True)
+@click.pass_context
+def ledger_group(ctx: click.Context) -> None:
     """Task audit ledger commands."""
-    pass
+    if ctx.invoked_subcommand is not None:
+        return
+    run_role_chat("ledger")
 
 
 @ledger_group.command("show")
-@click.argument("task_id")
+@click.argument("task_id", required=False)
 @click.option("--json", "as_json", is_flag=True, help="JSON output")
-def show_ledger(task_id: str, as_json: bool) -> None:
+def show_ledger(task_id: str | None, as_json: bool) -> None:
     """View audit ledger for a task."""
     config = get_config()
     reader = TraceReader(config.traces_dir)
+
+    if task_id is None:
+        task_ids = reader.list_traced_tasks()
+        if not task_ids:
+            click.echo("No ledgers found.")
+            return
+        click.echo("Traced tasks:")
+        for i, tid in enumerate(task_ids, 1):
+            click.echo(f"  {i}. {tid}")
+        choice = click.prompt("Which task?", type=int)
+        if choice < 1 or choice > len(task_ids):
+            raise click.ClickException("Invalid selection")
+        task_id = task_ids[choice - 1]
+
+    assert task_id is not None
     events = reader.read(task_id)
 
     if not events:

@@ -1,6 +1,7 @@
 import click
 
 from village.logging import get_logger
+from village.roles import run_role_chat
 from village.workflow.loader import WorkflowLoader, WorkflowLoadError
 from village.workflow.planner import Planner
 
@@ -15,8 +16,9 @@ def _get_loader() -> WorkflowLoader:
 @click.pass_context
 def planner_group(ctx: click.Context) -> None:
     """Design and manage workflows."""
-    if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+    if ctx.invoked_subcommand is not None:
+        return
+    run_role_chat("planner")
 
 
 @planner_group.command("workflows")
@@ -44,10 +46,14 @@ def show_workflow(ctx: click.Context, name: str | None) -> None:
             click.echo("No workflows found.")
             return
         click.echo("Available workflows:")
-        for n in names:
-            click.echo(f"  {n}")
-        return
+        for i, n in enumerate(names, 1):
+            click.echo(f"  {i}. {n}")
+        choice = click.prompt("Which workflow?", type=int)
+        if choice < 1 or choice > len(names):
+            raise click.ClickException("Invalid selection")
+        name = names[choice - 1]
 
+    assert name is not None
     try:
         wf = loader.load(name)
     except WorkflowLoadError as e:

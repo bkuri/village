@@ -8,6 +8,7 @@ import click
 
 from village.config import get_config
 from village.logging import get_logger
+from village.roles import RoleChat, RoutingAction, run_role_chat
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -69,6 +70,8 @@ def greeter() -> None:
 
     click.echo("Village Greeter — How can I help? /exit to quit.\n")
 
+    role_chat = RoleChat("greeter")
+
     try:
         while True:
             user_input = click.prompt("", prompt_suffix="> ")
@@ -78,11 +81,31 @@ def greeter() -> None:
 
             try:
                 response = asyncio.run(llm_chat.handle_message(user_input))
-                click.echo("\n" + response + "\n")
             except BeadsError as e:
                 click.echo(f"\n❌ Beads error: {e}\n")
+                continue
             except Exception as e:
                 click.echo(f"\n❌ Error: {e}\n")
+                continue
+
+            routing = role_chat.detect_cross_role(response)
+            if routing and routing.target_role:
+                if routing.action == RoutingAction.ROUTE:
+                    click.echo(f"\n  ── Routing to {routing.target_role} ──────────")
+                    run_role_chat(routing.target_role, context=routing.context)
+                    break
+                elif routing.action == RoutingAction.ADVISE:
+                    click.echo(f"\n  That sounds like a job for the {routing.target_role}.")
+                    confirm = click.prompt("  Want me to start it? [Y/n]", default="Y")
+                    if confirm.strip().lower() in ("y", "yes", ""):
+                        click.echo(f"  ── Routing to {routing.target_role} ──────────")
+                        run_role_chat(routing.target_role, context=routing.context)
+                        break
+                    else:
+                        click.echo(f"  You can run: village {routing.target_role}\n")
+                        continue
+
+            click.echo("\n" + response + "\n")
     except click.exceptions.Abort:
         click.echo("\nExiting...")
     except KeyboardInterrupt:

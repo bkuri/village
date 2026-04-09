@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+import click
+
 
 class RoutingAction(str, Enum):
     ROUTE = "route"
@@ -216,3 +218,47 @@ class RoleChat:
 
     def can_advise(self, role: str) -> bool:
         return role in self._routing.advise
+
+
+def run_role_chat(
+    role_name: str,
+    llm_call_fn: Any | None = None,
+    context: dict[str, Any] | None = None,
+) -> None:
+    chat = RoleChat(role_name, llm_call_fn=llm_call_fn, context=context)
+    click.echo(f"{chat.greeting}\n")
+
+    while True:
+        try:
+            user_input = click.prompt("", default="", show_default=False)
+        except (click.exceptions.Abort, EOFError):
+            click.echo("")
+            break
+
+        if not user_input or user_input.strip().lower() in ("/exit", "/quit"):
+            break
+
+        if user_input.strip().lower() == "/help":
+            click.echo(f"Available: {', '.join(s.name for s in chat.skills)}")
+            click.echo("/exit to quit, /help for commands\n")
+            continue
+
+        response = chat.run(user_input)
+
+        routing = chat.detect_cross_role(response)
+        if routing and routing.target_role:
+            if routing.action == RoutingAction.ROUTE:
+                click.echo(f"  ── Routing to {routing.target_role} ──────────")
+                run_role_chat(routing.target_role, context=routing.context)
+                break
+            elif routing.action == RoutingAction.ADVISE:
+                click.echo(f"  That sounds like a job for the {routing.target_role}.")
+                confirm = click.prompt("  Want me to start it? [Y/n]", default="Y")
+                if confirm.strip().lower() in ("y", "yes", ""):
+                    click.echo(f"  ── Routing to {routing.target_role} ──────────")
+                    run_role_chat(routing.target_role, context=routing.context)
+                    break
+                else:
+                    click.echo(f"  You can run: village {routing.target_role}\n")
+        else:
+            click.echo(f"  {response}\n")

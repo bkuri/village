@@ -15,6 +15,7 @@ from village.goals import (
     get_objective_coverage_from_file,
     parse_goals,
 )
+from village.roles import run_role_chat
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -30,9 +31,13 @@ def _find_wiki_path() -> Path:
     return cwd / "wiki"
 
 
-@click.group()
-def elder_group() -> None:
+@click.group(invoke_without_command=True)
+@click.pass_context
+def elder_group(ctx: click.Context) -> None:
     """Manage project knowledge base."""
+    if ctx.invoked_subcommand is not None:
+        return
+    run_role_chat("elder")
 
 
 @elder_group.command()

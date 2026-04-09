@@ -8,6 +8,7 @@ import click
 
 from village.config import CouncilConfig, get_config
 from village.council.engine import CouncilEngine
+from village.roles import run_role_chat
 
 
 def _find_wiki_path() -> Path:
@@ -29,114 +30,15 @@ def _get_engine(config: CouncilConfig) -> CouncilEngine:
 
 
 @click.group(invoke_without_command=True)
-@click.option("-t", "--type", "meeting_type", type=click.Choice(["chat", "debate"]), help="Meeting type")
-@click.option("-p", "--persona", "personas", multiple=True, help="Persona name(s)")
-@click.option("-r", "--rounds", type=int, help="Number of debate rounds")
-@click.option("--strategy", type=click.Choice(["synthesis", "vote", "arbiter"]), help="Resolution strategy")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def council_group(
     ctx: click.Context,
-    meeting_type: Optional[str],
-    personas: tuple[str, ...],
-    rounds: Optional[int],
-    strategy: Optional[str],
-    as_json: bool,
 ) -> None:
     """Multi-persona deliberation system."""
     if ctx.invoked_subcommand is not None:
         return
 
-    topic = ctx.params.get("topic")
-    if not topic:
-        try:
-            topic = click.prompt("Enter council topic")
-        except click.exceptions.Abort:
-            click.echo("")
-            return
-
-    config = get_config()
-    council_config = config.council
-
-    if rounds is not None:
-        council_config = CouncilConfig(
-            default_type=council_config.default_type,
-            max_turns=council_config.max_turns,
-            extension_turns=council_config.extension_turns,
-            default_rounds=rounds,
-            resolution_strategy=council_config.resolution_strategy,
-            personas_dir=council_config.personas_dir,
-        )
-
-    engine = _get_engine(council_config)
-    persona_list = list(personas) if personas else None
-
-    state = engine.start_meeting(
-        topic=topic,
-        meeting_type=meeting_type,
-        persona_names=persona_list,
-        resolution_strategy=strategy,
-    )
-
-    click.echo(f"Council {state.council_id} started ({state.meeting_type})")
-    click.echo(f"  Topic: {state.topic}")
-    click.echo(f"  Personas: {', '.join(p.name for p in state.personas)}")
-
-    if state.meeting_type == "debate":
-        click.echo(f"  Rounds: {state.max_rounds}, Strategy: {state.resolution_strategy.value}")
-
-    wiki_context = None
-    wiki_path = _find_wiki_path()
-    if wiki_path.exists():
-        try:
-            from village.elder.store import ElderStore
-
-            elder = ElderStore(wiki_path)
-            result = elder.ask(topic)
-            if result.answer and result.answer != "No relevant pages found.":
-                wiki_context = result.answer
-                click.echo(f"  Wiki context: {len(result.sources)} source(s)")
-        except Exception:
-            pass
-
-    for round_num in range(state.max_rounds):
-        turns = engine.run_round(state, wiki_context=wiki_context if round_num == 0 else None)
-        if not turns:
-            break
-
-        for turn in turns:
-            click.echo(f"\n  [{turn.persona_name}]: {turn.content[:200]}")
-
-        if round_num < state.max_rounds - 1:
-            click.echo(f"\n  --- Round {round_num + 1}/{state.max_rounds} complete ---")
-
-    resolution = engine.resolve(state)
-
-    click.echo(f"\nResolution ({state.resolution_strategy.value}):")
-    if resolution.summary:
-        click.echo(f"  {resolution.summary[:300]}")
-    if resolution.winner:
-        click.echo(f"  Winner: {resolution.winner}")
-
-    path = engine.save_and_close(state)
-    if path:
-        click.echo(f"\nTranscript saved: {path}")
-
-    if as_json:
-        output = {
-            "council_id": state.council_id,
-            "meeting_type": state.meeting_type,
-            "topic": state.topic,
-            "status": state.status,
-            "rounds": state.current_round,
-            "personas": [p.name for p in state.personas],
-            "resolution": {
-                "winner": resolution.winner,
-                "summary": resolution.summary[:200],
-                "strategy": state.resolution_strategy.value,
-            },
-        }
-        click.echo(json.dumps(output, indent=2))
+    run_role_chat("council")
 
 
 @council_group.command("list")
