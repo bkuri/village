@@ -47,8 +47,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
@@ -73,8 +73,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--plan", "--json"])
 
                 assert result.exit_code == 0
@@ -98,8 +98,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
@@ -117,8 +117,8 @@ class TestQueueCLIPlan:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue"])
 
                 assert result.exit_code == 0
@@ -158,9 +158,9 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
-                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
+                with patch("village.cli.work.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "2"])
 
                     assert result.exit_code == 0
@@ -206,9 +206,9 @@ class TestQueueCLIExecution:
                 ),
             ]
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
-                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
+                with patch("village.cli.work.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "2"])
 
                     assert result.exit_code == 4  # Partial success
@@ -244,9 +244,9 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
-                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
+                with patch("village.cli.work.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "1"])
 
                     assert result.exit_code == 1  # All failed
@@ -284,9 +284,9 @@ class TestQueueCLIExecution:
                 for t in plan.available_tasks
             ]
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
-                with patch("village.old_cli.execute_queue_plan", side_effect=mock_execute):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
+                with patch("village.cli.work.execute_queue_plan", side_effect=mock_execute):
                     result = runner.invoke(village, ["queue", "--n", "1", "--json"])
 
                     assert result.exit_code == 0
@@ -309,8 +309,8 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1"])
 
                 assert result.exit_code == EXIT_BLOCKED
@@ -328,8 +328,8 @@ class TestQueueCLIExecution:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--n", "1", "--json"])
 
                 assert result.exit_code == EXIT_BLOCKED
@@ -358,8 +358,8 @@ class TestQueueCLIFilters:
             concurrency_limit=3,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--agent", "build"])
 
                 assert result.exit_code == 0
@@ -382,8 +382,8 @@ class TestQueueCLIFilters:
             concurrency_limit=2,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan) as mock_gen:
-            with patch("village.old_cli.get_config", return_value=mock_config):
+        with patch("village.cli.work.generate_queue_plan", return_value=plan) as mock_gen:
+            with patch("village.cli.work.get_config", return_value=mock_config):
                 result = runner.invoke(village, ["queue", "--max-workers", "2"])
 
                 assert result.exit_code == 0
@@ -405,9 +405,9 @@ class TestQueueCLIFilters:
             concurrency_limit=1,
         )
 
-        with patch("village.old_cli.generate_queue_plan", return_value=plan):
-            with patch("village.old_cli.get_config", return_value=mock_config):
-                with patch("village.old_cli.execute_queue_plan") as mock_execute:
+        with patch("village.cli.work.generate_queue_plan", return_value=plan):
+            with patch("village.cli.work.get_config", return_value=mock_config):
+                with patch("village.cli.work.execute_queue_plan") as mock_execute:
                     result = runner.invoke(village, ["queue", "--dry-run", "--n", "1"])
 
                     assert result.exit_code == 0

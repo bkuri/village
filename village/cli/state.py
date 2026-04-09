@@ -1,10 +1,12 @@
 """State inspection commands: status, locks, events, state."""
 
 import json
+import sys
 
 import click
 
 from village.config import get_config
+from village.errors import EXIT_BLOCKED
 from village.logging import get_logger
 from village.probes.tmux import session_exists
 from village.status import collect_full_status, collect_workers
@@ -12,13 +14,7 @@ from village.status import collect_full_status, collect_workers
 logger = get_logger(__name__)
 
 
-@click.group(name="state")
-def state_group() -> None:
-    """Inspect village state."""
-    pass
-
-
-@state_group.command()
+@click.command()
 @click.option("--short", is_flag=True, help="Short output")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
 @click.option("--workers", is_flag=True, help="Show workers view")
@@ -79,7 +75,7 @@ def status(
         click.echo(output)
 
 
-@state_group.command()
+@click.command()
 def locks() -> None:
     """List all locks with ACTIVE/STALE status."""
     from village.render.text import render_worker_table
@@ -95,7 +91,7 @@ def locks() -> None:
     click.echo(output)
 
 
-@state_group.command()
+@click.command()
 @click.option("--task", "task_id", help="Filter by task ID")
 @click.option("--cmd", "cmd_filter", help="Filter by command")
 @click.option("--limit", "limit", default=20, help="Number of events to show")
@@ -122,21 +118,21 @@ def events(
     config = get_config()
 
     # Read all events
-    events = read_events(config.village_dir)
+    all_events = read_events(config.village_dir)
 
     # Apply filters
     if task_id:
-        events = [e for e in events if e.task_id and task_id in e.task_id]
+        all_events = [e for e in all_events if e.task_id and task_id in e.task_id]
     if cmd_filter:
-        events = [e for e in events if e.cmd and cmd_filter in e.cmd]
+        all_events = [e for e in all_events if e.cmd and cmd_filter in e.cmd]
 
     # Limit
-    events = events[-limit:] if len(events) > limit else events
+    all_events = all_events[-limit:] if len(all_events) > limit else all_events
 
     if json_output:
         # JSON output
         output = []
-        for event in events:
+        for event in all_events:
             output.append(
                 {
                     "ts": event.ts,
@@ -150,11 +146,11 @@ def events(
         click.echo(json.dumps(output, indent=2))
     else:
         # Text output
-        if not events:
+        if not all_events:
             click.echo("No events found")
             return
 
-        for event in events:
+        for event in all_events:
             parts = [event.ts, event.cmd]
             if event.task_id:
                 parts.append(event.task_id)
@@ -167,18 +163,28 @@ def events(
             click.echo(" ".join(parts))
 
 
-@state_group.command()
+@click.command()
 @click.argument("task_id")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
 def state(task_id: str, json_output: bool) -> None:
     """
-    Show task state machine state.
+    Show task state and history.
 
-    Non-mutating. Reads from state file.
+    Displays the current state and state transition history for a task.
+
+    \b
+    Non-mutating. Reads state from lock file.
 
     Examples:
-      village state bd-4uv
-      village state bd-4uv --json
+        village state bd-a3f8
+        village state bd-a3f8 --json
+
+    Options:
+        --json: Output as JSON instead of human-readable table
+
+    Exit codes:
+        0: State found and displayed
+        4: Task not found (no lock file)
     """
     from village.state_machine import TaskStateMachine
 
@@ -186,11 +192,38 @@ def state(task_id: str, json_output: bool) -> None:
     state_machine = TaskStateMachine(config)
 
     current_state = state_machine.get_state(task_id)
+    history = state_machine.get_state_history(task_id)
 
-    if not current_state:
-        raise click.ClickException(f"Task not found: {task_id}")
+    if current_state is None and not history:
+        click.echo(f"Task {task_id} not found (no lock file)", err=True)
+        sys.exit(EXIT_BLOCKED)
 
     if json_output:
-        click.echo(json.dumps({"task_id": task_id, "state": current_state.value}))
+        output = {
+            "task_id": task_id,
+            "current_state": current_state.value if current_state else None,
+            "history": [
+                {
+                    "ts": h.ts,
+                    "from_state": h.from_state.value if h.from_state else None,
+                    "to_state": h.to_state.value,
+                    "context": h.context,
+                }
+                for h in history
+            ],
+        }
+        click.echo(json.dumps(output, sort_keys=True, indent=2))
     else:
-        click.echo(f"Task {task_id}: {current_state.value}")
+        click.echo(f"Task: {task_id}")
+        click.echo(f"Current State: {current_state.value if current_state else 'None'}")
+
+        if history:
+            click.echo("\nState History:")
+            for h in history:
+                from_str = h.from_state.value if h.from_state else "initial"
+                click.echo(f"  {h.ts}: {from_str} → {h.to_state.value}")
+                if h.context:
+                    for key, value in h.context.items():
+                        click.echo(f"    {key}: {value}")
+        else:
+            click.echo("\nNo state history available")

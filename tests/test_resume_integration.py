@@ -204,8 +204,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.old_cli.execute_resume", return_value=result_obj):
-            with patch("village.old_cli.plan_resume"):
+        with patch("village.cli.work.execute_resume", return_value=result_obj):
+            with patch("village.cli.work.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",
@@ -237,8 +237,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.old_cli.execute_resume", return_value=result_obj):
-            with patch("village.old_cli.plan_resume"):
+        with patch("village.cli.work.execute_resume", return_value=result_obj):
+            with patch("village.cli.work.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",

@@ -1,6 +1,5 @@
 """Integration tests for Elder end-to-end flows."""
 
-import json
 from pathlib import Path
 
 from village.elder.crosslink import find_related, update_cross_references

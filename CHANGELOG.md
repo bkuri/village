@@ -43,6 +43,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **LLM Tools Module**
   - MCP tool mappings for Sequential Thinking, Atom of Thoughts, Think tool
   - ToolDefinitions with JSON schemas for prompts
+- **Adaptive Onboarding System**
+  - `village new` runs adaptive interview instead of stamping templates
+  - `village up` detects incomplete projects and offers onboarding
+  - `village onboard` command for re-onboarding existing projects
+  - BRUTAL method: critic persona, third-party framing, self-critique loop
+  - PPC profiles: village-onboard (interview), village-elder (query grounding)
+  - Project type detector: Python, JavaScript/TypeScript, Rust, Go
+  - Language-specific scaffold templates
 
 ### Fixed
 - Beads CLI compatibility: removed unsupported `--status` flag

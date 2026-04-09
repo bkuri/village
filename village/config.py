@@ -396,6 +396,70 @@ class MemoryConfig:
 
 
 @dataclass
+class OnboardConfig:
+    """Adaptive onboarding configuration."""
+
+    interview_model: str = "openrouter/auto"
+    max_questions: int = 15
+    skip_on_first_up: bool = False
+    ppc_mode: str = "onboard"
+    ppc_traits: list[str] = field(default_factory=lambda: ["critical", "probing"])
+    ppc_format: str = "markdown"
+    critic_persona: str = "red-team"
+    self_critique: bool = True
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "OnboardConfig":
+        """Load onboard config from environment variables and config file."""
+        model_env = os.environ.get("VILLAGE_ONBOARD_INTERVIEW_MODEL")
+        model_config = config.get("ONBOARD.INTERVIEW_MODEL") or config.get("onboard.interview_model")
+        interview_model = model_env or model_config or "openrouter/auto"
+
+        max_q_env = os.environ.get("VILLAGE_ONBOARD_MAX_QUESTIONS", "")
+        max_q_config = config.get("ONBOARD.MAX_QUESTIONS") or config.get("onboard.max_questions")
+        max_questions = int(max_q_env or max_q_config or 15)
+
+        skip_env = os.environ.get("VILLAGE_ONBOARD_SKIP_ON_FIRST_UP", "").lower()
+        skip_config = (
+            config.get("ONBOARD.SKIP_ON_FIRST_UP", "").lower() or config.get("onboard.skip_on_first_up", "").lower()
+        )
+        skip_raw = skip_env or skip_config
+        skip_on_first_up = skip_raw in ("1", "true", "yes") if skip_raw else False
+
+        ppc_mode_config = config.get("ONBOARD.PPC_MODE") or config.get("onboard.ppc_mode")
+        ppc_mode = ppc_mode_config or "onboard"
+
+        traits_config = config.get("ONBOARD.PPC_TRAITS") or config.get("onboard.ppc_traits")
+        ppc_traits = (
+            [t.strip() for t in traits_config.split(",") if t.strip()] if traits_config else ["critical", "probing"]
+        )
+
+        ppc_format_config = config.get("ONBOARD.PPC_FORMAT") or config.get("onboard.ppc_format")
+        ppc_format = ppc_format_config or "markdown"
+
+        persona_config = config.get("ONBOARD.CRITIC_PERSONA") or config.get("onboard.critic_persona")
+        critic_persona = persona_config or "red-team"
+
+        critique_env = os.environ.get("VILLAGE_ONBOARD_SELF_CRITIQUE", "").lower()
+        critique_config = (
+            config.get("ONBOARD.SELF_CRITIQUE", "").lower() or config.get("onboard.self_critique", "").lower()
+        )
+        critique_raw = critique_env or critique_config
+        self_critique = critique_raw not in ("0", "false", "no") if critique_raw else True
+
+        return cls(
+            interview_model=interview_model,
+            max_questions=max_questions,
+            skip_on_first_up=skip_on_first_up,
+            ppc_mode=ppc_mode,
+            ppc_traits=ppc_traits,
+            ppc_format=ppc_format,
+            critic_persona=critic_persona,
+            self_critique=self_critique,
+        )
+
+
+@dataclass
 class ACPAgentCapability:
     """ACP agent capability definition."""
 
@@ -498,6 +562,7 @@ class Config:
     task_breakdown: TaskBreakdownConfig = field(default_factory=TaskBreakdownConfig)
     acp: ACPConfig = field(default_factory=ACPConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    onboard: OnboardConfig = field(default_factory=OnboardConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -747,6 +812,8 @@ def _build_config(git_root: Path) -> Config:
 
     memory_config = MemoryConfig.from_env_and_config(file_config)
 
+    onboard_config = OnboardConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -837,4 +904,5 @@ def _build_config(git_root: Path) -> Config:
         task_breakdown=task_breakdown_config,
         acp=acp_config,
         memory=memory_config,
+        onboard=onboard_config,
     )

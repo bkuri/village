@@ -1,0 +1,22 @@
+# Profile: Village Onboarding Interview Mode
+
+# Mode
+mode: onboard
+
+# Modules to include (compose the prompt)
+requires:
+  - base
+  - onboard-interview
+
+# Contract
+contract: onboard-result
+
+# Traits
+traits: [critical, probing]
+
+# Configuration variables (substituted during prompt generation)
+vars:
+  enforce_grounding: true
+  max_questions: 15
+  self_critique: true
+  critic_persona: red-team

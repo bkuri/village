@@ -1,0 +1,21 @@
+# Profile: Village Elder Query Mode
+
+# Mode
+mode: elder-query
+
+# Modules to include (compose the prompt)
+requires:
+  - base
+  - elder-grounding
+
+# Contract
+contract: elder-answer
+
+# Traits
+traits: [grounded, conservative]
+
+# Configuration variables (substituted during prompt generation)
+vars:
+  enforce_grounding: true
+  cite_sources: true
+  allow_unverified: true

@@ -29,38 +29,56 @@ def village(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
 
 
-from village import old_cli  # noqa: E402
-from village.cli import acp, doctor, elder, lifecycle, state  # noqa: E402
+from village.cli import acp, chat, dashboard, doctor, elder, lifecycle, maintenance, release, state, work  # noqa: E402
 
+# Lifecycle commands
 for cmd_name in ["new", "up", "down"]:
     village.add_command(lifecycle.lifecycle_group.commands[cmd_name])
 
-village.add_command(state.state_group)
+# Onboard command (under lifecycle)
+village.add_command(lifecycle.lifecycle_group.commands["onboard"])
+
+# State inspection commands
+village.add_command(state.status)
+village.add_command(state.locks)
+village.add_command(state.events)
+village.add_command(state.state)
+
+# Work management commands
+village.add_command(work.queue)
+village.add_command(work.resume)
+village.add_command(work.pause)
+village.add_command(work.resume_task)
+village.add_command(work.ready)
+
+# Maintenance commands
+village.add_command(maintenance.cleanup)
+village.add_command(maintenance.unlock)
+
+# Dashboard and metrics
+village.add_command(dashboard.dashboard)
+village.add_command(dashboard.metrics)
+
+# Release
+village.add_command(release.release)
+
+# Chat and drafts
+village.add_command(chat.chat)
+village.add_command(chat.drafts)
+
+# Elder
 village.add_command(elder.elder_group, name="elder")
+
+# ACP
 village.add_command(acp.acp_command, name="gate")
 village.add_command(acp.acp_command)
+
+# Doctor
 village.add_command(doctor.doctor_command)
 
-for cmd in [
-    old_cli.queue,
-    old_cli.resume,
-    old_cli.pause,
-    old_cli.resume_task,
-    old_cli.ready,
-    old_cli.dashboard,
-    old_cli.metrics,
-    old_cli.cleanup,
-    old_cli.unlock,
-    old_cli.release,
-    old_cli.chat,
-    old_cli.drafts,
-    old_cli.status,
-    old_cli.state,
-]:
-    village.add_command(cmd)
-
-village.add_command(old_cli.dashboard, name="square")
-village.add_command(old_cli.cleanup, name="sweep")
-village.add_command(old_cli.chat, name="council")
-village.add_command(old_cli.status, name="census")
-village.add_command(old_cli.state, name="archives")
+# Aliases
+village.add_command(dashboard.dashboard, name="square")
+village.add_command(maintenance.cleanup, name="sweep")
+village.add_command(chat.chat, name="council")
+village.add_command(state.status, name="census")
+village.add_command(state.state, name="archives")

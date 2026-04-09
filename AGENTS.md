@@ -208,6 +208,35 @@ village elder curate
 village elder stats
 ```
 
+## Adaptive Onboarding
+
+### Commands
+```bash
+village new <name>                # Create project with adaptive interview
+village new <name> --skip-onboard # Create with minimal templates
+village up                        # Detects incomplete setup, runs interview if needed
+village up --skip-onboard         # Skip onboarding check
+village onboard                   # Force-run onboarding on existing project
+village onboard --force           # Overwrite existing AGENTS.md/README.md
+village onboard --skip-interview  # Use scaffold defaults without interview
+```
+
+### Configuration
+```ini
+[onboard]
+interview_model = openrouter/auto
+max_questions = 15
+critic_persona = red-team        # devil's-advocate | red-team | gordon-ramsay
+self_critique = true
+```
+
+### Architecture
+The onboarding pipeline:
+1. **Detect** (rule-based): Scan for pyproject.toml, package.json, etc.
+2. **Interview** (LLM adaptive): 10-15 BRUTAL-method questions
+3. **Generate**: AGENTS.md + README.md + wiki/ seeds
+4. **Process**: Elder ingests wiki seeds, curate generates VOICE.md
+
 ## Key Integration Points
 
 ### tmux
