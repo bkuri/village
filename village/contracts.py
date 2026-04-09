@@ -32,6 +32,11 @@ Work on task `{task_id}` in isolated workspace.
 - Git root: `{git_root}`
 - Window name: `{window_name}`
 - Created: `{created_at}`
+
+## Trace Recording
+Record audit events to: `{traces_dir}/{task_id}.jsonl`
+Events: task_checkout, tool_call, decision, file_modified, task_complete
+Format: one JSON object per line with keys: timestamp, event_type, task_id, agent, data, sequence
 """
 
 
@@ -99,6 +104,8 @@ def generate_fallback_contract(
     Returns:
         Markdown contract string
     """
+    config = get_config()
+
     return FALLBACK_CONTRACT_TEMPLATE.format(
         task_id=task_id,
         agent=agent,
@@ -108,7 +115,57 @@ def generate_fallback_contract(
         created_at=created_at.isoformat(),
         task_title=task_title,
         task_description=task_description,
+        traces_dir=str(config.traces_dir),
     )
+
+
+def _build_goal_context(config: Config, task_title: str, task_description: str) -> str:
+    """Find the most relevant active goal and build context section."""
+    try:
+        from village.goals import get_active_goals, get_goal_chain, parse_goals
+
+        goals_path = config.git_root / "GOALS.md"
+        all_goals = parse_goals(goals_path)
+        if not all_goals:
+            return ""
+
+        active = get_active_goals(all_goals)
+        if not active:
+            return ""
+
+        search_text = (task_title + " " + task_description).lower()
+        best_goal = None
+        best_score = 0.0
+
+        for goal in active:
+            score = 0.0
+            goal_text = (goal.title + " " + goal.description).lower()
+            for word in search_text.split():
+                if len(word) > 2 and word in goal_text:
+                    score += 1.0
+            if score > best_score:
+                best_score = score
+                best_goal = goal
+
+        if best_goal is None:
+            best_goal = active[0]
+
+        chain = get_goal_chain(all_goals, best_goal.id)
+        chain_str = " → ".join(f"{g.id}: {g.title}" for g in chain)
+
+        lines = ["## Current Objective", ""]
+        lines.append(f"Goal chain: {chain_str}")
+        if best_goal.description:
+            lines.append(f"Context: {best_goal.description}")
+        if best_goal.objectives:
+            lines.append("Key objectives:")
+            for obj in best_goal.objectives[:5]:
+                lines.append(f"- {obj}")
+        lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.debug(f"Could not build goal context: {e}")
+        return ""
 
 
 def generate_contract(
@@ -205,6 +262,19 @@ def generate_contract(
             task_description=task_description,
         )
         ppc_profile = "fallback"
+
+    if ppc_profile != "fallback":
+        trace_section = (
+            f"\n## Trace Recording\n"
+            f"Record audit events to: `{config.traces_dir}/{task_id}.jsonl`\n"
+            f"Events: task_checkout, tool_call, decision, file_modified, task_complete\n"
+            f"Format: one JSON object per line with keys: timestamp, event_type, task_id, agent, data, sequence\n"
+        )
+        content = content.rstrip("\n") + trace_section + "\n"
+
+    goal_section = _build_goal_context(config, task_title, task_description)
+    if goal_section:
+        content = content.rstrip("\n") + "\n\n" + goal_section + "\n"
 
     return ContractEnvelope(
         version=1,

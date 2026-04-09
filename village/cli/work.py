@@ -1,11 +1,12 @@
 """Work management commands: queue, resume, pause, resume_task, ready."""
 
+import os
 import sys
 from typing import TYPE_CHECKING
 
 import click
 
-from village.config import get_config
+from village.config import Config, get_config
 from village.errors import EXIT_BLOCKED, EXIT_ERROR, EXIT_PARTIAL, EXIT_SUCCESS
 from village.logging import get_logger
 from village.queue import (
@@ -30,6 +31,9 @@ logger = get_logger(__name__)
 @click.option("--agent", help="Filter tasks by agent type")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
 @click.option("--force", is_flag=True, help="Skip deduplication checks")
+@click.option("--approve", "approve_task_id", help="Approve a pending task")
+@click.option("--approve-all", is_flag=True, help="Approve all pending tasks")
+@click.option("--reject", "reject_task_id", help="Reject a pending task")
 def queue(
     count: int,
     plan: bool,
@@ -38,6 +42,9 @@ def queue(
     agent: str,
     json_output: bool,
     force: bool,
+    approve_task_id: str | None,
+    approve_all: bool,
+    reject_task_id: str | None,
 ) -> None:
     """
     Queue and execute ready tasks from Beads.
@@ -63,7 +70,70 @@ def queue(
     """
     import json as _json
 
+    from village.state_machine import TaskState, TaskStateMachine
+
     config = get_config()
+
+    if approve_task_id:
+        state_machine = TaskStateMachine(config)
+        current = state_machine.get_state(approve_task_id)
+        if current == TaskState.PENDING_APPROVAL:
+            transition_result = state_machine.transition(
+                task_id=approve_task_id,
+                new_state=TaskState.QUEUED,
+                context={"reason": "user_approved"},
+            )
+            if transition_result.success:
+                click.echo(f"Approved task {approve_task_id}")
+            else:
+                click.echo(f"Failed to approve: {transition_result.message}", err=True)
+                sys.exit(EXIT_ERROR)
+        else:
+            click.echo(
+                f"Task {approve_task_id} is not pending approval (state: {current.value if current else 'none'})",
+                err=True,
+            )
+            sys.exit(EXIT_BLOCKED)
+        return
+
+    if approve_all:
+        state_machine = TaskStateMachine(config)
+        approved_count = 0
+        for lock_file in config.locks_dir.glob("*.lock"):
+            task_id = lock_file.stem
+            current = state_machine.get_state(task_id)
+            if current == TaskState.PENDING_APPROVAL:
+                transition_result = state_machine.transition(
+                    task_id=task_id,
+                    new_state=TaskState.QUEUED,
+                    context={"reason": "bulk_approved"},
+                )
+                if transition_result.success:
+                    approved_count += 1
+        click.echo(f"Approved {approved_count} task(s)")
+        return
+
+    if reject_task_id:
+        state_machine = TaskStateMachine(config)
+        current = state_machine.get_state(reject_task_id)
+        if current == TaskState.PENDING_APPROVAL:
+            transition_result = state_machine.transition(
+                task_id=reject_task_id,
+                new_state=TaskState.FAILED,
+                context={"reason": "user_rejected"},
+            )
+            if transition_result.success:
+                click.echo(f"Rejected task {reject_task_id}")
+            else:
+                click.echo(f"Failed to reject: {transition_result.message}", err=True)
+                sys.exit(EXIT_ERROR)
+        else:
+            click.echo(
+                f"Task {reject_task_id} is not pending approval (state: {current.value if current else 'none'})",
+                err=True,
+            )
+            sys.exit(EXIT_BLOCKED)
+        return
 
     # Use config max_workers or override from CLI
     concurrency_limit = max_workers if max_workers else config.max_workers
@@ -79,6 +149,12 @@ def queue(
 
     # Render plan (default or --plan)
     if plan or count is None:
+        pending_approval = [t for t in queue_plan.blocked_tasks if t.skip_reason == "pending_approval"]
+        ci_mode = os.environ.get("VILLAGE_CI_MODE", "").lower() in ("1", "true", "yes")
+        if ci_mode and pending_approval:
+            click.echo(f"Error: {len(pending_approval)} task(s) pending approval in CI mode", err=True)
+            sys.exit(EXIT_ERROR)
+
         if json_output:
             click.echo(render_queue_plan_json(queue_plan))
         else:
@@ -531,3 +607,25 @@ def ready(json_output: bool) -> None:
         click.echo(render_ready_json(assessment))
     else:
         click.echo(render_ready_text(assessment))
+        _show_objective_coverage(config)
+
+
+def _show_objective_coverage(config: "Config") -> None:
+    """Append objective coverage summary after readiness text."""
+    from village.goals import get_objective_coverage_from_file, parse_goals
+
+    goals_path = config.git_root / "GOALS.md"
+    all_goals = parse_goals(goals_path)
+    if not all_goals:
+        return
+
+    coverage = get_objective_coverage_from_file(goals_path)
+    total_completed = 0
+    total_objectives = 0
+    for goal_id, (completed, total, _ratio) in coverage.items():
+        total_completed += completed
+        total_objectives += total
+
+    if total_objectives > 0:
+        pct = round(total_completed / total_objectives * 100, 1)
+        click.echo(f"Objectives: {total_completed}/{total_objectives} completed ({pct}%)")

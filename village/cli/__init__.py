@@ -35,10 +35,12 @@ from village.cli import (  # noqa: E402
     dashboard,
     doctor,
     elder,
+    goals,
     lifecycle,
     maintenance,
     release,
     state,
+    trace,
     work,
     workflow,
 )
@@ -62,6 +64,9 @@ village.add_command(work.resume)
 village.add_command(work.pause)
 village.add_command(work.resume_task)
 village.add_command(work.ready)
+
+# Goals
+village.add_command(goals.goals)
 
 # Maintenance commands
 village.add_command(maintenance.cleanup)
@@ -93,6 +98,9 @@ village.add_command(workflow.workflow)
 
 # Council
 village.add_command(council.council_group, name="council")
+
+# Trace
+village.add_command(trace.trace_group, name="trace")
 
 # Aliases
 village.add_command(dashboard.dashboard, name="square")

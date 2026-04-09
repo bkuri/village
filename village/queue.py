@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from village.config import Config, get_config
+from village.config import ApprovalConfig, Config, get_config
 from village.conflict_detection import (
     WorkerInfo,
     detect_file_conflicts,
@@ -18,6 +18,7 @@ from village.probes.beads import beads_available
 from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
 from village.state_machine import TaskState, TaskStateMachine
+from village.trace import TraceEventType, TraceWriter
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class QueueTask:
     lock_agent: Optional[str] = None
     lock_claimed_at: Optional[str] = None
     worktree_path: Optional[Path] = None
+    needs_approval: bool = False
+    approval_status: str | None = None
 
 
 @dataclass
@@ -141,6 +144,23 @@ def extract_ready_tasks(config: Config) -> list[QueueTask]:
     except SubprocessError as e:
         logger.warning(f"Failed to extract ready tasks: {e}")
         return []
+
+
+def _task_needs_approval(task: QueueTask, approval_config: ApprovalConfig) -> bool:
+    """Check if a task requires approval based on config threshold."""
+    if not approval_config.enabled:
+        return False
+
+    priority = task.agent_metadata.get("priority", "")
+    if not priority:
+        return False
+
+    try:
+        priority_val = int(re.sub(r"[^\d]", "", priority))
+    except (ValueError, TypeError):
+        return False
+
+    return priority_val <= approval_config.threshold
 
 
 def arbitrate_locks(
@@ -259,6 +279,23 @@ def arbitrate_locks(
                             f"Task {task.task_id} has potential conflicts: {render_conflict_report(conflict_report)}"
                         )
 
+        # Approval gate check
+        if _task_needs_approval(task, config.approval):
+            if task.approval_status != "approved":
+                task.skip_reason = "pending_approval"
+                task.needs_approval = True
+                blocked_tasks.append(task)
+
+                state_machine = TaskStateMachine(config)
+                current = state_machine.get_state(task.task_id)
+                if current == TaskState.QUEUED:
+                    state_machine.transition(
+                        task_id=task.task_id,
+                        new_state=TaskState.PENDING_APPROVAL,
+                        context={"reason": "approval_required"},
+                    )
+                continue
+
         # Task is available
         available_tasks.append(task)
 
@@ -327,7 +364,8 @@ def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
         lines.append("Available tasks (will start):")
         for task in plan.available_tasks:
             title_display = f" - {task.title}" if task.title else ""
-            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display}")
+            approval_flag = " [NEEDS APPROVAL]" if task.needs_approval else ""
+            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display}{approval_flag}")
         lines.append("")
     else:
         lines.append("No tasks available to start")
@@ -370,6 +408,8 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
             "lock_agent": task.lock_agent,
             "lock_claimed_at": task.lock_claimed_at,
             "worktree_path": str(task.worktree_path) if task.worktree_path else None,
+            "needs_approval": task.needs_approval,
+            "approval_status": task.approval_status,
         }
 
     plan_dict: dict[str, object] = {
@@ -426,7 +466,14 @@ def execute_queue_plan(
             if result.success:
                 logger.info(f"Task started successfully: {task.task_id}")
 
-                # Transition state to CLAIMED after successful claim
+                tracer = TraceWriter(task.task_id, config.traces_dir)
+                tracer.record(
+                    TraceEventType.TASK_CHECKOUT,
+                    agent=task.agent,
+                    pane_id=result.pane_id,
+                    window=result.window_name,
+                )
+
                 state_machine = TaskStateMachine(config)
                 transition_result = state_machine.transition(
                     task_id=task.task_id,

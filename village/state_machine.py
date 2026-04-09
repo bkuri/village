@@ -18,6 +18,7 @@ class TaskState(str, Enum):
     """Task lifecycle states."""
 
     QUEUED = "queued"
+    PENDING_APPROVAL = "pending_approval"
     CLAIMED = "claimed"
     IN_PROGRESS = "in_progress"
     PAUSED = "paused"
@@ -66,7 +67,8 @@ class TaskStateMachine:
     """Manages task lifecycle states with persistence and logging."""
 
     VALID_TRANSITIONS: dict[TaskState, set[TaskState]] = {
-        TaskState.QUEUED: {TaskState.CLAIMED},
+        TaskState.QUEUED: {TaskState.CLAIMED, TaskState.PENDING_APPROVAL},
+        TaskState.PENDING_APPROVAL: {TaskState.QUEUED, TaskState.CLAIMED, TaskState.FAILED},
         TaskState.CLAIMED: {TaskState.IN_PROGRESS, TaskState.FAILED},
         TaskState.IN_PROGRESS: {TaskState.PAUSED, TaskState.COMPLETED, TaskState.FAILED},
         TaskState.PAUSED: {TaskState.IN_PROGRESS, TaskState.FAILED},
@@ -187,9 +189,7 @@ class TaskStateMachine:
                         return [
                             StateTransition(
                                 ts=entry["ts"],
-                                from_state=TaskState(entry["from_state"])
-                                if entry.get("from_state")
-                                else None,
+                                from_state=TaskState(entry["from_state"]) if entry.get("from_state") else None,
                                 to_state=TaskState(entry["to_state"]),
                                 context=entry.get("context", {}),
                             )

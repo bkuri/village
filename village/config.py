@@ -589,6 +589,33 @@ class ACPConfig:
 
 
 @dataclass
+class ApprovalConfig:
+    """Approval gate configuration."""
+
+    enabled: bool = False
+    threshold: int = 1
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "ApprovalConfig":
+        """Load approval config from environment variables and config file."""
+        enabled_env = os.environ.get("VILLAGE_APPROVAL_ENABLED", "").lower()
+        enabled_config = (
+            config.get("queue.approval_enabled", "").lower() or config.get("QUEUE.APPROVAL_ENABLED", "").lower()
+        )
+        enabled = enabled_env or enabled_config
+        approval_enabled = enabled in ("1", "true", "yes")
+
+        threshold_str = (
+            os.environ.get("VILLAGE_APPROVAL_THRESHOLD")
+            or config.get("queue.approval_threshold")
+            or config.get("QUEUE.APPROVAL_THRESHOLD")
+        )
+        threshold = int(threshold_str) if threshold_str else 1
+
+        return cls(enabled=approval_enabled, threshold=threshold)
+
+
+@dataclass
 class Config:
     """Village configuration."""
 
@@ -603,6 +630,7 @@ class Config:
     agents: dict[str, AgentConfig] = field(default_factory=dict)
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
+    traces_dir: Path = field(init=False)
     debug: DebugConfig = field(default_factory=DebugConfig.from_env)
     llm: LLMConfig = field(default_factory=LLMConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
@@ -618,11 +646,13 @@ class Config:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     onboard: OnboardConfig = field(default_factory=OnboardConfig)
     council: CouncilConfig = field(default_factory=CouncilConfig)
+    approval: ApprovalConfig = field(default_factory=ApprovalConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
         self._config_path = self.village_dir / "config"
         self.locks_dir = self.village_dir / "locks"
+        self.traces_dir = self.village_dir / "traces"
 
     @property
     def config_path(self) -> Path:
@@ -639,6 +669,8 @@ class Config:
         self.village_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Creating {self.locks_dir}")
         self.locks_dir.mkdir(exist_ok=True)
+        logger.debug(f"Creating {self.traces_dir}")
+        self.traces_dir.mkdir(exist_ok=True)
         logger.debug(f"Creating {self.worktrees_dir}")
         self.worktrees_dir.mkdir(parents=True, exist_ok=True)
 
@@ -871,6 +903,8 @@ def _build_config(git_root: Path) -> Config:
 
     council_config = CouncilConfig.from_env_and_config(file_config)
 
+    approval_config = ApprovalConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -963,4 +997,5 @@ def _build_config(git_root: Path) -> Config:
         memory=memory_config,
         onboard=onboard_config,
         council=council_config,
+        approval=approval_config,
     )
