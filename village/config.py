@@ -396,6 +396,60 @@ class MemoryConfig:
 
 
 @dataclass
+class CouncilConfig:
+    default_type: str = "chat"
+    max_turns: int = 10
+    extension_turns: int = 5
+    default_rounds: int = 3
+    resolution_strategy: str = "synthesis"
+    personas_dir: str = "personas/"
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "CouncilConfig":
+        default_type_env = os.environ.get("VILLAGE_COUNCIL_TYPE")
+        default_type_config = config.get("council.default_type") or config.get("COUNCIL.DEFAULT_TYPE")
+        default_type = default_type_env or default_type_config or "chat"
+
+        max_turns_str = (
+            os.environ.get("VILLAGE_COUNCIL_MAX_TURNS")
+            or config.get("council.max_turns")
+            or config.get("COUNCIL.MAX_TURNS")
+        )
+        max_turns = int(max_turns_str) if max_turns_str else 10
+
+        ext_turns_str = (
+            os.environ.get("VILLAGE_COUNCIL_EXTENSION_TURNS")
+            or config.get("council.extension_turns")
+            or config.get("COUNCIL.EXTENSION_TURNS")
+        )
+        extension_turns = int(ext_turns_str) if ext_turns_str else 5
+
+        rounds_str = (
+            os.environ.get("VILLAGE_COUNCIL_ROUNDS")
+            or config.get("council.default_rounds")
+            or config.get("COUNCIL.DEFAULT_ROUNDS")
+        )
+        default_rounds = int(rounds_str) if rounds_str else 3
+
+        strategy_env = os.environ.get("VILLAGE_COUNCIL_RESOLUTION")
+        strategy_config = config.get("council.resolution_strategy") or config.get("COUNCIL.RESOLUTION_STRATEGY")
+        resolution_strategy = strategy_env or strategy_config or "synthesis"
+
+        personas_env = os.environ.get("VILLAGE_COUNCIL_PERSONAS_DIR")
+        personas_config = config.get("council.personas_dir") or config.get("COUNCIL.PERSONAS_DIR")
+        personas_dir = personas_env or personas_config or "personas/"
+
+        return cls(
+            default_type=default_type,
+            max_turns=max_turns,
+            extension_turns=extension_turns,
+            default_rounds=default_rounds,
+            resolution_strategy=resolution_strategy,
+            personas_dir=personas_dir,
+        )
+
+
+@dataclass
 class OnboardConfig:
     """Adaptive onboarding configuration."""
 
@@ -563,6 +617,7 @@ class Config:
     acp: ACPConfig = field(default_factory=ACPConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     onboard: OnboardConfig = field(default_factory=OnboardConfig)
+    council: CouncilConfig = field(default_factory=CouncilConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -814,6 +869,8 @@ def _build_config(git_root: Path) -> Config:
 
     onboard_config = OnboardConfig.from_env_and_config(file_config)
 
+    council_config = CouncilConfig.from_env_and_config(file_config)
+
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
@@ -905,4 +962,5 @@ def _build_config(git_root: Path) -> Config:
         acp=acp_config,
         memory=memory_config,
         onboard=onboard_config,
+        council=council_config,
     )

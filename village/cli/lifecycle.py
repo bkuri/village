@@ -91,7 +91,9 @@ def new(name: str, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_o
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
 @click.option("--skip-onboard", is_flag=True, help="Skip onboarding check")
-def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
+@click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md during onboarding")
+@click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
+def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bool, skip_interview: bool) -> None:
     """
     Initialize village runtime (idempotent).
 
@@ -106,7 +108,10 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
     Skips components that already exist.
     Does not start workers.
 
-    Supports: --dry-run, --plan (preview mode)
+    Supports: --dry-run, --plan (preview mode),
+    --skip-onboard (skip onboarding check),
+    --force (overwrite existing files during onboarding),
+    --skip-interview (use scaffold defaults without prompts)
     """
     config = get_config()
 
@@ -119,7 +124,6 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
         click.echo(render_initialization_plan(init_plan, config.tmux_session, plan_mode=plan_mode))
         return
 
-    # Execute initialization
     state = collect_runtime_state(config.tmux_session)
     init_plan = plan_initialization(state)
     success = execute_initialization(
@@ -141,14 +145,14 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
     append_event(event, config.village_dir)
     click.echo("Runtime initialized")
 
-    # Check for onboarding after runtime is up
     if not skip_onboard:
         from village.onboard.detector import detect_project
 
         info = detect_project(config.git_root)
-        if info.needs_onboarding:
-            click.echo("Detected incomplete project setup. Starting onboarding...")
-            _run_onboard(config.git_root, force=False, skip_interview=False)
+        if info.needs_onboarding or force:
+            if not force:
+                click.echo("Detected incomplete project setup. Starting onboarding...")
+            _run_onboard(config.git_root, force=force, skip_interview=skip_interview)
 
 
 @lifecycle_group.command("down")
@@ -189,30 +193,6 @@ def down(dry_run: bool, plan: bool) -> None:
         click.echo(f"Runtime stopped (session '{config.tmux_session}' terminated)")
     else:
         raise click.ClickException("Failed to stop runtime")
-
-
-@lifecycle_group.command("onboard")
-@click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md")
-@click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
-def onboard(force: bool, skip_interview: bool) -> None:
-    """
-    Run adaptive onboarding interview for this project.
-
-    Detects the project language, framework, and tooling, then runs
-    an interactive interview to generate AGENTS.md, README.md, and
-    wiki seed files tailored to the project.
-
-    Use --force to overwrite existing files.
-    Use --skip-interview to generate from scaffold defaults without prompts.
-    """
-    from village.probes.repo import find_git_root
-
-    try:
-        git_root = find_git_root()
-    except Exception:
-        raise click.ClickException("Must be inside a git repository to run onboard.")
-
-    _run_onboard(Path(git_root), force=force, skip_interview=skip_interview)
 
 
 def _run_onboard(project_root: Path, force: bool, skip_interview: bool) -> None:

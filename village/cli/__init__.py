@@ -29,14 +29,26 @@ def village(ctx: click.Context, verbose: bool) -> None:
     ctx.ensure_object(dict)
 
 
-from village.cli import acp, chat, dashboard, doctor, elder, lifecycle, maintenance, release, state, work  # noqa: E402
+from village.cli import (  # noqa: E402
+    acp,
+    council,
+    dashboard,
+    doctor,
+    elder,
+    lifecycle,
+    maintenance,
+    release,
+    state,
+    work,
+    workflow,
+)
+from village.cli import help as help_mod  # noqa: E402
 
 # Lifecycle commands
 for cmd_name in ["new", "up", "down"]:
     village.add_command(lifecycle.lifecycle_group.commands[cmd_name])
 
-# Onboard command (under lifecycle)
-village.add_command(lifecycle.lifecycle_group.commands["onboard"])
+village.add_command(lifecycle.lifecycle_group.commands["up"], name="onboard")
 
 # State inspection commands
 village.add_command(state.status)
@@ -62,9 +74,9 @@ village.add_command(dashboard.metrics)
 # Release
 village.add_command(release.release)
 
-# Chat and drafts
-village.add_command(chat.chat)
-village.add_command(chat.drafts)
+# Help and drafts
+village.add_command(help_mod.help_cmd, name="help")
+village.add_command(help_mod.drafts)
 
 # Elder
 village.add_command(elder.elder_group, name="elder")
@@ -76,9 +88,15 @@ village.add_command(acp.acp_command)
 # Doctor
 village.add_command(doctor.doctor_command)
 
+# Workflow
+village.add_command(workflow.workflow)
+
+# Council
+village.add_command(council.council_group, name="council")
+
 # Aliases
 village.add_command(dashboard.dashboard, name="square")
 village.add_command(maintenance.cleanup, name="sweep")
-village.add_command(chat.chat, name="council")
+village.add_command(help_mod.help_cmd, name="chat")
 village.add_command(state.status, name="census")
 village.add_command(state.state, name="archives")

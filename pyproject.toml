@@ -8,6 +8,7 @@ dependencies = [
     "anthropic>=0.76.0",
     "click>=8.1.0",
     "httpx>=0.28.1",
+    "pyyaml>=6.0.3",
     "questionary>=2.0.0",
     "trafilatura>=2.0.0",
 ]
@@ -80,5 +81,6 @@ dev = [
     "pytest-cov>=7.0.0",
     "requests>=2.32.5",
     "ruff>=0.14.14",
+    "types-pyyaml>=6.0.12.20260408",
     "types-requests>=2.32.4.20260107",
 ]

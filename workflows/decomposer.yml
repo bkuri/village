@@ -1,0 +1,47 @@
+name: decomposer
+description: Decompose a feature description into trackable subtasks
+version: 1
+inputs:
+  - feature_description
+
+steps:
+  - name: analyze
+    type: prompt
+    prompt: >
+      Analyze this feature description and identify all the distinct work items needed:
+
+      {{feature_description}}
+
+      For each work item, identify:
+      - What needs to be done
+      - Dependencies on other work items
+      - Estimated complexity (small/medium/large)
+      - Type (backend/frontend/testing/docs/infrastructure)
+
+  - name: decompose
+    type: decompose
+    prompt: >
+      Break the analysis into concrete, actionable subtasks suitable for individual agents.
+      Each subtask should be completable independently (given its dependencies are met).
+
+      Format each subtask as:
+      - Title: [clear, action-oriented]
+      - Description: [what to implement, acceptance criteria]
+      - Type: bug|feature|task|chore
+      - Priority: 0-4
+      - Dependencies: [list of other subtask titles it depends on]
+      - Estimated complexity: small|medium|large
+
+      Ensure no subtask is larger than "medium" complexity. Split further if needed.
+
+  - name: validate
+    type: critique
+    prompt: >
+      Validate the decomposition:
+      - Are all dependencies acyclic? (no circular deps)
+      - Is every subtask independently actionable?
+      - Are acceptance criteria clear enough for an AI agent?
+      - Are there any gaps or missing subtasks?
+      - Are priorities reasonable?
+
+      Fix any issues found and output the final task list.

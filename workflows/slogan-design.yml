@@ -1,0 +1,40 @@
+name: slogan-design
+description: Generate, critique, and refine slogan/tagline candidates
+version: 1
+inputs:
+  - brand_context
+
+steps:
+  - name: generate
+    type: prompt
+    prompt: >
+      Generate 12 slogan candidates for the following brand/product.
+
+      Brand context: {{brand_context}}
+
+      Mix styles: aspirational, functional, clever, minimalist.
+      Output one slogan per line, numbered 1-12.
+
+  - name: critique
+    type: critique
+    prompt: >
+      Critically evaluate these slogan candidates. For each, assess:
+      - Clarity (1-10)
+      - Memorability (1-10)
+      - Emotional impact (1-10)
+      - Brand fit (1-10)
+      - Length appropriateness
+
+      Eliminate the bottom 7 and explain why.
+      Keep the top 5 strongest candidates.
+
+  - name: refine
+    type: synthesize
+    prompt: >
+      Refine the top 5 slogan candidates. For each:
+      - Polish the wording
+      - Suggest 1-2 variations
+      - Note the tone and target audience
+      - Rank by overall effectiveness
+
+      Present as a final recommendation with rationale.
