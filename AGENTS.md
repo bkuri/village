@@ -150,8 +150,8 @@ village acp --server status
 ```
 village/
 ├── cli/                # CLI commands (role-based)
-│   ├── planner.py      #   village planner — workflow design
-│   ├── builder.py      #   village builder — workflow execution
+│   ├── planner.py      #   village planner — spec design + inspection
+│   ├── builder.py      #   village builder — spec-driven autonomous loop
 │   ├── elder.py        #   village elder — knowledge base + goals
 │   ├── ledger.py       #   village ledger — audit trails
 │   ├── council.py      #   village council — multi-persona deliberation
@@ -159,7 +159,8 @@ village/
 │   └── ...
 ├── config.py           # Config loading
 ├── roles.py            # RoleChat base, routing table, greetings
-├── workflow/            # Workflow engine
+├── loop.py             # Spec-driven autonomous build loop
+├── workflow/            # Workflow engine (planner infrastructure)
 │   ├── schema.py       #   Step types, WorkflowSchema
 │   ├── loader.py       #   YAML loader
 │   ├── builder.py      #   Execution engine
@@ -257,67 +258,70 @@ The onboarding pipeline:
 
 ## Role-Based CLI Architecture
 
-### Roles and Commands
-
-Each role is a top-level `village` command. Invoking without subcommands launches an interactive chat session with cross-role routing.
+### Planner Produces Specs, Builder Implements Specs
 
 | Role | Default Chat | Subcommands |
 |------|-------------|-------------|
-| **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine` |
-| **builder** | "Which workflow shall I run?" | `run`, `status`, `stop`, `resume`, `logs` |
+| **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
+| **builder** | "Which specs shall I work on?" | `run`, `status`, `stop`, `resume`, `logs` |
 | **elder** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
 | **ledger** | "Which task are you looking for?" | `show`, `list` |
 | **council** | "What shall we discuss?" | `debate`, `list`, `show`, `rematch` |
 | **doctor** | "What seems to be the problem?" | `check` |
 | **greeter** | "How can I help?" | General triage, routes to all roles |
 
-### Cross-Role Routing
+### Spec-Driven Build Loop
 
-```python
-ROLE_ROUTING = {
-    "planner": {"route": ["builder"], "advise": ["council", "elder"]},
-    "builder": {"route": ["planner", "ledger"], "advise": ["elder", "council"]},
-    "elder":   {"route": ["council", "ledger"], "advise": ["planner", "builder"]},
-    "ledger":  {"route": [], "advise": ["elder", "doctor", "planner"]},
-    "council": {"route": ["elder"], "advise": ["planner", "builder"]},
-    "doctor":  {"route": ["ledger"], "advise": ["elder", "council"]},
-    "greeter": {"route": ["planner", "builder", "elder", "ledger", "council", "doctor"], "advise": []},
-}
-```
-
-- **route**: Auto-invoke target role with context handoff and notification
-- **advise**: Suggest target role with `[Y/n]` confirmation, escalate to route on yes
-
-### Backward Compatibility
-
-| Old Command | New Command | Alias |
-|-------------|-------------|-------|
-| `village workflow` | `village planner` | Yes (hidden) |
-| `village trace` | `village ledger` | Yes (hidden) |
-| `village help` / `village chat` | `village greeter` | Yes (hidden) |
-| `village goals` | `village elder goals` | No (removed) |
-
-### Missing Arguments
-
-When required arguments are missing, commands prompt interactively:
-- `village planner show` (no name) → list workflows, prompt to pick
-- `village planner design` (no goal) → prompt "Describe your goal..."
-- `village builder run` (no workflow) → list workflows, prompt
-- `village ledger show` (no task-id) → list recent traces, prompt
-
-### Builder Run State
-
-Runs are tracked in `.village/runs/`:
-- `<run-id>.json` — manifest (status, workflow, inputs, steps)
-- `<run-id>.jsonl` — step log (start/complete/error events)
+The builder implements specs autonomously via the Ralph Wiggum methodology.
 
 ```bash
-village builder run name-design -i entity_description="My Project"
-village builder status run-abc12345
-village builder stop run-abc12345
-village builder resume run-abc12345
-village builder logs
+# Planning — decides what, produces specs
+village planner design <goal>          # LLM pipeline → produces spec in specs/
+village planner inspect                # Review all specs (read-only)
+village planner inspect --fix          # Review + amend specs with Inspect Notes
+village planner inspect <spec-id>      # Review one spec
+village planner refine <spec-id>       # Iterate on a spec
+
+# Building — implements specs via autonomous loop
+village builder run                    # Loop through specs (sequential, 1 worktree)
+village builder run -p 4               # Parallel mode, 4 worktrees
+village builder run -n 20              # Max 20 iterations
+village builder run -m zai/glm-5-turbo # Override agent model
+village builder run --dry-run          # Preview without executing
+village builder status                 # Show spec completion progress
+village builder stop                   # Halt the loop
+village builder resume                 # Resume a stopped loop
+village builder logs                   # View iteration logs
 ```
+
+### Spec Format
+
+Specs are numbered markdown files in `specs/`:
+
+```markdown
+# 001-core-config
+
+## Overview
+Core configuration and CLI framework.
+
+## Status: incomplete
+
+## Requirements
+- FR-1: Load config from INI files
+  - [ ] Parses `.village/config` correctly
+  - [ ] Falls back to defaults
+
+## Completion Signal
+Run `village doctor check` and verify all pass.
+<promise>DONE</promise>
+```
+
+- **Priority**: Lexicographic filename order (001, 002, ...)
+- **Completion**: `Status: COMPLETE` written by the agent when done
+- **Promise signal**: Agent outputs `<promise>DONE</promise>` when all criteria met
+- **Inspect Notes**: Appended by `planner inspect --fix`, treated as hard constraints
+
+### Cross-Role Routing
 
 ## Key Integration Points
 

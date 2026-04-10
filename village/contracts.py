@@ -13,6 +13,53 @@ logger = logging.getLogger(__name__)
 
 CONTRACT_VERSION = 1
 
+SPEC_CONTRACT_TEMPLATE = """# Spec: {spec_name}
+
+You are running inside a spec-driven autonomous build loop.
+
+## Your Mission
+
+1. Read the spec below carefully, including any "Inspect Notes" sections.
+2. Look at any existing notes from previous attempts (if available).
+3. Implement the spec FULLY:
+   - Write all required code
+   - Write all required tests
+   - Run linting/formatting
+   - Run tests
+   - Fix any issues
+4. When ALL acceptance criteria are verified and tests pass:
+   - Add "Status: COMPLETE" to the top of the spec file
+   - Commit changes with a descriptive message
+5. Output `<promise>DONE</promise>` ONLY when everything is done.
+
+## Critical Rules
+
+- Do NOT ask for permission. Be fully autonomous.
+- Do NOT skip any acceptance criteria. Verify EACH one.
+- Treat "Inspect Notes" as hard constraints — same priority as acceptance criteria.
+- Do NOT output `<promise>DONE</promise>` unless ALL criteria pass.
+- If validation commands fail, fix them and try again.
+- This spec is independent — implement it completely in this iteration.
+
+## Workspace
+
+- Worktree path: `{worktree_path}`
+- Git root: `{git_root}`
+- Window name: `{window_name}`
+- Created: `{created_at}`
+
+## Trace Recording
+Record audit events to: `{traces_dir}/{task_id}.jsonl`
+Events: task_checkout, tool_call, decision, file_modified, task_complete
+Format: one JSON object per line with keys: timestamp, event_type, task_id, agent, data, sequence
+
+---
+
+## Spec: {spec_name}
+
+{spec_content}
+"""
+
 FALLBACK_CONTRACT_TEMPLATE = """# Task: {task_id} ({agent})
 
 ## Goal
@@ -205,19 +252,18 @@ def generate_contract(
     task_title = ""
     task_description = ""
 
-    try:
-        from village.probes.beads import beads_available
-        from village.probes.tools import run_command_output
+    from village.tasks import TaskNotFoundError, get_task_store
 
-        beads_status = beads_available()
-        if beads_status.command_available and beads_status.repo_initialized:
-            show_output = run_command_output(["bd", "show", task_id, "--json"])
-            if show_output:
-                task_info = json.loads(show_output)
-                task_title = task_info.get("title", "")
-                task_description = task_info.get("description", "")
+    try:
+        store = get_task_store(config=config)
+        task = store.get_task(task_id)
+        if task is not None:
+            task_title = task.title
+            task_description = task.description
+    except TaskNotFoundError:
+        pass
     except Exception as e:
-        logger.debug(f"Could not fetch task details from Beads: {e}")
+        logger.debug(f"Could not fetch task details from task store: {e}")
 
     # Resolve agent config
     agent_config = config.agents.get(agent, AgentConfig())
@@ -288,4 +334,88 @@ def generate_contract(
         created_at=created_at,
         task_title=task_title,
         task_description=task_description,
+    )
+
+
+def generate_spec_contract(
+    spec_path: Path,
+    spec_content: str,
+    agent: str,
+    worktree_path: Path,
+    window_name: str,
+    model: str | None = None,
+    config: Config | None = None,
+) -> ContractEnvelope:
+    """Generate a contract for spec-driven autonomous building.
+
+    Args:
+        spec_path: Path to the spec file
+        spec_content: Raw content of the spec file
+        agent: Agent name
+        worktree_path: Path to worktree directory
+        window_name: Tmux window name
+        model: Optional model override
+        config: Optional config
+
+    Returns:
+        ContractEnvelope with spec content as the contract body
+    """
+    if config is None:
+        config = get_config()
+
+    created_at = datetime.now().isoformat()
+    task_id = spec_path.stem
+    warnings: list[str] = []
+
+    agent_config = config.agents.get(agent, AgentConfig())
+
+    if agent_config.contract:
+        contract_path = config.git_root / agent_config.contract
+        if contract_path.exists():
+            logger.debug(f"Using custom contract: {contract_path}")
+            content = contract_path.read_text(encoding="utf-8")
+            ppc_profile = f"file:{agent_config.contract}"
+        else:
+            warnings.append(f"contract_file_not_found: {contract_path}")
+            content = SPEC_CONTRACT_TEMPLATE.format(
+                spec_name=spec_path.name,
+                task_id=task_id,
+                agent=agent,
+                worktree_path=str(worktree_path),
+                git_root=str(config.git_root),
+                window_name=window_name,
+                created_at=created_at,
+                traces_dir=str(config.traces_dir),
+                spec_content=spec_content,
+            )
+            ppc_profile = "spec"
+    else:
+        content = SPEC_CONTRACT_TEMPLATE.format(
+            spec_name=spec_path.name,
+            task_id=task_id,
+            agent=agent,
+            worktree_path=str(worktree_path),
+            git_root=str(config.git_root),
+            window_name=window_name,
+            created_at=created_at,
+            traces_dir=str(config.traces_dir),
+            spec_content=spec_content,
+        )
+        ppc_profile = "spec"
+
+    goal_section = _build_goal_context(config, spec_path.name, spec_content[:200])
+    if goal_section:
+        content = content.rstrip("\n") + "\n\n" + goal_section + "\n"
+
+    return ContractEnvelope(
+        version=1,
+        format="markdown",
+        task_id=task_id,
+        agent=agent,
+        content=content,
+        warnings=warnings,
+        ppc_profile=ppc_profile,
+        created_at=created_at,
+        task_title=spec_path.name,
+        task_description=f"Spec: {spec_path.name}",
     )

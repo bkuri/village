@@ -2,8 +2,7 @@ import click
 
 from village.logging import get_logger
 from village.roles import run_role_chat
-from village.workflow.builder import Builder
-from village.workflow.loader import WorkflowLoader, WorkflowLoadError
+from village.workflow.loader import WorkflowLoader
 
 logger = get_logger(__name__)
 
@@ -15,97 +14,124 @@ def _get_loader() -> WorkflowLoader:
 @click.group(invoke_without_command=True)
 @click.pass_context
 def builder_group(ctx: click.Context) -> None:
-    """Execute and manage workflow runs."""
+    """Execute and manage spec-driven builds."""
     if ctx.invoked_subcommand is not None:
         return
     run_role_chat("builder")
 
 
 @builder_group.command("run")
-@click.argument("name", required=False)
-@click.option("--input", "-i", multiple=True, help="Input as KEY=VALUE")
+@click.option("--specs-dir", type=click.Path(), default="specs", help="Directory containing spec files")
+@click.option("--agent", "-a", default="worker", help="Agent to use for building")
+@click.option("--model", "-m", default=None, help="Model override for the agent")
+@click.option("--parallel", "-p", "parallel", default=1, type=int, help="Number of parallel worktrees")
+@click.option("--max-iterations", "-n", default=None, type=int, help="Max iterations (default: unlimited)")
 @click.option("--dry-run", is_flag=True, help="Show plan without executing")
-def run_workflow(name: str | None, input: tuple[str, ...], dry_run: bool) -> None:
-    """Execute a workflow."""
-    loader = _get_loader()
+@click.pass_context
+def run_loop(
+    ctx: click.Context,
+    specs_dir: str,
+    agent: str,
+    model: str | None,
+    parallel: int,
+    max_iterations: int | None,
+    dry_run: bool,
+) -> None:
+    """Run the autonomous spec-driven build loop."""
 
-    if name is None:
-        names = loader.list_workflows()
-        if not names:
-            click.echo("No workflows found.")
-            return
-        click.echo("Available workflows:")
-        for i, n in enumerate(names, 1):
-            click.echo(f"  {i}. {n}")
-        choice = click.prompt("Which workflow?", type=int)
-        if choice < 1 or choice > len(names):
-            raise click.ClickException("Invalid selection")
-        name = names[choice - 1]
+    from village.config import get_config
+    from village.loop import find_incomplete_specs, find_specs
+    from village.loop import run_loop as _run_loop
 
-    assert name is not None
-    try:
-        wf = loader.load(name)
-    except WorkflowLoadError as e:
-        raise click.ClickException(str(e))
+    config = get_config()
+    specs_path = config.git_root / specs_dir
 
-    inputs: dict[str, str] = {}
-    for pair in input:
-        if "=" not in pair:
-            raise click.ClickException(f"Invalid input format: {pair} (expected KEY=VALUE)")
-        key, value = pair.split("=", 1)
-        inputs[key] = value
+    if not specs_path.is_dir():
+        raise click.ClickException(f"Specs directory not found: {specs_path}")
 
+    all_specs = find_specs(specs_path)
+    if not all_specs:
+        raise click.ClickException(f"No specs found in {specs_path}")
+
+    incomplete = find_incomplete_specs(specs_path)
+    completed = len(all_specs) - len(incomplete)
+
+    click.echo(f"Specs: {len(all_specs)} total, {completed} complete, {len(incomplete)} remaining")
+    if incomplete:
+        click.echo(f"Next: {incomplete[0].name}")
     if dry_run:
-        click.echo(f"Workflow: {wf.name}")
-        click.echo(f"Inputs: {inputs}")
-        click.echo(f"Steps: {len(wf.steps)}")
-        for step in wf.resolve_steps():
-            click.echo(f"  - {step.name} ({step.type.value})")
+        click.echo("Dry run: no changes will be made")
         return
 
-    builder = Builder()
-    result = builder.run_sync(wf, inputs)
+    click.echo(f"Starting build loop (max_iterations={max_iterations or 'unlimited'})...")
+    click.echo("Press Ctrl+C to stop.\n")
 
-    if result.success:
-        click.echo(f"Workflow '{wf.name}' completed successfully.")
-        for step_result in result.step_results:
-            click.echo(f"\n--- {step_result.name} ---")
-            click.echo(step_result.output[:500])
-            if len(step_result.output) > 500:
-                click.echo("... (truncated)")
-    else:
-        raise click.ClickException(f"Workflow failed at step: {result.step_results[-1].name}")
+    try:
+        result = _run_loop(
+            specs_dir=specs_path,
+            agent=agent,
+            model=model,
+            max_iterations=max_iterations,
+            dry_run=dry_run,
+            config=config,
+        )
+
+        click.echo(f"\nBuild loop finished ({result.iterations} iterations)")
+        click.echo(f"Completed: {result.completed_specs} / {result.total_specs}")
+        if result.remaining:
+            click.echo(f"Remaining: {', '.join(result.remaining)}")
+            click.echo("\nRun again to continue.")
+        else:
+            click.echo("All specs complete!")
+    except KeyboardInterrupt:
+        click.echo("\nBuild loop stopped by user.")
+    except Exception as e:
+        raise click.ClickException(str(e))
 
 
 @builder_group.command("status")
 @click.argument("run_id", required=False)
 def run_status(run_id: str | None) -> None:
-    """Show run status."""
-    if run_id is None:
-        click.echo("No runs tracked yet.")
+    """Show build loop status."""
+
+    from village.config import get_config
+    from village.loop import find_specs
+
+    config = get_config()
+    specs_path = config.git_root / "specs"
+
+    if not specs_path.is_dir():
+        click.echo("No specs directory found.")
         return
-    click.echo(f"Run status for: {run_id}")
-    click.echo("Status tracking not yet implemented.")
+
+    specs = find_specs(specs_path)
+    if not specs:
+        click.echo("No specs found.")
+        return
+
+    complete = sum(1 for s in specs if s.is_complete)
+    incomplete = [s for s in specs if not s.is_complete]
+
+    click.echo(f"Specs: {len(specs)} total, {complete} complete, {len(incomplete)} remaining")
+    if incomplete:
+        click.echo("\nIncomplete specs:")
+        for s in incomplete:
+            click.echo(f"  - {s.name}")
+    if complete:
+        click.echo(f"\nComplete specs: {complete}")
 
 
 @builder_group.command("stop")
 @click.argument("run_id", required=False)
 def stop_run(run_id: str | None) -> None:
-    """Stop a running workflow."""
-    if run_id is None:
-        click.echo("No active runs to stop.")
-        return
-    click.echo(f"Stopping run: {run_id}")
-    click.echo("Run cancellation not yet implemented.")
+    """Stop a running build loop."""
+    click.echo("Stop not yet implemented. Use Ctrl+C in the running terminal.")
 
 
 @builder_group.command("cancel", hidden=True)
 @click.argument("run_id", required=False)
 def cancel_run(run_id: str | None) -> None:
     """Alias for stop."""
-    if run_id is None:
-        click.echo("No active runs to cancel.")
-        return
     from click import Context
 
     ctx = Context(stop_run)
@@ -116,21 +142,28 @@ def cancel_run(run_id: str | None) -> None:
 @click.argument("run_id", required=False)
 @click.option("--follow", is_flag=True, help="Follow log output")
 def show_logs(run_id: str | None, follow: bool) -> None:
-    """List past runs or show specific run log."""
-    if run_id is None:
-        click.echo("No past runs found.")
-        return
-    click.echo(f"Logs for run: {run_id}")
-    if follow:
-        click.echo("Follow mode not yet implemented.")
+    """Show build loop logs."""
+    click.echo("Log viewing not yet implemented.")
 
 
 @builder_group.command("resume")
 @click.argument("run_id", required=False)
 def resume_run(run_id: str | None) -> None:
-    """Resume a failed run."""
-    if run_id is None:
-        click.echo("No failed runs to resume.")
+    """Resume a stopped build loop."""
+
+    from village.config import get_config
+    from village.loop import find_incomplete_specs
+
+    config = get_config()
+    specs_path = config.git_root / "specs"
+
+    if not specs_path.is_dir():
+        raise click.ClickException("No specs directory found.")
+
+    incomplete = find_incomplete_specs(specs_path)
+    if not incomplete:
+        click.echo("All specs complete. Nothing to resume.")
         return
-    click.echo(f"Resuming run: {run_id}")
-    click.echo("Run resume not yet implemented.")
+
+    click.echo(f"Resuming: {len(incomplete)} incomplete specs")
+    click.echo("Use 'builder run' to continue.")
