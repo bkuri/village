@@ -4,106 +4,97 @@ All notable changes to Village will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased] - Task Decomposition & Extensibility
+## [2.0.0] - 2026-04-11
+
+### Breaking
+- Remove beads client dependency — replaced with native task store (`village/tasks/`)
+- Remove `village/chat/beads_client.py` and `village/probes/beads.py`
+- Replace `village/cli.py` monolith with modular `village/cli/` package
 
 ### Added
+- **ACP (Agent Communication Protocol) Integration**
+  - ACP server mode for editor integration (Zed, JetBrains)
+  - ACP client mode for spawning external agents (Claude Code, Gemini CLI)
+  - Bridge layer for ACP ↔ Village protocol translation
+  - Permission system for resource access control
+  - File system API with line/limit support
+  - Notification streaming
+  - Terminal API
+  - Session lifecycle methods
+  - Configuration support
+  - Comprehensive test suite and documentation
+- **Role-Based CLI Architecture**
+  - `village planner` — spec design + inspection
+  - `village builder` — spec-driven autonomous build loop
+  - `village elder` — knowledge base + goals
+  - `village ledger` — audit trails
+  - `village council` — multi-persona deliberation
+  - `village greeter` — Q&A session / triage
+  - `village doctor` — health check framework
+  - RoleChat routing with greetings per role
+- **Spec-Driven Build Loop**
+  - `village builder run` — autonomous implementation loop
+  - Builder state tracking (manifest + step log)
+  - Promise signal pattern for completion detection
+  - Parallel mode with configurable worktree count
 - **Village Elder Knowledge Base**
   - `village elder see/fetch <url|file>` — Ingest sources, auto-tag, cross-link
   - `village elder ask "question"` — Query wiki and synthesize answers
   - `village elder curate/upkeep` — Health check, find orphans, regenerate VOICE.md
   - `village elder stats` — Show wiki statistics
   - `village elder monitor` — Watch wiki/ingest/ for new files
+  - `village elder goals` — Goal hierarchy with coverage tracking
 - **File-based Memory System**
   - Replace memvid with pure markdown memory store
   - MemoryStore: put/get/find/recent/related/delete over markdown files
   - FileMemoryContext: ChatContext backed by MemoryStore
-  - MemoryConfig in `[memory]` config section
-- **Automatic Task Decomposition**
-  - LLM-based complexity detection evaluates if tasks should be broken down
-  - Uses semantic understanding (not keyword matching) for flexibility
-  - Sequential Thinking generates structured breakdown with dependencies
-  - Dependencies displayed as task titles (not indices) for clarity
-  - `/confirm` creates all subtasks with proper blocking relationships
-  - `/edit` allows refining the entire breakdown
-  - `/discard` skips decomposition, creates as single task
-  - `/reset` alias for `/discard` command
-- **Extensibility Framework**
-  - 7 extension points for domain-specific customization without forking
-  - ChatProcessor: Pre/post-process chat messages
-  - ToolInvoker: Customize MCP tool invocation with caching
-  - ThinkingRefiner: Domain-specific query refinement
-  - ChatContext: Session state management
-  - BeadsIntegrator: Custom task metadata
-  - ServerDiscovery: Dynamic MCP server discovery
-  - LLMProviderAdapter: LLM provider customization
-- **Documentation**
-  - Comprehensive EXTENSIBILITY_GUIDE.md (1596 lines, 7 tutorials)
-  - EXTENSIBILITY_API.md for API reference
-  - Research domain example in examples/research/
-- **LLM Tools Module**
-  - MCP tool mappings for Sequential Thinking, Atom of Thoughts, Think tool
-  - ToolDefinitions with JSON schemas for prompts
+- **Workflow Engine**
+  - YAML-based workflow definitions
+  - Step types: prompt, shell, decision, parallel
+  - LLM-driven workflow planning
+  - Built-in workflows: decomposer, name-design, slogan-design
+- **Council Deliberation System**
+  - Multi-persona debate and resolution
+  - Transcript recording and replay
+  - Persona definitions (pragmatist, skeptic)
 - **Adaptive Onboarding System**
   - `village new` runs adaptive interview instead of stamping templates
   - `village up` detects incomplete projects and offers onboarding
-  - `village onboard` command for re-onboarding existing projects
   - BRUTAL method: critic persona, third-party framing, self-critique loop
-  - PPC profiles: village-onboard (interview), village-elder (query grounding)
   - Project type detector: Python, JavaScript/TypeScript, Rust, Go
   - Language-specific scaffold templates
+- **Approval Gates, Goal Hierarchy, and Structured Trace**
+  - TraceWriter/Reader for JSONL execution traces
+  - Goal hierarchy management (GOALS.md)
+  - Approval gates for spec progression
+- **Native Task Store**
+  - Replace beads with `village/tasks/` module
+  - File-based task storage with atomic operations
+  - Task IDs, models, and store interfaces
+  - Task hooks extensibility point
+- **Agent Commands and Events**
+  - Agent command dispatching
+  - Agent event system
+  - Prepare-commit-msg hook
+- **Extensibility Framework**
+  - 7 extension points: ChatProcessor, ToolInvoker, ThinkingRefiner, ChatContext, TaskHooks, ServerDiscovery, LLMProviderAdapter
+- **Doctor Analysis Framework**
+  - Built-in checks: git, quality, tests
+  - Extensible check system with JSON reporting
+- **Comprehensive Documentation**
+  - ACP API reference, configuration, examples, integration guides
+  - Systemd service/timer for village-analyze
 
-### Fixed
-- Beads CLI compatibility: removed unsupported `--status` flag
-- Estimate conversion: string estimates ("days", "weeks") → minutes for `bd create`
-- Delete requires `--force`: added to `bd delete` commands
-- Lock directory creation: defensive `mkdir(parents=True, exist_ok=True)`
-- JSON serialization: SessionStateEncoder handles datetime and dataclass objects
-- Test suite: 41 failures reduced to 1 (97% reduction)
+### Changed
+- Modularize CLI from single `village/cli.py` to `village/cli/` package
+- Update queue, release, ready, and config modules for task store migration
+- Improve error handling across core modules
 
-### Test Results
-- Before: 1208 passed, 26 skipped, 41 failed
-- After: 1242 passed, 26 skipped, 1 failed
-
-## [Unreleased] - ST → AoT Light Strategy
-
-### Added
-- **Task Breakdown Strategy: ST → AoT Light**
-  - New configuration-driven approach for task decomposition
-  - Phase 1: Sequential Thinking for deep analysis (requirements, constraints, dependencies)
-  - Phase 2: Atom of Thoughts (AoT-light) for atomic, queueable task creation
-  - Default strategy: `st_aot_light` (configurable via env or config file)
-  - Supported strategies: `sequential`, `atomic`, `st_aot_light`
-- **Configuration Options**
-  - Environment variable: `VILLAGE_TASK_BREAKDOWN_STRATEGY`
-  - Config file key: `TASK_BREAKDOWN.STRATEGY`
-  - New `TaskBreakdownConfig` dataclass with `from_env_and_config()` method
-- **Tool Mapping**
-  - Added `ATOM_OF_THOUGHTS` mapping (server="atom_of_thoughts", tool="AoT-light")
-  - Added `ATOM_OF_THOUGHTS_TOOL` definition with JSON schema for prompts
-  - Tool name format: `mcproxy_{server}__{tool}` pattern
-- **Prompt Builders**
-  - `_build_st_analysis_prompt()`: Creates analysis-focused Sequential Thinking prompt
-  - `_build_aot_light_atomization_prompt()`: Creates atomic task atomization prompt
-  - Both support `beads_state` context for dependency awareness
-- **Strategy Router**
-  - `generate_task_breakdown()` now routes based on `config.task_breakdown.strategy`
-  - `_st_aot_light_strategy()`: Orchestrates two-phase analysis → atomization workflow
-  - Graceful fallback to original sequential behavior for unknown strategies
-- **Bug Fixes**
-  - Added missing `@dataclass` decorator to `ExtensionConfig` class
-  - Added `from_env_and_config()` method to `ExtensionConfig` for consistency
-
-### Testing
-- **New Test Files**
-  - `tests/test_config/task_breakdown.py`: 10 tests for TaskBreakdownConfig
-  - `tests/test_llm_tools_atom_of_thoughts.py`: 9 tests for AoT tool mappings
-  - `tests/test_chat/test_sequential_thinking_aot_light.py`: 10 tests for strategy
-- **Total Tests**: 29 new tests, all passing
-
-### Files Modified
-- `village/config.py`: Added TaskBreakdownConfig, fixed ExtensionConfig
-- `village/llm/tools.py`: Added ATOM_OF_THOUGHTS mappings and tool definition
-- `village/chat/sequential_thinking.py`: Added prompt builders and strategy router
+### Removed
+- `village/chat/beads_client.py` — beads client replaced by native task store
+- `village/probes/beads.py` — beads probe replaced by tasks probe
+- `village/extensibility/beads_integrators.py` — replaced by task_hooks
+- `village/cli.py` — replaced by `village/cli/` package
 
 ## [1.4.0] - 2026-04-07
 
