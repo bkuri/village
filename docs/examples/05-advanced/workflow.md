@@ -8,11 +8,11 @@ This example demonstrates handling interrupts, stale locks, and corrupted locks 
 # Morning: Initialize and start first task
 cd /path/to/repo
 village up
-village ready
+village watcher ready
 
 # Queue a build task
-village queue --agent build --n 1
-village status --workers
+village builder queue --agent build --n 1
+village watcher status --system
 ```
 
 ## Day 1: Interrupted Resume (Ctrl+C)
@@ -21,7 +21,7 @@ While working on a task, press Ctrl+C to interrupt:
 
 ```bash
 # This simulates interrupt during execution
-village resume bd-a3f8 --agent build
+village builder resume --task bd-a3f8 --agent build
 # (Press Ctrl+C while OpenCode is running)
 ```
 
@@ -37,7 +37,7 @@ After interrupt, check what was left behind:
 
 ```bash
 # Orphaned resources will appear here
-village status --orphans
+village watcher status --system
 ```
 
 Expected output:
@@ -55,10 +55,10 @@ Remove the orphaned resources from interrupt:
 
 ```bash
 # Plan cleanup (dry-run)
-village cleanup
+village watcher cleanup
 
 # Execute cleanup
-village cleanup --apply
+village watcher cleanup --apply
 ```
 
 Expected output:
@@ -72,7 +72,7 @@ Remove 1 stale lock file?
 Remove 1 untracked worktree?
   .worktrees/bd-a3f8
 
-Run: village cleanup --apply
+Run: village watcher cleanup --apply
 ```
 
 ## Day 1: Continue Work
@@ -81,8 +81,8 @@ Start fresh after cleanup:
 
 ```bash
 # Resume a different task
-village queue --n 1
-village status --workers
+village builder queue --n 1
+village watcher status --system
 ```
 
 ## Day 2: Corrupted Lock Recovery
@@ -94,7 +94,7 @@ Simulate a corrupted lock file:
 echo "corrupted=invalid" > .village/locks/bd-corrupted.lock
 
 # Check status - corrupted lock will be logged
-village status --locks
+village watcher locks
 ```
 
 Expected output (error in logs):
@@ -109,7 +109,7 @@ Remove corrupted lock manually:
 
 ```bash
 # Option 1: Use unlock command
-village unlock bd-corrupted --force
+village watcher unlock bd-corrupted --force
 
 # Option 2: Manual removal
 rm .village/locks/bd-corrupted.lock
@@ -119,7 +119,7 @@ rm .village/locks/bd-corrupted.lock
 
 ```bash
 # Check for remaining orphans
-village status --orphans
+village watcher status --system
 
 # Should show no orphans
 ```
@@ -138,19 +138,19 @@ Combine all patterns in a real workflow:
 village up
 
 # Check readiness
-village ready
+village watcher ready
 
 # Queue multiple tasks
-village queue --n 3
+village builder queue --n 3
 
 # Monitor progress
-village status --workers
+village watcher status --system
 
 # Handle interrupts if they occur
 # (Use Ctrl+C gracefully)
 
 # End of day: cleanup any orphans
-village cleanup --apply
+village watcher cleanup --apply
 
 # Stop runtime when done
 village down
@@ -162,35 +162,35 @@ village down
 
 ```bash
 # After any interrupt:
-village status --orphans
-village status --workers
+village watcher status --system
+village watcher status --system
 ```
 
 ### 2. Clean Up Before New Work
 
 ```bash
 # Always cleanup before starting new tasks
-village cleanup --apply
-village queue --n 1
+village watcher cleanup --apply
+village builder queue --n 1
 ```
 
 ### 3. Use Planner for Next Action
 
 ```bash
 # Let Village suggest next step
-village resume
+village watcher ready
 
 # Output will suggest one of:
 # - "Action: village up"
-# - "Action: village status"
-# - "Action: village queue"
+# - "Action: village watcher status"
+# - "Action: village builder queue"
 ```
 
 ### 4. Monitor Logs for Warnings
 
 ```bash
 # Run with verbose logging to see all warnings
-village --verbose queue --n 1
+village --verbose builder queue --n 1
 
 # Check logs for:
 # - "Corrupted lock .village/locks/..."
@@ -207,9 +207,9 @@ Lock files are internal state. Let Village manage them.
 
 ```bash
 # Correct: Use village commands
-village resume bd-a3f8
-village unlock bd-a3f8
-village cleanup
+village builder resume --task bd-a3f8
+village watcher unlock bd-a3f8
+village watcher cleanup
 
 # Incorrect: Direct file manipulation
 rm .village/locks/bd-a3f8.lock
@@ -222,7 +222,7 @@ If you encounter corrupted locks regularly:
 
 1. Enable verbose logging: `village --verbose <command>`
 2. Check for disk issues: `fsck` (if applicable)
-3. Check for concurrent access: `village status --locks` while another command runs
+3. Check for concurrent access: `village watcher locks` while another command runs
 
 ## Exit Code Reference
 
@@ -244,17 +244,17 @@ When working across multiple days, pay attention to exit codes:
 
 echo "=== Morning Setup ==="
 village up
-village ready
+village watcher ready
 
 echo "=== Queue Tasks ==="
-village queue --n 3
+village builder queue --n 3
 
 echo "=== Monitor Progress ==="
-village status --workers
+village watcher status --system
 
 echo "=== End of Day ==="
-village status --orphans
-village cleanup --apply
+village watcher status --system
+village watcher cleanup --apply
 
 echo "=== Shut Down ==="
 village down

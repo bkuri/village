@@ -17,10 +17,10 @@ cd /path/to/your/repo
 village up
 
 # Check if Village is ready
-village ready
+village watcher ready
 ```
 
-Expected output from `village ready`:
+Expected output from `village watcher ready`:
 ```
 Environment: ✅ Runtime
           ✅ Git repo
@@ -33,7 +33,7 @@ Assume Beads reports a ready task: `bd-a3f8`
 
 ```bash
 # Queue the task (starts it in background)
-village queue --n 1
+village builder queue --n 1
 ```
 
 Expected output:
@@ -48,7 +48,7 @@ Tasks failed: 0
 
 ```bash
 # See active workers
-village status --workers
+village watcher status --system
 ```
 
 Expected output:
@@ -61,7 +61,7 @@ bd-a3f8    ACTIVE    %12      worker   worker-1-bd-a3f8  2024-01-23 12:34:56
 
 ```bash
 # Attach to the worker pane
-village resume bd-a3f8
+village builder resume --task bd-a3f8
 ```
 
 You're now inside a tmux pane with OpenCode running on your task. Work on it as needed.
@@ -75,17 +75,17 @@ When done with the task:
 village down
 
 # Clean up any stale locks
-village cleanup --apply
+village watcher cleanup --apply
 ```
 
 ## What You Learned
 
 - Village uses `village up` to initialize runtime
-- `village queue` starts tasks in background workers
-- `village status --workers` shows active work
-- `village resume` attaches to workers
+- `village builder queue` starts tasks in background workers
+- `village watcher status --system` shows active work
+- `village builder resume` attaches to workers
 - `village down` stops the runtime
-- `village cleanup` removes stale locks and orphaned worktrees
+- `village watcher cleanup` removes stale locks and orphaned worktrees
 
 ## Next Steps
 

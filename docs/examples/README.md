@@ -37,7 +37,7 @@ cd /path/to/your/repo
 village up
 
 # Check readiness
-village ready
+village watcher ready
 
 # Follow an example
 # (Copy commands from example files)
@@ -50,7 +50,7 @@ village ready
 ```bash
 # Clean slate: stop runtime, cleanup, restart
 village down
-village cleanup --apply
+village watcher cleanup --apply
 village up
 ```
 
@@ -58,42 +58,42 @@ village up
 
 ```bash
 # Quick status check
-village status --short
+village watcher status
 
 # Detailed workers view
-village status --workers
+village watcher status --system
 
 # Orphan detection
-village status --orphans
+village watcher status --system
 ```
 
 ### Queue Operations
 
 ```bash
 # Preview queue plan
-village queue --n 3 --dry-run
+village builder queue --n 3 --dry-run
 
 # Execute queue
-village queue --n 3
+village builder queue --n 3
 
 # Queue specific agent type
-village queue --agent build --n 2
+village builder queue --agent build --n 2
 ```
 
 ### Resume Operations
 
 ```bash
 # Explicit resume
-village resume bd-a3f8
+village builder resume --task bd-a3f8
 
 # Resume with agent
-village resume bd-a3f8 --agent frontend
+village builder resume --task bd-a3f8 --agent frontend
 
 # Detached resume
-village resume bd-a3f8 --detached
+village builder resume --task bd-a3f8 --detached
 
 # Planner mode (no task ID)
-village resume
+village watcher ready
 ```
 
 ## Contributing

@@ -17,14 +17,14 @@ You want to start 2 workers and execute tasks as they become available.
 ```bash
 # Ensure Village is ready
 village up
-village ready
+village watcher ready
 ```
 
 ## Queue Multiple Tasks
 
 ```bash
 # Queue up to 2 tasks from all ready tasks
-village queue --n 2
+village builder queue --n 2
 ```
 
 Expected output:
@@ -39,7 +39,7 @@ Tasks failed: 0
 
 ```bash
 # See all active workers
-village status --workers
+village watcher status --system
 ```
 
 Expected output:
@@ -53,7 +53,7 @@ bd-b7c2    ACTIVE    %13      worker    worker-2-bd-b7c2
 
 ```bash
 # Queue only build tasks
-village queue --agent build --n 2
+village builder queue --agent build --n 2
 ```
 
 ## Handle Partial Success
@@ -73,13 +73,13 @@ You can inspect what went wrong and retry:
 
 ```bash
 # Check for stale locks
-village status --orphans
+village watcher status --system
 
 # Clean up
-village cleanup --apply
+village watcher cleanup --apply
 
 # Retry the failed task
-village queue --n 1
+village builder queue --n 1
 ```
 
 ## Queue with Dry Run
@@ -88,7 +88,7 @@ Preview what will be queued without starting:
 
 ```bash
 # Preview queue plan
-village queue --n 3 --dry-run
+village builder queue --n 3 --dry-run
 ```
 
 Expected output:

@@ -39,10 +39,11 @@ If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
 | Role | Default Chat | Subcommands |
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
-| **builder** | "Which workflow shall I run?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **scribe** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `ledger show`, `ledger list` |
-| **council** | "What shall we discuss?" | `list`, `show`, `rematch` |
-| **doctor** | "What seems to be the problem?" | `check` |
+| **builder** | "Which specs shall I work on?" | `run`, `status`, `cancel`, `logs`, `resume`, `queue`, `pause`, `release` |
+| **watcher** | "What would you like to observe?" | `status`, `locks`, `events`, `dashboard`, `cleanup`, `unlock`, `monitor`, `ledger show`, `ledger list`, `ready` |
+| **scribe** | "What do you want to know?" | `fetch`, `ask`, `curate`, `drafts` |
+| **council** | "What shall we discuss?" | `debate`, `list`, `show` |
+| **doctor** | "What seems to be the problem?" | `diagnose`, `prescribe` |
 | **greeter** | "How can I help?" | General triage, routes to all roles |
 
 Each role has its own greeting, skills, and cross-routing rules. Roles hand off to each other via `ROUTE:` and `ADVISE:` markers.
@@ -64,17 +65,13 @@ village builder run --dry-run          # Preview without executing
 village builder status                 # Show spec completion progress
 ```
 
-### Scribe Knowledge Base & Audit Trails
+### Scribe Knowledge Base
 
 ```bash
-village scribe see <url|file>           # Ingest knowledge source
+village scribe fetch <url|file>         # Ingest knowledge source
 village scribe ask "question"           # Query knowledge base
 village scribe curate                   # Health check + regenerate VOICE.md
-village scribe stats                    # Show wiki statistics
-village scribe goals                    # Show goal hierarchy
-village scribe goals --coverage         # Show objective completion %
-village scribe ledger show [task]       # View audit trail for a task
-village scribe ledger list              # List tasks with traces
+village scribe drafts                   # List or count draft tasks
 ```
 
 Sources are auto-tagged, cross-linked, and stored as markdown with YAML frontmatter. The curated knowledge distills into `VOICE.md` for agent context.
@@ -87,7 +84,7 @@ Multi-persona debate with transcript recording:
 village council debate <topic>         # Start a deliberation
 village council list                   # Past councils
 village council show <id>              # View transcript
-village council rematch <id>           # Re-run with same config
+village council debate --from <id> --rematch  # Re-run with same config
 ```
 
 ### Adaptive Onboarding
@@ -95,11 +92,10 @@ village council rematch <id>           # Re-run with same config
 ```bash
 village new <name>                     # Create project with adaptive interview
 village up                             # Detects incomplete setup, runs interview
-village onboard                        # Force-run onboarding
-village onboard --force                # Overwrite existing files
+village up --force                     # Overwrite existing files
 ```
 
-The onboarding pipeline detects your project type, runs an LLM-driven adaptive interview (10-15 questions), and generates `AGENTS.md` + `README.md` + wiki seeds.
+The onboarding pipeline detects your project type, runs an LLM-driven adaptive interview (10-15 questions), and generates `AGENTS.md` + `README.md` + wiki seeds. Use `village up --skip-onboard` to skip the interview.
 
 ### ACP Integration
 
@@ -131,7 +127,7 @@ Step types: `prompt`, `critique`, `decompose`, `research`, `synthesize`.
 
 - **Multi-agent coordination** — Lock system prevents duplicate work, concurrency limits enforce fairness
 - **State management** — Lock files survive crashes, event logs capture audit trails, orphan detection cleans up failures
-- **Observability** — Real-time dashboard, metrics export (Prometheus/StatsD), event queries
+- **Observability** — Real-time dashboard, event queries, wiki monitoring
 - **Safety guarantees** — Conflict detection, automatic rollback, resource quotas
 - **Doctor framework** — Built-in health checks for git, quality, and tests; extensible with custom analyzers
 - **Release automation** — Semver bumps from task metadata, categorized changelogs, git tags
@@ -152,6 +148,7 @@ flowchart TB
     subgraph Roles["Role Plane"]
         P[Planner<br/>Spec Design]
         B[Builder<br/>Spec Execution]
+        W[Watcher<br/>Observability]
         E[Scribe<br/>Knowledge & Audit]
         C[Council<br/>Deliberation]
         D[Doctor<br/>Health Checks]
@@ -172,6 +169,7 @@ flowchart TB
     E -->|context| B
     C -->|advice| P
     TMUX -->|runtime truth| B
+    TMUX -->|runtime truth| W
 ```
 
 ---
@@ -191,17 +189,17 @@ Task management:
 village tasks list                       # List tasks
 village tasks create "Fix login bug"     # Create a task
 village tasks ready                      # Show ready tasks
-village queue --n 3                      # Start 3 tasks
-village status --workers                 # Show active workers
+village builder queue --n 3              # Start 3 tasks
+village watcher status --system          # Show active workers
 ```
 
 Inspect anytime:
 
 ```bash
-village doctor check                    # Run health checks
+village doctor diagnose                  # Run health checks
 village scribe curate                    # Maintain knowledge base
-village scribe ledger show bd-xyz       # View audit trail
-village release --dry-run               # Preview release
+village watcher ledger show bd-xyz       # View audit trail
+village builder release --dry-run        # Preview release
 ```
 
 ---
@@ -215,10 +213,21 @@ village release --dry-run               # Preview release
 | `village up` | Initialize Village runtime (idempotent) |
 | `village down` | Stop Village runtime (kill tmux session) |
 | `village new <name>` | Create project with adaptive onboarding |
-| `village onboard` | Force-run onboarding on existing project |
-| `village ready` | Check if Village is ready for work |
-| `village status` | Show Village status (`--workers`, `--locks`, `--orphans`, `--short`, `--json`) |
-| `village events` | Show recent events (`--task`, `--cmd`, `--limit`, `--json`) |
+
+### Watcher (Observability)
+
+| Command | Description |
+|---------|-------------|
+| `village watcher status` | Show Village status (`--system`, `--task`, `--wiki`, `--short`, `--json`) |
+| `village watcher locks` | Show all locks |
+| `village watcher events` | Show recent events (`--task`, `--cmd`, `--limit`, `--json`) |
+| `village watcher ready` | Check if Village is ready for work |
+| `village watcher dashboard` | Real-time dashboard (`--watch`, `--refresh-interval`) |
+| `village watcher cleanup` | Remove stale locks/worktrees (`--apply`, `--force`) |
+| `village watcher unlock <task-id>` | Remove a lock (`--force`) |
+| `village watcher monitor` | Watch wiki/ingest/ for new files |
+| `village watcher ledger show [task]` | View audit trail for a task (`--json`) |
+| `village watcher ledger list` | List tasks with traces (`--json`) |
 
 ### Task Management
 
@@ -230,7 +239,6 @@ village release --dry-run               # Preview release
 | `village tasks ready` | Show ready tasks (`--json`) |
 | `village tasks update <id>` | Update a task (`--status`, `-l`, `-p`, `-d`, `--title`) |
 | `village tasks search <query>` | Search tasks by keyword |
-| `village tasks prime` | Show workflow context for current project |
 
 ### Planning & Building
 
@@ -242,21 +250,20 @@ village release --dry-run               # Preview release
 | `village planner workflows` | List available workflow templates |
 | `village builder run` | Run autonomous spec-driven build loop |
 | `village builder status` | Show build loop status |
-| `village builder stop` | Stop a running build loop |
-| `village builder resume` | Resume a stopped build loop |
+| `village builder cancel` | Cancel a running build loop |
+| `village builder resume --build` | Resume a stopped build loop |
+| `village builder queue` | Queue and execute ready tasks |
+| `village builder pause` | Pause an in-progress task |
+| `village builder release` | Apply pending version bumps, update changelog, create tag |
 
-### Scribe (Knowledge Base & Audit Trails)
+### Scribe (Knowledge Base)
 
 | Command | Description |
 |---------|-------------|
-| `village scribe see <source>` | Ingest a URL or file into wiki |
+| `village scribe fetch <source>` | Ingest a URL or file into wiki |
 | `village scribe ask "question"` | Query the knowledge base |
 | `village scribe curate` | Health check + regenerate VOICE.md |
-| `village scribe goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
-| `village scribe stats` | Show wiki statistics |
-| `village scribe monitor` | Watch wiki/ingest/ for new files |
-| `village scribe ledger show [task]` | View audit trail for a task (`--json`) |
-| `village scribe ledger list` | List tasks with traces (`--json`) |
+| `village scribe drafts` | List or count draft tasks |
 
 ### Council (Deliberation)
 
@@ -265,18 +272,17 @@ Start a deliberation session with `village council` (no subcommand) or use subco
 | Command | Description |
 |---------|-------------|
 | `village council` | Start a deliberation session (RoleChat) |
+| `village council debate <topic>` | Start a deliberation |
+| `village council debate --from <id> --rematch` | Re-run with same configuration (`--json`) |
 | `village council list` | List past councils (`--type`, `--json`) |
 | `village council show <id>` | View a council transcript (`--json`) |
-| `village council rematch <id>` | Re-run with same configuration (`--json`) |
 
 ### Other Commands
 
 | Command | Description |
 |---------|-------------|
-| `village doctor check` | Run project health diagnostics (`--json`, `--prescribe`) |
-| `village release` | Apply pending version bumps, update changelog, create tag |
-| `village dashboard` | Real-time dashboard (`--watch`, `--refresh-interval`) |
-| `village metrics` | Export metrics (`--backend`, `--port`) |
+| `village doctor diagnose` | Run project health diagnostics (`--json`) |
+| `village doctor prescribe` | Show recommendations from diagnosis (`--fix`) |
 | `village acp` | Run as ACP agent (for editor integration) |
 | `village greeter` | Start ephemeral Q&A session |
 
@@ -361,7 +367,7 @@ Core configuration and CLI framework.
   - [ ] Falls back to defaults
 
 ## Completion Signal
-Run `village doctor check` and verify all pass.
+Run `village doctor diagnose` and verify all pass.
 <promise>DONE</promise>
 ```
 
@@ -375,9 +381,9 @@ Run `village doctor check` and verify all pass.
 ## Release Automation
 
 ```bash
-village release                      # Apply version bumps + changelog + tag
-village release --dry-run            # Preview without making changes
-village release --no-tag             # Skip git tag creation
+village builder release                  # Apply version bumps + changelog + tag
+village builder release --dry-run        # Preview without making changes
+village builder release --no-tag         # Skip git tag creation
 ```
 
 Release process:
@@ -397,11 +403,11 @@ Bump labels are applied per task: `bd label add <task-id> bump:<type>`
 
 | Code | Meaning | Example |
 |------|---------|---------|
-| 0 | Success | `village resume bd-a3f8` completes |
+| 0 | Success | `village builder resume --task bd-a3f8` completes |
 | 1 | Generic error | Worktree creation failed |
-| 2 | Not ready / precondition failed | `village queue` when no tasks ready |
-| 3 | Blocked / no work available | `village queue` with no ready tasks |
-| 4 | Partial success | `village queue` with some tasks failed |
+| 2 | Not ready / precondition failed | `village builder queue` when no tasks ready |
+| 3 | Blocked / no work available | `village builder queue` with no ready tasks |
+| 4 | Partial success | `village builder queue` with some tasks failed |
 | 5 | Invalid usage | Missing required arguments |
 
 ---
@@ -461,16 +467,16 @@ village up  # Starts tmux session
 ### Stale locks after interrupt
 
 ```bash
-village status --orphans   # Inspect what's orphaned
-village cleanup --apply    # Clean up
+village watcher status --system   # Inspect what's orphaned
+village watcher cleanup --apply   # Clean up
 ```
 
 ### Corrupted lock files
 
 ```bash
-village status --locks         # View all locks
-village unlock <task-id> --force  # Force remove
-village cleanup --apply --force    # Clean up including corrupted
+village watcher locks                  # View all locks
+village watcher unlock <task-id> --force  # Force remove
+village watcher cleanup --apply --force    # Clean up including corrupted
 ```
 
 ### Workers not starting
@@ -479,7 +485,7 @@ village cleanup --apply --force    # Clean up including corrupted
 tmux list-sessions              # Check tmux
 tmux list-panes -t village       # Check panes
 which opencode                   # Check OpenCode
-village --verbose queue --n 1    # Verbose logging
+village --verbose builder queue --n 1    # Verbose logging
 ```
 
 ---
