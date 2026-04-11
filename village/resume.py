@@ -13,7 +13,6 @@ from village.contracts import ContractEnvelope, generate_contract
 from village.errors import InterruptedResume
 from village.event_log import log_task_error, log_task_start, log_task_success
 from village.locks import Lock, parse_lock, write_lock
-from village.probes.beads import beads_available
 from village.probes.tmux import (
     panes,
     send_keys,
@@ -26,8 +25,6 @@ from village.worktrees import create_worktree, get_worktree_info, reset_worktree
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-OPENCODE_COMMAND = "opencode"
-OPENCODE_STDIN_INDICATOR = "cat <<'VILLAGE_CONTRACT_EOF'"
 
 
 @dataclass
@@ -173,7 +170,7 @@ def execute_resume(
     Creates worktree, window, lock, and starts OpenCode with contract injection.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         agent: Agent name (e.g., "build", "frontend")
         detached: Run in detached mode (no tmux attach)
         dry_run: Preview mode without making changes
@@ -237,7 +234,8 @@ def execute_resume(
 
         # Phase 4: Generate and inject contract
         contract = generate_contract(task_id, agent, worktree_path, window_name, config)
-        _inject_contract(session_name, pane_id, contract, dry_run)
+        agent_type = config.agents[agent].type if agent in config.agents else "opencode"
+        _inject_contract(session_name, pane_id, contract, dry_run, agent_type=agent_type, traces_dir=config.traces_dir)
 
         logger.info(f"Resume complete: task_id={task_id}, pane_id={pane_id}")
 
@@ -388,10 +386,10 @@ def _generate_resume_window(task_id: str, session_name: str) -> str:
     Example: build-1-bd-a3f8
 
     For initial creation, uses "worker" as agent placeholder.
-    Caller can update based on Beads metadata.
+    Caller can update based on task metadata.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         session_name: Tmux session name (not used in pattern)
 
     Returns:
@@ -409,7 +407,7 @@ def _generate_resume_window(task_id: str, session_name: str) -> str:
             worker_num = int(suffix)
 
     # Default to "worker" as agent placeholder
-    # Caller should update based on actual agent from Beads
+    # Caller should update based on actual agent from task metadata
     return f"worker-{worker_num}-{base}"
 
 
@@ -471,41 +469,35 @@ def _inject_contract(
     pane_id: str,
     contract: ContractEnvelope,
     dry_run: bool,
+    agent_type: str = "opencode",
+    traces_dir: Path | None = None,
 ) -> None:
-    """
-    Inject contract into OpenCode via stdin.
-
-    Uses heredoc pattern to send JSON to stdin without attaching.
-
-    Args:
-        session_name: Tmux session name
-        pane_id: Pane ID (e.g., "%12")
-        contract: ContractEnvelope to inject
-        dry_run: Preview mode
-    """
     if dry_run:
         logger.info(f"Dry run: would inject contract to pane {pane_id}")
         return
 
-    # Log warnings if any
     if contract.warnings:
         for warning in contract.warnings:
             logger.warning(f"Contract warning: {warning}")
 
-    # Format contract as JSON
     contract_json = contract.to_json()
 
-    # Build heredoc command: opencode <<'EOF'
-    # {contract_json}
-    # EOF
-    heredoc_command = f"opencode <<'VILLAGE_CONTRACT_EOF'\n{contract_json}\nVILLAGE_CONTRACT_EOF"
+    if agent_type == "pi":
+        trace_redirect = ""
+        if traces_dir is not None:
+            trace_file = traces_dir.resolve() / f"{contract.task_id}-agent.jsonl"
+            trace_redirect = f" 2>&1 | tee {trace_file}"
+        command = (
+            f"pi --no-session --mode json <<'VILLAGE_CONTRACT_EOF'{trace_redirect}"
+            f"\n{contract_json}\nVILLAGE_CONTRACT_EOF"
+        )
+    else:
+        command = f"opencode <<'VILLAGE_CONTRACT_EOF'\n{contract_json}\nVILLAGE_CONTRACT_EOF"
 
-    # Send keys to start OpenCode with stdin
-    # Note: tmux targets panes by %id directly, not session:%id
-    send_keys(session_name, pane_id, heredoc_command)
+    send_keys(session_name, pane_id, command)
     send_keys(session_name, pane_id, "Enter")
 
-    logger.debug(f"Injected contract to pane {pane_id}")
+    logger.debug(f"Injected contract to pane {pane_id} via {agent_type}")
 
 
 def is_active_lock(lock: Lock, session_name: str, force_refresh: bool = False) -> bool:
@@ -524,30 +516,44 @@ def is_active_lock(lock: Lock, session_name: str, force_refresh: bool = False) -
     return lock.pane_id in all_panes
 
 
+def check_agent_done(task_id: str, agent_type: str, config: Config) -> bool | None:
+    """Check if agent has positively completed.
+
+    Returns True if completed, False if still running, None if unknown (not a pi agent).
+    """
+    if agent_type != "pi":
+        return None
+
+    from village.agent_events import check_agent_completion
+
+    result = check_agent_completion(task_id, config.traces_dir)
+    if result is None:
+        return None
+    return result.completed
+
+
 def _get_agent_from_task_id(
     task_id: str,
     default_agent: str | None = None,
 ) -> str:
     """
-    Auto-detect agent from Beads task metadata.
+    Auto-detect agent from task metadata.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
-        default_agent: Fallback agent if Beads unavailable
+        task_id: Task ID (e.g., "bd-a3f8")
+        default_agent: Fallback agent if task store unavailable
 
     Returns:
         Agent name (e.g., "build", "frontend")
     """
-    # Try to get agent from Beads task metadata
     try:
-        status = beads_available()
-        if status.command_available and status.repo_initialized:
-            # Try to get agent from Beads task info
-            # This would require Beads to provide task metadata
-            # For now, use default
+        from village.tasks import get_task_store
+
+        store = get_task_store()
+        if store.is_available():
             pass
     except Exception:
-        logger.debug("Beads unavailable for agent detection")
+        logger.debug("Task store unavailable for agent detection")
 
     # Use default agent or fallback to "worker"
     return default_agent if default_agent else "worker"
