@@ -11,12 +11,7 @@ from village.logging import get_logger
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--dry-run", is_flag=True, help="Preview without applying")
-@click.option("--changelog/--no-changelog", default=True, help="Update CHANGELOG.md")
-@click.option("--tag/--no-tag", default=True, help="Create git tag")
-@click.option("--force", is_flag=True, help="Skip unlabeled-task check")
-def release(dry_run: bool, changelog: bool, tag: bool, force: bool) -> None:
+def release(dry_run: bool = False, changelog: bool = True, tag: bool = True, force: bool = False) -> None:
     """
     Apply pending version bumps.
 

@@ -234,27 +234,46 @@ def update(
             click.echo(f"  Removed labels: {', '.join(update_spec.remove_labels)}")
 
 
-@tasks.command()
+@tasks.command(name="label")
 @click.argument("task_id")
-@click.option("--label", "-l", multiple=True, help="Labels to add")
+@click.option("--add", "add_labels", multiple=True, help="Labels to add (repeatable)")
+@click.option("--remove", "remove_labels", multiple=True, help="Labels to remove (repeatable)")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
-def add_label_cmd(task_id: str, label: tuple[str, ...], json_output: bool) -> None:
-    """Add a label to a task."""
+def label(task_id: str, add_labels: tuple[str, ...], remove_labels: tuple[str, ...], json_output: bool) -> None:
+    """Add or remove labels from a task."""
+    if not add_labels and not remove_labels:
+        click.echo("Error: specify --add <label> or --remove <label>", err=True)
+        raise SystemExit(1)
+
     try:
         store = get_task_store()
-        for lbl in label:
-            store.add_label(task_id, lbl)
+        if add_labels:
+            for lbl in add_labels:
+                store.add_label(task_id, lbl)
+        if remove_labels:
+            from village.tasks import TaskUpdate
+
+            update_spec = TaskUpdate(remove_labels=list(remove_labels))
+            store.update_task(task_id, update_spec)
     except TaskStoreError as e:
         click.echo(f"Error: {e}", err=True)
         return
 
-    click.echo(f"Added label(s) to {task_id}")
+    if json_output:
+        task = store.get_task(task_id)
+        if task:
+            click.echo(json.dumps(task.to_dict(), indent=2))
+    else:
+        if add_labels:
+            click.echo(f"Added label(s) to {task_id}: {', '.join(add_labels)}")
+        if remove_labels:
+            click.echo(f"Removed label(s) from {task_id}: {', '.join(remove_labels)}")
 
 
 @tasks.command()
 @click.argument("task_id")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
-def dep(task_id: str, json_output: bool) -> None:
+def deps(task_id: str, json_output: bool) -> None:
     """Show task dependencies."""
     try:
         store = get_task_store()
@@ -333,20 +352,6 @@ def search(query: str, status: str | None, limit: int, json_output: bool) -> Non
 
 @tasks.command()
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
-def prime(json_output: bool) -> None:
-    """Show workflow context for current project."""
-    try:
-        store = get_task_store()
-        context = store.get_prime_context()
-    except TaskStoreError as e:
-        click.echo(f"Error: {e}", err=True)
-        return
-
-    click.echo(context)
-
-
-@tasks.command()
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
 def count(status: str | None, json_output: bool) -> None:
     """Count tasks."""
     try:
@@ -363,16 +368,3 @@ def count(status: str | None, json_output: bool) -> None:
             click.echo(f"{total} task(s) with status '{status}'")
         else:
             click.echo(f"{total} total task(s)")
-
-
-@tasks.command()
-def compact() -> None:
-    """Compact the task store (remove superseded records)."""
-    try:
-        store = get_task_store()
-        removed = store.compact()
-    except TaskStoreError as e:
-        click.echo(f"Error: {e}", err=True)
-        return
-
-    click.echo(f"Compacted: removed {removed} superseded record(s).")

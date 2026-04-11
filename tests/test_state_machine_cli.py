@@ -40,22 +40,20 @@ def state_machine_cli_test_setup(mock_config: Config) -> None:
 
 
 class TestStateCommand:
-    """Tests for `village state` command."""
+    """Tests for `village watcher status --task` command."""
 
     def test_state_command_displays_current_state(
         self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner
     ) -> None:
         """Test that state command displays current state correctly."""
-        # Create a lock file with a state
         lock_path = mock_config.locks_dir / "bd-a3f8.lock"
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=in_progress\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        # Mock CLI invocation
-        with patch("village.cli.state.get_config", return_value=mock_config):
-            from village.cli.state import state
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            from village.cli.watcher import watcher_group
 
-            result = runner.invoke(state, ["bd-a3f8"])
+            result = runner.invoke(watcher_group, ["status", "--task", "bd-a3f8"])
 
         assert result.exit_code == 0
         assert "Task: bd-a3f8" in result.output
@@ -76,10 +74,10 @@ class TestStateCommand:
         )
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.state.get_config", return_value=mock_config):
-            from village.cli.state import state
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            from village.cli.watcher import watcher_group
 
-            result = runner.invoke(state, ["bd-a3f8", "--json"])
+            result = runner.invoke(watcher_group, ["status", "--task", "bd-a3f8", "--json"])
 
         assert result.exit_code == 0
         output_data = json.loads(result.output)
@@ -91,10 +89,10 @@ class TestStateCommand:
 
     def test_state_command_no_state(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
         """Test that state command handles tasks without state gracefully."""
-        with patch("village.cli.state.get_config", return_value=mock_config):
-            from village.cli.state import state
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            from village.cli.watcher import watcher_group
 
-            result = runner.invoke(state, ["bd-a3f8"])
+            result = runner.invoke(watcher_group, ["status", "--task", "bd-a3f8"])
 
         assert result.exit_code == EXIT_BLOCKED
         assert "Task bd-a3f8 not found" in result.output
@@ -129,10 +127,10 @@ class TestStateCommand:
         )
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.state.get_config", return_value=mock_config):
-            from village.cli.state import state
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            from village.cli.watcher import watcher_group
 
-            result = runner.invoke(state, ["bd-a3f8"])
+            result = runner.invoke(watcher_group, ["status", "--task", "bd-a3f8"])
 
         assert result.exit_code == 0
         assert "State History:" in result.output
@@ -142,7 +140,7 @@ class TestStateCommand:
 
 
 class TestPauseCommand:
-    """Tests for `village pause` command."""
+    """Tests for `village builder pause` command."""
 
     def test_pause_in_progress_task(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
         """Test that pause command successfully pauses in-progress task."""
@@ -150,10 +148,10 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=in_progress\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import pause
+        with patch("village.config.get_config", return_value=mock_config):
+            from village.cli.builder import builder_group
 
-            result = runner.invoke(pause, ["bd-a3f8"])
+            result = runner.invoke(builder_group, ["pause", "bd-a3f8"])
 
         assert result.exit_code == 0
         assert "Paused task bd-a3f8" in result.output
@@ -169,10 +167,10 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import pause
+        with patch("village.config.get_config", return_value=mock_config):
+            from village.cli.builder import builder_group
 
-            result = runner.invoke(pause, ["bd-a3f8"])
+            result = runner.invoke(builder_group, ["pause", "bd-a3f8"])
 
         assert result.exit_code == EXIT_BLOCKED
         assert "is not IN_PROGRESS" in result.output
@@ -185,67 +183,12 @@ class TestPauseCommand:
 
         events_log_path = mock_config.village_dir / "events.log"
 
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import pause
+        with patch("village.config.get_config", return_value=mock_config):
+            from village.cli.builder import builder_group
 
-            runner.invoke(pause, ["bd-a3f8"])
+            runner.invoke(builder_group, ["pause", "bd-a3f8"])
 
-        # Verify event was logged
         assert events_log_path.exists()
         events_content = events_log_path.read_text(encoding="utf-8")
         assert "state_transition" in events_content
         assert '"to_state": "paused"' in events_content
-
-
-class TestResumeTaskCommand:
-    """Tests for `village resume-task` command."""
-
-    def test_resume_paused_task(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
-        """Test that resume-task command successfully resumes paused task."""
-        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
-        lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=paused\n"
-        lock_path.write_text(lock_content, encoding="utf-8")
-
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import resume_task
-
-            result = runner.invoke(resume_task, ["bd-a3f8"])
-
-        assert result.exit_code == 0
-        assert "Resumed task bd-a3f8" in result.output
-
-        updated_content = lock_path.read_text(encoding="utf-8")
-        assert "state=in_progress" in updated_content
-
-    def test_resume_non_paused_task(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
-        """Test that resume-task command rejects resume of non-paused task."""
-        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
-        lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
-        lock_path.write_text(lock_content, encoding="utf-8")
-
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import resume_task
-
-            result = runner.invoke(resume_task, ["bd-a3f8"])
-
-        assert result.exit_code == EXIT_BLOCKED
-        assert "is not PAUSED" in result.output
-
-    def test_resume_logs_event(self, mock_config: Config, state_machine_cli_test_setup, runner: CliRunner) -> None:
-        """Test that resume-task logs transition event to events.log."""
-        lock_path = mock_config.locks_dir / "bd-a3f8.lock"
-        lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=paused\n"
-        lock_path.write_text(lock_content, encoding="utf-8")
-
-        events_log_path = mock_config.village_dir / "events.log"
-
-        with patch("village.cli.work.get_config", return_value=mock_config):
-            from village.cli.work import resume_task
-
-            runner.invoke(resume_task, ["bd-a3f8"])
-
-        # Verify event was logged
-        assert events_log_path.exists()
-        events_content = events_log_path.read_text(encoding="utf-8")
-        assert "state_transition" in events_content
-        assert '"to_state": "in_progress"' in events_content

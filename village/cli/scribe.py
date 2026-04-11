@@ -1,28 +1,13 @@
 """Village Scribe — knowledge base and audit trail CLI commands."""
 
 import json
-import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import click
 
-from village.config import get_config
-from village.errors import EXIT_ERROR
-from village.goals import (
-    Goal,
-    get_active_goals,
-    get_goal_chain,
-    get_objective_coverage_from_file,
-    parse_goals,
-)
 from village.roles import run_role_chat
 from village.scribe.curate import Curator
 from village.scribe.store import ScribeStore
-from village.trace import TraceReader, format_trace
-
-if TYPE_CHECKING:
-    from village.config import Config
 
 
 def _find_wiki_path() -> Path:
@@ -47,38 +32,8 @@ def scribe_group(ctx: click.Context) -> None:
 @scribe_group.command()
 @click.argument("source")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def see(source: str, json_output: bool) -> None:
-    """Ingest a URL or file into the knowledge base."""
-    wiki_path = _find_wiki_path()
-    store = ScribeStore(wiki_path)
-
-    result = store.see(source)
-
-    if json_output:
-        click.echo(
-            json.dumps(
-                {
-                    "entry_id": result.entry_id,
-                    "title": result.title,
-                    "tags": result.tags,
-                    "status": result.status,
-                }
-            )
-        )
-    else:
-        if result.status == "error":
-            click.echo(f"Error: {result.error}")
-            raise SystemExit(1)
-        click.echo(f"Ingested: {result.title} ({result.entry_id})")
-        if result.tags:
-            click.echo(f"  Tags: {', '.join(result.tags)}")
-
-
-@scribe_group.command()
-@click.argument("source")
-@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def fetch(source: str, json_output: bool) -> None:
-    """Ingest a URL or file into the knowledge base. (Alias for see)"""
+    """Ingest a URL or file into the knowledge base."""
     wiki_path = _find_wiki_path()
     store = ScribeStore(wiki_path)
 
@@ -169,319 +124,23 @@ def curate(json_output: bool) -> None:
 
 
 @scribe_group.command()
-def upkeep() -> None:
-    """Health check and maintain the knowledge base. (Alias for curate)"""
-    wiki_path = _find_wiki_path()
-    project_root = wiki_path.parent
-    store = ScribeStore(wiki_path)
-    curator = Curator(store.store, wiki_path, project_root)
-
-    result = curator.curate()
-
-    click.echo(f"Entries: {result.total_entries}")
-    click.echo(f"Orphans: {len(result.orphans)}")
-    click.echo(f"Stale: {len(result.stale_entries)}")
-    click.echo(f"Broken links: {len(result.broken_links)}")
-    click.echo(f"VOICE.md updated: {result.voice_updated}")
-
-
-@scribe_group.command()
-def stats() -> None:
-    """Show knowledge base statistics."""
-    wiki_path = _find_wiki_path()
-    store = ScribeStore(wiki_path)
-
-    entries = store.store.all_entries()
-    log_path = wiki_path / "log.md"
-
-    click.echo(f"Wiki path: {wiki_path}")
-    click.echo(f"Total entries: {len(entries)}")
-
-    if entries:
-        all_tags: list[str] = []
-        for e in entries:
-            all_tags.extend(e.tags)
-        unique_tags = set(all_tags)
-        click.echo(f"Unique tags: {len(unique_tags)}")
-        if unique_tags:
-            click.echo(f"  Top tags: {', '.join(sorted(unique_tags)[:10])}")
-
-        click.echo(f"Latest entry: {entries[-1].title} ({entries[-1].id})")
-
-    if log_path.exists():
-        log_content = log_path.read_text(encoding="utf-8")
-        log_lines = [line for line in log_content.split("\n") if line.startswith("- [")]
-        click.echo(f"Log entries: {len(log_lines)}")
-
-
-@scribe_group.command()
-@click.option("--interval", default=30, help="Poll interval in seconds")
-def monitor(interval: int) -> None:
-    """Watch wiki/ingest/ for new files and process them."""
-    from village.scribe.monitor import Monitor
-
-    wiki_path = _find_wiki_path()
-    store = ScribeStore(wiki_path)
-    mon = Monitor(wiki_path, store, poll_interval=interval)
-
-    click.echo(f"Monitoring {wiki_path / 'ingest'} every {interval}s (Ctrl+C to stop)")
-    mon.start()
-
-
-@scribe_group.group("ledger")
-def ledger_group() -> None:
-    """Audit trail commands."""
-
-
-@ledger_group.command("show")
-@click.argument("task_id", required=False)
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def ledger_show(task_id: str | None, json_output: bool) -> None:
-    """View audit trail for a task."""
-    config = get_config()
-    reader = TraceReader(config.traces_dir)
-
-    if task_id is None:
-        task_ids = reader.list_traced_tasks()
-        if not task_ids:
-            click.echo("No audit trails found.")
-            return
-        click.echo("Traced tasks:")
-        for i, tid in enumerate(task_ids, 1):
-            click.echo(f"  {i}. {tid}")
-        choice = click.prompt("Which task?", type=int)
-        if choice < 1 or choice > len(task_ids):
-            raise click.ClickException("Invalid selection")
-        task_id = task_ids[choice - 1]
-
-    assert task_id is not None
-    events = reader.read(task_id)
-
-    if not events:
-        click.echo(f"No audit events for {task_id}")
-        sys.exit(EXIT_ERROR)
-
-    if json_output:
-        data = []
-        for event in events:
-            data.append(
-                {
-                    "timestamp": event.timestamp,
-                    "event_type": event.event_type.value,
-                    "task_id": event.task_id,
-                    "agent": event.agent,
-                    "data": event.data,
-                    "sequence": event.sequence,
-                }
-            )
-        click.echo(json.dumps(data, indent=2, sort_keys=True))
-    else:
-        click.echo(format_trace(events))
-
-
-@ledger_group.command("list")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def ledger_list(json_output: bool) -> None:
-    """List tasks with audit trails."""
-    config = get_config()
-    reader = TraceReader(config.traces_dir)
-    task_ids = reader.list_traced_tasks()
-
-    if not task_ids:
-        click.echo("No audit trails found")
-        return
-
-    if json_output:
-        click.echo(json.dumps(task_ids, indent=2))
-    else:
-        for task_id in task_ids:
-            click.echo(task_id)
-
-
-@scribe_group.command("goals")
-@click.option("--edit", "edit_mode", is_flag=True, help="Interactive refinement mode")
-@click.option("--coverage", "show_coverage", is_flag=True, help="Show objective coverage")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def goals_cmd(edit_mode: bool, show_coverage: bool, json_output: bool) -> None:
-    """Show goal hierarchy from GOALS.md."""
+@click.option("--scope", type=str, help="Filter by scope (feature|fix|investigation|refactoring)")
+@click.option("--total", is_flag=True, help="Return draft count (for statusbar)")
+def drafts(scope: str | None, total: bool) -> None:
+    """List or count draft tasks."""
+    from village.chat.drafts import list_drafts
     from village.config import get_config
+    from village.render.text import render_drafts_table
 
     config = get_config()
-    goals_path = config.git_root / "GOALS.md"
-    all_goals = parse_goals(goals_path)
+    all_drafts = list_drafts(config)
 
-    if not all_goals:
-        click.echo("No GOALS.md found. Run 'village scribe curate' to bootstrap.")
+    if total:
+        click.echo(str(len(all_drafts)))
         return
 
-    if show_coverage:
-        _render_coverage(all_goals, goals_path, json_output)
-        return
+    if scope:
+        all_drafts = [d for d in all_drafts if d.scope == scope]
 
-    if edit_mode:
-        _interactive_edit(all_goals, goals_path, config)
-        return
-
-    if json_output:
-        _render_json(all_goals)
-        return
-
-    _render_tree(all_goals)
-
-
-def _render_tree(all_goals: list[Goal]) -> None:
-    root_goals = [g for g in all_goals if g.parent is None]
-    child_map: dict[str, list[Goal]] = {}
-    for g in all_goals:
-        if g.parent:
-            child_map.setdefault(g.parent, []).append(g)
-
-    for goal in root_goals:
-        _render_goal_node(goal, child_map, indent=0)
-
-
-def _render_goal_node(goal: Goal, child_map: dict[str, list[Goal]], indent: int) -> None:
-    prefix = "  " * indent
-    status_icon = {"active": "●", "completed": "✓", "dropped": "✗"}.get(goal.status, "?")
-    obj_count = len(goal.objectives)
-    click.echo(f"{prefix}{status_icon} {goal.id}: {goal.title} [{goal.status}]")
-    if goal.description and indent == 0:
-        for line in goal.description.split("\n")[:3]:
-            click.echo(f"{prefix}  {line}")
-    if obj_count > 0:
-        click.echo(f"{prefix}  Objectives: {obj_count} defined")
-    for child in child_map.get(goal.id, []):
-        _render_goal_node(child, child_map, indent + 1)
-
-
-def _render_coverage(all_goals: list[Goal], goals_path: Path, json_output: bool) -> None:
-    coverage = get_objective_coverage_from_file(goals_path)
-
-    if json_output:
-        output = {}
-        for goal in all_goals:
-            if goal.id in coverage:
-                completed, total, ratio = coverage[goal.id]
-                output[goal.id] = {
-                    "title": goal.title,
-                    "completed": completed,
-                    "total": total,
-                    "percentage": round(ratio * 100, 1),
-                }
-        click.echo(json.dumps(output, sort_keys=True, indent=2))
-        return
-
-    active = get_active_goals(all_goals)
-    total_completed = 0
-    total_objectives = 0
-
-    for goal in active:
-        chain = get_goal_chain(all_goals, goal.id)
-        chain_str = " → ".join(g.id for g in chain)
-        if goal.id in coverage:
-            completed, total, ratio = coverage[goal.id]
-            total_completed += completed
-            total_objectives += total
-            pct = round(ratio * 100, 1)
-            click.echo(f"  {chain_str} {goal.title}: {completed}/{total} ({pct}%)")
-        else:
-            click.echo(f"  {chain_str} {goal.title}: no objectives")
-
-    if total_objectives > 0:
-        overall_pct = round(total_completed / total_objectives * 100, 1)
-        click.echo(f"\nOverall: {total_completed}/{total_objectives} completed ({overall_pct}%)")
-
-
-def _render_json(all_goals: list[Goal]) -> None:
-    output = []
-    for goal in all_goals:
-        output.append(
-            {
-                "id": goal.id,
-                "title": goal.title,
-                "status": goal.status,
-                "priority": goal.priority,
-                "parent": goal.parent,
-                "children": goal.children,
-                "objectives": goal.objectives,
-                "source": goal.source,
-            }
-        )
-    click.echo(json.dumps(output, sort_keys=True, indent=2))
-
-
-def _interactive_edit(all_goals: list[Goal], goals_path: Path, config: "Config") -> None:
-    from village.goals import write_goals
-
-    click.echo("Goal refinement mode")
-    click.echo(f"Found {len(all_goals)} goal(s) in {goals_path}")
-    click.echo("")
-
-    for goal in all_goals:
-        click.echo(f"  {goal.id}: {goal.title} [{goal.status}]")
-    click.echo("")
-
-    while True:
-        try:
-            action = input("Action (add/edit/done/quit): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            click.echo("")
-            break
-
-        if action in ("done", "quit", "q"):
-            break
-        elif action == "add":
-            _add_goal_interactive(all_goals, goals_path)
-        elif action == "edit":
-            goal_id = input("Goal ID to edit: ").strip()
-            _edit_goal_interactive(all_goals, goal_id)
-        else:
-            click.echo(f"Unknown action: {action}")
-
-    write_goals(all_goals, goals_path)
-    click.echo(f"Goals saved to {goals_path}")
-
-
-def _add_goal_interactive(all_goals: list[Goal], goals_path: Path) -> None:
-    from village.goals import write_goals
-
-    next_num = len(all_goals) + 1
-    goal_id = f"G{next_num}"
-
-    title = input("Title: ").strip()
-    if not title:
-        click.echo("Canceled.")
-        return
-
-    description = input("Description: ").strip()
-    objectives_raw = input("Objectives (comma-separated): ").strip()
-    objectives = [o.strip() for o in objectives_raw.split(",") if o.strip()] if objectives_raw else []
-
-    new_goal = Goal(
-        id=goal_id,
-        title=title,
-        description=description,
-        status="active",
-        objectives=objectives,
-    )
-
-    all_goals.append(new_goal)
-    write_goals(all_goals, goals_path)
-    click.echo(f"Added {goal_id}: {title}")
-
-
-def _edit_goal_interactive(all_goals: list[Goal], goal_id: str) -> None:
-    goal_map = {g.id: g for g in all_goals}
-    goal = goal_map.get(goal_id)
-    if goal is None:
-        click.echo(f"Goal {goal_id} not found.")
-        return
-
-    click.echo(f"Editing {goal_id}: {goal.title}")
-    click.echo(f"  Current status: {goal.status}")
-    new_status = input("New status (active/completed/dropped): ").strip().lower()
-    if new_status in ("active", "completed", "dropped"):
-        goal.status = new_status
-        click.echo(f"  Status updated to {new_status}")
-    else:
-        click.echo("  No change.")
+    output = render_drafts_table(all_drafts)
+    click.echo(output)

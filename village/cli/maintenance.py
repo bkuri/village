@@ -10,11 +10,7 @@ from village.logging import get_logger
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--dry-run", is_flag=True, help="Show what would be removed")
-@click.option("--plan", is_flag=True, help="Generate cleanup plan")
-@click.option("--apply", is_flag=True, help="Include orphan and stale worktrees")
-def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
+def cleanup(dry_run: bool = False, plan: bool = False, apply: bool = False) -> None:
     """
     Remove stale locks and optionally remove orphan/stale worktrees.
 
@@ -77,11 +73,7 @@ def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
     click.echo("Cleanup complete")
 
 
-@click.command()
-@click.argument("task_id", default=None, required=False, type=str)
-@click.option("--force", is_flag=True, help="Force unlock even if pane is active")
-@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
-def unlock(task_id: str | None, force: bool, select_mode: bool) -> None:
+def unlock(task_id: str | None = None, force: bool = False, select_mode: bool = False) -> None:
     """
     Unlock a task (remove lock file).
 

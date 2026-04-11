@@ -152,10 +152,20 @@ village/
 ├── cli/                # CLI commands (role-based)
 │   ├── planner.py      #   village planner — spec design + inspection
 │   ├── builder.py      #   village builder — spec-driven autonomous loop
-│   ├── scribe.py       #   village scribe — knowledge base + goals + audit trails
+│   ├── scribe.py       #   village scribe — knowledge base
 │   ├── council.py      #   village council — multi-persona deliberation
+│   ├── watcher.py      #   village watcher — observability and maintenance
+│   ├── doctor.py       #   village doctor — diagnostics
 │   ├── greeter.py      #   village greeter — Q&A session
-│   └── ...
+│   ├── goals.py        #   village goals — goal hierarchy
+│   ├── lifecycle.py    #   new, up, down
+│   ├── acp.py          #   village acp — agent bridge
+│   ├── tasks.py        #   village tasks — task store management
+│   ├── state.py        #   (logic-only, no CLI decorators)
+│   ├── dashboard.py    #   (logic-only, no CLI decorators)
+│   ├── maintenance.py  #   (logic-only, no CLI decorators)
+│   ├── work.py         #   (logic-only, no CLI decorators)
+│   └── release.py      #   (logic-only, no CLI decorators)
 ├── config.py           # Config loading
 ├── roles.py            # RoleChat base, routing table, greetings
 ├── loop.py             # Spec-driven autonomous build loop
@@ -183,23 +193,14 @@ tests/
 └── test_*.py
 ```
 
-## Village Scribe — Knowledge Base & Audit Trails
+## Village Scribe — Knowledge Base
 
 ### Commands
 ```bash
-village scribe see <url|file>         # Ingest knowledge source
-village scribe fetch <url|file>       # Alias for see
+village scribe fetch <url|file>       # Ingest knowledge source
 village scribe ask "question"         # Query knowledge base
 village scribe curate                 # Health check + regenerate VOICE.md
-village scribe upkeep                 # Alias for curate
-village scribe stats                  # Show wiki statistics
-village scribe monitor                # Watch wiki/ingest/ for new files
-village scribe goals                  # Show goal hierarchy
-village scribe goals --coverage       # Show objective completion %
-village scribe goals --edit           # Interactive refinement
-village scribe goals --json           # JSON output
-village scribe ledger show [task]     # View audit trail for a task
-village scribe ledger list            # List tasks with traces
+village scribe drafts                 # List or count draft tasks
 ```
 
 ### Architecture
@@ -221,12 +222,10 @@ Read it first for project context, conventions, and known issues.
 
 ### Manual testing
 ```bash
-village scribe see ./docs/guide.md
-village scribe see https://docs.example.com/api
+village scribe fetch ./docs/guide.md
+village scribe fetch https://docs.example.com/api
 village scribe ask "how do I configure auth?"
 village scribe curate
-village scribe stats
-village scribe ledger show bd-xyz
 ```
 
 ## Adaptive Onboarding
@@ -237,9 +236,8 @@ village new <name>                # Create project with adaptive interview
 village new <name> --skip-onboard # Create with minimal templates
 village up                        # Detects incomplete setup, runs interview if needed
 village up --skip-onboard         # Skip onboarding check
-village onboard                   # Force-run onboarding on existing project
-village onboard --force           # Overwrite existing AGENTS.md/README.md
-village onboard --skip-interview  # Use scaffold defaults without interview
+village up --force                # Overwrite existing AGENTS.md/README.md
+village up --skip-interview       # Use scaffold defaults without interview
 ```
 
 ### Configuration
@@ -264,11 +262,12 @@ The onboarding pipeline:
 
 | Role | Default Chat | Subcommands |
 |------|-------------|-------------|
+| **watcher** | "What would you like to observe?" | `status`, `locks`, `events`, `dashboard`, `cleanup`, `unlock`, `monitor`, `ledger show`, `ledger list`, `ready` |
+| **builder** | "Which specs shall I work on?" | `run`, `status`, `cancel`, `logs`, `resume`, `queue`, `pause`, `release` |
+| **scribe** | "What do you want to know?" | `fetch`, `ask`, `curate`, `drafts` |
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
-| **builder** | "Which specs shall I work on?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **scribe** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `ledger show`, `ledger list` |
-| **council** | "What shall we discuss?" | `debate`, `list`, `show`, `rematch` |
-| **doctor** | "What seems to be the problem?" | `check` |
+| **council** | "What shall we discuss?" | `debate`, `list`, `show` |
+| **doctor** | "What seems to be the problem?" | `diagnose`, `prescribe` |
 | **greeter** | "How can I help?" | General triage, routes to all roles |
 
 ### Spec-Driven Build Loop
@@ -284,15 +283,53 @@ village planner inspect <spec-id>      # Review one spec
 village planner refine <spec-id>       # Iterate on a spec
 
 # Building — implements specs via autonomous loop
-village builder run                    # Loop through specs (sequential, 1 worktree)
+village builder run                    # Loop through specs
 village builder run -p 4               # Parallel mode, 4 worktrees
 village builder run -n 20              # Max 20 iterations
 village builder run -m zai/glm-5-turbo # Override agent model
 village builder run --dry-run          # Preview without executing
 village builder status                 # Show spec completion progress
-village builder stop                   # Halt the loop
-village builder resume                 # Resume a stopped loop
+village builder cancel                 # Halt the loop
+village builder resume --build         # Resume a stopped build loop
+village builder resume --task <id>     # Resume a paused task
+village builder queue                  # Queue and execute ready tasks
+village builder pause                  # Pause an in-progress task
+village builder release                # Ship a release
 village builder logs                   # View iteration logs
+```
+
+### Village Watcher — Observability & Maintenance
+
+```bash
+village watcher status                # General overview
+village watcher status --system       # System health (workers, locks, orphans)
+village watcher status --task <id>    # Task state and history
+village watcher status --wiki         # Wiki statistics
+village watcher locks                 # List all locks
+village watcher events                # Show recent events
+village watcher dashboard             # Real-time dashboard
+village watcher cleanup               # Remove stale locks/worktrees
+village watcher unlock                # Unlock a task
+village watcher monitor               # Watch wiki/ingest/ for new files
+village watcher ledger show [task]    # View audit trail
+village watcher ledger list           # List tasks with audit trails
+village watcher ready                 # Readiness assessment
+```
+
+### Village Doctor — Diagnostics
+
+```bash
+village doctor diagnose               # Run full diagnostics (writes .village/diagnosis.json)
+village doctor prescribe              # Show recommendations from diagnosis
+village doctor prescribe --fix        # Auto-apply fixes
+```
+
+### Village Council — Deliberation
+
+```bash
+village council debate "topic"                    # Start a new debate
+village council debate --from <id>                # Continue a past debate
+village council debate --from <id> --rematch      # Re-run from scratch
 ```
 
 ### Spec Format
@@ -313,7 +350,7 @@ Core configuration and CLI framework.
   - [ ] Falls back to defaults
 
 ## Completion Signal
-Run `village doctor check` and verify all pass.
+Run `village doctor diagnose` and verify all pass.
 <promise>DONE</promise>
 ```
 
@@ -322,7 +359,16 @@ Run `village doctor check` and verify all pass.
 - **Promise signal**: Agent outputs `<promise>DONE</promise>` when all criteria met
 - **Inspect Notes**: Appended by `planner inspect --fix`, treated as hard constraints
 
-### Cross-Role Routing
+### Top-Level Commands
+```bash
+village new <name>                # Create project with adaptive interview
+village up                        # Initialize village (includes onboarding)
+village down                      # Stop village runtime
+village goals                     # Show goal hierarchy
+village tasks                     # Task store management
+village acp                       # ACP agent bridge
+village greeter                   # Interactive Q&A (aliases: welcome, chat, help)
+```
 
 ## Key Integration Points
 

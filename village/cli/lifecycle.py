@@ -1,4 +1,4 @@
-"""Lifecycle commands: new, up, down, onboard."""
+"""Lifecycle commands: new, up, down."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -97,8 +97,7 @@ def _run_create_project_workflow() -> tuple[str, str]:
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
-@click.option("--skip-onboard", is_flag=True, help="Skip onboarding interview, write placeholder files")
-def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool) -> None:
+def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool) -> None:
     """
     Create a new project with village support.
 
@@ -120,7 +119,6 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
       village new myproject
       village new myproject --path ~/projects
       village new myproject --dry-run
-      village new myproject --skip-onboard
     """
     from village.scaffold import (
         execute_scaffold,
@@ -154,7 +152,7 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
         project_name,
         parent_dir,
         dashboard=dashboard,
-        onboard=not skip_onboard,
+        onboard=True,
         description=description,
     )
 
@@ -163,10 +161,6 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
         click.echo("\nCreated:")
         for item in result.created:
             click.echo(f"  - {item}")
-        if skip_onboard:
-            click.echo(
-                "\nOnboarding skipped. AGENTS.md contains placeholder values. Run `village onboard` to complete setup."
-            )
         click.echo("\nNext steps:")
         click.echo(f"  cd {project_name}")
         click.echo("  village chat   # create your first task")
@@ -176,13 +170,13 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
 
 
 @lifecycle_group.command("up")
+@click.option("--path", "path_opt", type=click.Path(), default=None, help="Project path (default: current directory)")
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
-@click.option("--skip-onboard", is_flag=True, help="Skip onboarding check")
 @click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md during onboarding")
 @click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
-def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bool, skip_interview: bool) -> None:
+def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: bool, skip_interview: bool) -> None:
     """
     Initialize village runtime (idempotent).
 
@@ -198,10 +192,12 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bo
     Does not start workers.
 
     Supports: --dry-run, --plan (preview mode),
-    --skip-onboard (skip onboarding check),
     --force (overwrite existing files during onboarding),
     --skip-interview (use scaffold defaults without prompts)
     """
+    if path_opt is None:
+        click.echo("No --path specified, using current directory.", err=True)
+
     config = get_config()
 
     if dry_run or plan:
@@ -234,36 +230,13 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bo
     append_event(event, config.village_dir)
     click.echo("Runtime initialized")
 
-    if not skip_onboard:
-        from village.onboard.detector import detect_project
+    from village.onboard.detector import detect_project
 
-        info = detect_project(config.git_root)
-        if info.needs_onboarding or force:
-            if not force:
-                click.echo("Detected incomplete project setup. Starting onboarding...")
-            _run_onboard(config.git_root, force=force, skip_interview=skip_interview)
-
-
-@lifecycle_group.command("onboard")
-@click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md")
-@click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
-def onboard(force: bool, skip_interview: bool) -> None:
-    """Run adaptive onboarding for current project.
-
-    Generates AGENTS.md, README.md, and wiki seeds based on an
-    adaptive interview about your project.
-
-    Use --force to overwrite existing files.
-    Use --skip-interview to use scaffold defaults without prompts.
-    """
-    from village.probes.repo import find_git_root
-
-    try:
-        git_root = find_git_root()
-    except RuntimeError:
-        raise click.ClickException("Not in a git repository. Use 'village new' to create a project.")
-
-    _run_onboard(git_root, force=force, skip_interview=skip_interview)
+    info = detect_project(config.git_root)
+    if info.needs_onboarding or force:
+        if not force:
+            click.echo("Detected incomplete project setup. Starting onboarding...")
+        _run_onboard(config.git_root, force=force, skip_interview=skip_interview)
 
 
 @lifecycle_group.command("down")

@@ -75,7 +75,7 @@ class TestRoleRouting:
         assert ROLE_ROUTING["doctor"].advise == ["scribe", "council"]
 
     def test_greeter_routes_to_all_roles(self):
-        all_roles = ["planner", "builder", "scribe", "council", "doctor"]
+        all_roles = ["planner", "builder", "scribe", "council", "doctor", "watcher"]
         assert ROLE_ROUTING["greeter"].route == all_roles
 
     def test_greeter_advises_none(self):
@@ -84,7 +84,7 @@ class TestRoleRouting:
 
 class TestGreetingTemplates:
     def test_all_roles_have_greetings(self):
-        expected = {"planner", "builder", "scribe", "council", "doctor", "greeter"}
+        expected = {"planner", "builder", "scribe", "council", "doctor", "greeter", "watcher"}
         assert set(GREETING_TEMPLATES.keys()) == expected
 
     def test_greetings_are_non_empty(self):
@@ -94,7 +94,7 @@ class TestGreetingTemplates:
 
 class TestRoleSkills:
     def test_all_roles_have_skills(self):
-        expected = {"planner", "builder", "scribe", "council", "doctor", "greeter"}
+        expected = {"planner", "builder", "scribe", "council", "doctor", "greeter", "watcher"}
         assert set(ROLE_SKILLS.keys()) == expected
 
     def test_each_role_has_at_least_one_skill(self):

@@ -225,46 +225,6 @@ class TestPlannerDesignFallback:
                 assert "designed workflow" in result.output
 
 
-class TestBuilderRunFallback:
-    def test_missing_name_prompts_selection(self):
-        from village.cli.builder import builder_group
-
-        runner = CliRunner()
-        with patch("village.cli.builder._get_loader") as mock_loader_fn:
-            mock_loader = MagicMock()
-            mock_loader.list_workflows.return_value = ["build-api", "build-web"]
-            mock_wf = MagicMock()
-            mock_wf.name = "build-api"
-            mock_wf.steps = []
-            mock_wf.resolve_steps.return_value = []
-            mock_loader.load.return_value = mock_wf
-            mock_loader_fn.return_value = mock_loader
-
-            with patch("village.cli.builder.Builder") as mock_builder_cls:
-                mock_builder = MagicMock()
-                mock_result = MagicMock()
-                mock_result.success = True
-                mock_result.step_results = []
-                mock_builder.run_sync.return_value = mock_result
-                mock_builder_cls.return_value = mock_builder
-
-                result = runner.invoke(builder_group, ["run"], input="1\n")
-                assert result.exit_code == 0
-
-    def test_missing_name_no_workflows(self):
-        from village.cli.builder import builder_group
-
-        runner = CliRunner()
-        with patch("village.cli.builder._get_loader") as mock_loader_fn:
-            mock_loader = MagicMock()
-            mock_loader.list_workflows.return_value = []
-            mock_loader_fn.return_value = mock_loader
-
-            result = runner.invoke(builder_group, ["run"])
-            assert result.exit_code == 0
-            assert "No workflows found" in result.output
-
-
 class TestBuilderStatusFallback:
     def test_missing_run_id_shows_message(self):
         from village.cli.builder import builder_group
@@ -272,20 +232,20 @@ class TestBuilderStatusFallback:
         runner = CliRunner()
         result = runner.invoke(builder_group, ["status"])
         assert result.exit_code == 0
-        assert "No runs tracked yet" in result.output
+        assert "No specs directory found" in result.output
 
 
 class TestLedgerShowFallback:
     def test_missing_task_id_prompts_selection(self):
-        from village.cli.scribe import ledger_group
+        from village.cli.watcher import ledger_group
 
         runner = CliRunner()
-        with patch("village.cli.scribe.get_config") as mock_config_fn:
+        with patch("village.cli.watcher.get_config") as mock_config_fn:
             mock_config = MagicMock()
             mock_config.traces_dir = "/tmp/test_traces"
             mock_config_fn.return_value = mock_config
 
-            with patch("village.cli.scribe.TraceReader") as mock_reader_cls:
+            with patch("village.cli.watcher.TraceReader") as mock_reader_cls:
                 mock_reader = MagicMock()
                 mock_reader.list_traced_tasks.return_value = ["bd-001", "bd-002"]
                 mock_event = MagicMock()
@@ -298,21 +258,21 @@ class TestLedgerShowFallback:
                 mock_reader.read.return_value = [mock_event]
                 mock_reader_cls.return_value = mock_reader
 
-                with patch("village.cli.scribe.format_trace", return_value="formatted"):
+                with patch("village.cli.watcher.format_trace", return_value="formatted"):
                     result = runner.invoke(ledger_group, ["show"], input="1\n")
                     assert result.exit_code == 0
                     assert "formatted" in result.output
 
     def test_missing_task_id_no_ledgers(self):
-        from village.cli.scribe import ledger_group
+        from village.cli.watcher import ledger_group
 
         runner = CliRunner()
-        with patch("village.cli.scribe.get_config") as mock_config_fn:
+        with patch("village.cli.watcher.get_config") as mock_config_fn:
             mock_config = MagicMock()
             mock_config.traces_dir = "/tmp/test_traces"
             mock_config_fn.return_value = mock_config
 
-            with patch("village.cli.scribe.TraceReader") as mock_reader_cls:
+            with patch("village.cli.watcher.TraceReader") as mock_reader_cls:
                 mock_reader = MagicMock()
                 mock_reader.list_traced_tasks.return_value = []
                 mock_reader_cls.return_value = mock_reader

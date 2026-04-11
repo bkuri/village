@@ -11,15 +11,7 @@ from village.logging import get_logger
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--watch", is_flag=True, help="Auto-refresh mode")
-@click.option(
-    "--refresh-interval",
-    type=int,
-    default=None,
-    help="Refresh interval in seconds (default: from config)",
-)
-def dashboard(watch: bool, refresh_interval: int | None) -> None:
+def dashboard(watch: bool = False, refresh_interval: int | None = None) -> None:
     """
     Show real-time dashboard of Village state.
 
@@ -63,12 +55,12 @@ def dashboard(watch: bool, refresh_interval: int | None) -> None:
         click.echo(output)
 
 
-@click.command()
-@click.option("--backend", type=click.Choice(["prometheus", "statsd"]), help="Metrics backend")
-@click.option("--port", type=int, help="Port for metrics export")
-@click.option("--interval", type=int, help="Export interval in seconds")
-@click.option("--reset", is_flag=True, help="Reset all metrics counters to 0")
-def metrics(backend: str, port: int | None, interval: int | None, reset: bool) -> None:
+def metrics(
+    backend: str | None = None,
+    port: int | None = None,
+    interval: int | None = None,
+    reset: bool = False,
+) -> None:
     """
     Export Village metrics.
 

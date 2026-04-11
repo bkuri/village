@@ -23,28 +23,17 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--n", "count", type=int, help="Number of tasks to start")
-@click.option("--plan", is_flag=True, help="Generate queue plan")
-@click.option("--dry-run", is_flag=True, help="Preview execution")
-@click.option("--max-workers", type=int, help="Override concurrency limit")
-@click.option("--agent", help="Filter tasks by agent type")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-@click.option("--force", is_flag=True, help="Skip deduplication checks")
-@click.option("--approve", "approve_task_id", help="Approve a pending task")
-@click.option("--approve-all", is_flag=True, help="Approve all pending tasks")
-@click.option("--reject", "reject_task_id", help="Reject a pending task")
 def queue(
-    count: int,
-    plan: bool,
-    dry_run: bool,
-    max_workers: int,
-    agent: str,
-    json_output: bool,
-    force: bool,
-    approve_task_id: str | None,
-    approve_all: bool,
-    reject_task_id: str | None,
+    count: int | None = None,
+    plan: bool = False,
+    dry_run: bool = False,
+    max_workers: int | None = None,
+    agent: str | None = None,
+    json_output: bool = False,
+    force: bool = False,
+    approve_task_id: str | None = None,
+    approve_all: bool = False,
+    reject_task_id: str | None = None,
 ) -> None:
     """
     Queue and execute ready tasks.
@@ -241,41 +230,13 @@ def queue(
         sys.exit(EXIT_ERROR)
 
 
-@click.command()
-@click.argument("task_id", default=None, required=False, type=str)
-@click.option(
-    "--agent",
-    type=str,
-    help="Agent name (auto-detect from task store if not provided)",
-)
-@click.option(
-    "--detached",
-    is_flag=True,
-    help="Run in detached mode (no tmux attach)",
-)
-@click.option(
-    "--html",
-    is_flag=True,
-    help="Output HTML with JSON metadata",
-)
-@click.option(
-    "--dry-run",
-    is_flag=True,
-    help="Preview mode without making changes",
-)
-@click.option(
-    "--select",
-    "select_mode",
-    is_flag=True,
-    help="Select from ready tasks interactively",
-)
 def resume(
-    task_id: str | None,
-    agent: str | None,
-    detached: bool,
-    html: bool,
-    dry_run: bool,
-    select_mode: bool,
+    task_id: str | None = None,
+    agent: str | None = None,
+    detached: bool = False,
+    html: bool = False,
+    dry_run: bool = False,
+    select_mode: bool = False,
 ) -> None:
     """
     Resume a task (explicit or planner).
@@ -419,11 +380,7 @@ def resume(
         click.echo(render_resume_html(contract))
 
 
-@click.command()
-@click.argument("task_id", default=None, required=False, type=str)
-@click.option("--force", is_flag=True, help="Force pause without validation")
-@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
-def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
+def pause(task_id: str | None = None, force: bool = False, select_mode: bool = False) -> None:
     """
     Pause an in-progress task.
 
@@ -498,11 +455,7 @@ def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
         sys.exit(EXIT_ERROR)
 
 
-@click.command("resume-task")
-@click.argument("task_id", default=None, required=False, type=str)
-@click.option("--force", is_flag=True, help="Force resume without validation")
-@click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
-def resume_task(task_id: str | None, force: bool, select_mode: bool) -> None:
+def resume_task(task_id: str | None = None, force: bool = False, select_mode: bool = False) -> None:
     """
     Resume a paused task.
 
@@ -583,9 +536,7 @@ def resume_task(task_id: str | None, force: bool, select_mode: bool) -> None:
         sys.exit(EXIT_ERROR)
 
 
-@click.command()
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def ready(json_output: bool) -> None:
+def ready(json_output: bool = False) -> None:
     """
     Check if village is ready for work.
 

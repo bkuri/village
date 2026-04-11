@@ -495,7 +495,7 @@ class TestCouncilCLI:
 
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(council_group, ["rematch", "council-nonexistent"])
+        result = runner.invoke(council_group, ["debate", "--from", "council-nonexistent", "--rematch"])
         assert result.exit_code == 1
 
     def test_council_rematch_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -518,7 +518,7 @@ class TestCouncilCLI:
         personas_dir.mkdir()
 
         runner = CliRunner()
-        result = runner.invoke(council_group, ["rematch", "council-rematch1"])
+        result = runner.invoke(council_group, ["debate", "--from", "council-rematch1", "--rematch"])
         assert result.exit_code == 0
         assert "Rematch:" in result.output
 

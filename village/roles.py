@@ -48,8 +48,12 @@ ROLE_ROUTING: dict[str, RoutingConfig] = {
         route=["scribe"],
         advise=["scribe", "council"],
     ),
+    "watcher": RoutingConfig(
+        route=["scribe"],
+        advise=["builder", "planner"],
+    ),
     "greeter": RoutingConfig(
-        route=["planner", "builder", "scribe", "council", "doctor"],
+        route=["planner", "builder", "scribe", "council", "doctor", "watcher"],
         advise=[],
     ),
 }
@@ -61,6 +65,7 @@ GREETING_TEMPLATES: dict[str, str] = {
     "scribe": "What do you want to know?",
     "council": "What shall we discuss?",
     "doctor": "What seems to be the problem?",
+    "watcher": "What would you like to observe?",
     "greeter": "How can I help?",
 }
 
@@ -99,6 +104,18 @@ ROLE_SKILLS: dict[str, list[RoleSkill]] = {
     ],
     "doctor": [
         RoleSkill("check", "Run diagnostics"),
+    ],
+    "watcher": [
+        RoleSkill("status", "Show village status"),
+        RoleSkill("locks", "List locks"),
+        RoleSkill("events", "Show recent events"),
+        RoleSkill("dashboard", "Real-time dashboard"),
+        RoleSkill("cleanup", "Remove stale locks and worktrees"),
+        RoleSkill("unlock", "Unlock a task"),
+        RoleSkill("monitor", "Watch wiki ingest for new files"),
+        RoleSkill("ledger show", "View task audit trail"),
+        RoleSkill("ledger list", "List tasks with traces"),
+        RoleSkill("ready", "Check if village is ready for work"),
     ],
     "greeter": [
         RoleSkill("help", "General guidance and routing"),

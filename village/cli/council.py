@@ -128,109 +128,91 @@ def show(council_id: str, json_output: bool) -> None:
 
 
 @council_group.command()
-@click.argument("council_id")
-@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def rematch(council_id: str, json_output: bool) -> None:
-    """Re-run a council with the same configuration."""
-    wiki_path = _find_wiki_path()
-    transcript_path = wiki_path / "councils" / council_id / "transcript.md"
-
-    if not transcript_path.exists():
-        click.echo(f"Council not found: {council_id}")
-        raise SystemExit(1)
-
-    content = transcript_path.read_text(encoding="utf-8")
-
-    topic = ""
-    meeting_type = "chat"
-    found_personas: list[str] = []
-
-    for line in content.split("\n"):
-        if line.startswith("- **Topic**:"):
-            topic = line.split(":", 1)[1].strip()
-        elif line.startswith("- **Type**:"):
-            meeting_type = line.split(":", 1)[1].strip()
-        elif line.startswith("## Turn"):
-            parts = line.split(":", 1)
-            if len(parts) > 1:
-                name = parts[1].split("[")[0].strip()
-                if name not in found_personas:
-                    found_personas.append(name)
-
-    if not topic:
-        click.echo("Could not extract topic from transcript.")
-        raise SystemExit(1)
-
-    config = get_config()
-    engine = _get_engine(config.council)
-
-    state = engine.start_meeting(
-        topic=topic,
-        meeting_type=meeting_type,
-        persona_names=found_personas or None,
-    )
-
-    click.echo(f"Rematch: {state.council_id} (from {council_id})")
-    click.echo(f"  Topic: {state.topic}")
-    click.echo(f"  Personas: {', '.join(p.name for p in state.personas)}")
-
-    for round_num in range(state.max_rounds):
-        turns = engine.run_round(state)
-        if not turns:
-            break
-
-        for turn in turns:
-            click.echo(f"\n  [{turn.persona_name}]: {turn.content[:200]}")
-
-    resolution = engine.resolve(state)
-    click.echo(f"\nResolution: {resolution.summary[:300]}")
-
-    path = engine.save_and_close(state)
-    if path:
-        click.echo(f"\nTranscript saved: {path}")
-
-    if json_output:
-        output = {
-            "council_id": state.council_id,
-            "original_id": council_id,
-            "topic": state.topic,
-            "meeting_type": state.meeting_type,
-            "status": state.status,
-        }
-        click.echo(json.dumps(output, indent=2))
-
-
-@council_group.command()
-@click.argument("topic")
-@click.option("--type", "meeting_type", type=click.Choice(["chat", "debate"]), default="debate", help="Meeting type")
+@click.argument("topic", required=False)
+@click.option("--from", "from_council", type=str, help="Council ID to continue or rematch")
+@click.option("--rematch", is_flag=True, help="Re-run from scratch (use with --from)")
+@click.option("--type", "meeting_type", type=click.Choice(["chat", "debate"]), default=None, help="Meeting type")
 @click.option("--personas", type=str, help="Comma-separated persona names")
 @click.option("--rounds", type=int, help="Number of rounds")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def debate(
-    topic: str,
-    meeting_type: str,
+    topic: Optional[str],
+    from_council: Optional[str],
+    rematch: bool,
+    meeting_type: Optional[str],
     personas: Optional[str],
     rounds: Optional[int],
     json_output: bool,
 ) -> None:
     """Start a council debate on a topic."""
+    if rematch and not from_council:
+        click.echo("Error: --rematch requires --from <council_id>")
+        raise SystemExit(1)
+
+    extracted_topic = ""
+    extracted_type = "debate"
+    found_personas: list[str] = []
+    original_id: Optional[str] = None
+
+    if from_council:
+        wiki_path = _find_wiki_path()
+        transcript_path = wiki_path / "councils" / from_council / "transcript.md"
+
+        if not transcript_path.exists():
+            click.echo(f"Council not found: {from_council}")
+            raise SystemExit(1)
+
+        content = transcript_path.read_text(encoding="utf-8")
+
+        for line in content.split("\n"):
+            if line.startswith("- **Topic**:"):
+                extracted_topic = line.split(":", 1)[1].strip()
+            elif line.startswith("- **Type**:"):
+                extracted_type = line.split(":", 1)[1].strip()
+            elif line.startswith("## Turn"):
+                parts = line.split(":", 1)
+                if len(parts) > 1:
+                    name = parts[1].split("[")[0].strip()
+                    if name not in found_personas:
+                        found_personas.append(name)
+
+        if not extracted_topic:
+            click.echo("Could not extract topic from transcript.")
+            raise SystemExit(1)
+
+        original_id = from_council
+
+    if not topic and not from_council:
+        click.echo("Error: topic argument required (or use --from <council_id>)")
+        raise SystemExit(1)
+
+    final_topic = topic or extracted_topic
+    final_type = meeting_type or extracted_type
+
     config = get_config()
     engine = _get_engine(config.council)
 
     persona_names: Optional[list[str]] = None
     if personas:
         persona_names = [p.strip() for p in personas.split(",") if p.strip()]
+    elif found_personas:
+        persona_names = found_personas
 
     state = engine.start_meeting(
-        topic=topic,
-        meeting_type=meeting_type,
+        topic=final_topic,
+        meeting_type=final_type,
         persona_names=persona_names,
     )
 
     if rounds is not None:
         state.max_rounds = rounds
 
-    click.echo(f"Council: {state.council_id}")
+    if from_council and not rematch:
+        click.echo(f"Continuing: {state.council_id} (from {from_council})")
+    elif from_council and rematch:
+        click.echo(f"Rematch: {state.council_id} (from {from_council})")
+    else:
+        click.echo(f"Council: {state.council_id}")
     click.echo(f"  Topic: {state.topic}")
     click.echo(f"  Personas: {', '.join(p.name for p in state.personas)}")
 
@@ -256,4 +238,6 @@ def debate(
             "meeting_type": state.meeting_type,
             "status": state.status,
         }
+        if original_id:
+            output["original_id"] = original_id
         click.echo(json.dumps(output, indent=2))

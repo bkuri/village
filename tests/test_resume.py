@@ -4,7 +4,7 @@ import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -626,9 +626,11 @@ class TestGetAgentFromTaskId:
     """Tests for _get_agent_from_task_id."""
 
     def test_returns_default_agent(self) -> None:
-        """Test returns default agent when Beads unavailable."""
-        with patch("village.resume.beads_available") as mock_beads:
-            mock_beads.side_effect = Exception("Beads unavailable")
+        """Test returns default agent when task store unavailable."""
+        with patch("village.tasks.get_task_store") as mock_store_fn:
+            mock_store = MagicMock()
+            mock_store.is_available.side_effect = Exception("Task store unavailable")
+            mock_store_fn.return_value = mock_store
 
             agent = _get_agent_from_task_id("bd-a3f8", default_agent="build")
 
@@ -636,8 +638,10 @@ class TestGetAgentFromTaskId:
 
     def test_returns_worker_fallback(self) -> None:
         """Test returns 'worker' as fallback."""
-        with patch("village.resume.beads_available") as mock_beads:
-            mock_beads.side_effect = Exception("Beads unavailable")
+        with patch("village.tasks.get_task_store") as mock_store_fn:
+            mock_store = MagicMock()
+            mock_store.is_available.side_effect = Exception("Task store unavailable")
+            mock_store_fn.return_value = mock_store
 
             agent = _get_agent_from_task_id("bd-a3f8", default_agent=None)
 

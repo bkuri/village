@@ -318,26 +318,26 @@ class TestCLIGoalsCommand:
     def test_goals_command_no_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.scribe import goals_cmd
+        from village.cli.goals import goals
 
         self._init_git_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(goals_cmd)
+        result = runner.invoke(goals)
         assert result.exit_code == 0
         assert "No GOALS.md found" in result.output
 
     def test_goals_command_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.scribe import goals_cmd
+        from village.cli.goals import goals
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"
         goals_path.write_text(SAMPLE_GOALS_MD, encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(goals_cmd)
+        result = runner.invoke(goals)
         assert result.exit_code == 0
         assert "G1" in result.output
         assert "G2" in result.output
@@ -345,14 +345,14 @@ class TestCLIGoalsCommand:
     def test_goals_command_coverage(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.scribe import goals_cmd
+        from village.cli.goals import goals
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"
         goals_path.write_text(SAMPLE_GOALS_MD, encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(goals_cmd, ["--coverage"])
+        result = runner.invoke(goals, ["--coverage"])
         assert result.exit_code == 0
         assert "2/4" in result.output
         assert "Overall:" in result.output
@@ -362,14 +362,14 @@ class TestCLIGoalsCommand:
 
         from click.testing import CliRunner
 
-        from village.cli.scribe import goals_cmd
+        from village.cli.goals import goals
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"
         goals_path.write_text(SAMPLE_GOALS_MD, encoding="utf-8")
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        result = runner.invoke(goals_cmd, ["--json"])
+        result = runner.invoke(goals, ["--json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert len(data) == 3

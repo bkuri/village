@@ -14,18 +14,12 @@ from village.status import collect_full_status, collect_workers
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--short", is_flag=True, help="Short output")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-@click.option("--workers", is_flag=True, help="Show workers view")
-@click.option("--locks", is_flag=True, help="Show locks view")
-@click.option("--orphans", is_flag=True, help="Show orphans view")
 def status(
-    short: bool,
-    json_output: bool,
-    workers: bool,
-    locks: bool,
-    orphans: bool,
+    short: bool = False,
+    json_output: bool = False,
+    workers: bool = False,
+    locks: bool = False,
+    orphans: bool = False,
 ) -> None:
     """
     Show village status.
@@ -75,7 +69,6 @@ def status(
         click.echo(output)
 
 
-@click.command()
 def locks() -> None:
     """List all locks with ACTIVE/STALE status."""
     from village.render.text import render_worker_table
@@ -91,16 +84,11 @@ def locks() -> None:
     click.echo(output)
 
 
-@click.command()
-@click.option("--task", "task_id", help="Filter by task ID")
-@click.option("--cmd", "cmd_filter", help="Filter by command")
-@click.option("--limit", "limit", default=20, help="Number of events to show")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
 def events(
-    task_id: str | None,
-    cmd_filter: str | None,
-    limit: int,
-    json_output: bool,
+    task_id: str | None = None,
+    cmd_filter: str | None = None,
+    limit: int = 20,
+    json_output: bool = False,
 ) -> None:
     """
     Show recent events.
@@ -163,10 +151,7 @@ def events(
             click.echo(" ".join(parts))
 
 
-@click.command()
-@click.argument("task_id")
-@click.option("--json", "json_output", is_flag=True, help="JSON output")
-def state(task_id: str, json_output: bool) -> None:
+def state(task_id: str, json_output: bool = False) -> None:
     """
     Show task state and history.
 

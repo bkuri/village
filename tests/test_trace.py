@@ -264,8 +264,8 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "show", "bd-a3f8"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "show", "bd-a3f8"])
             assert result.exit_code == 0
             assert "task_checkout" in result.output
 
@@ -275,8 +275,8 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "show", "bd-a3f8", "--json"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "show", "bd-a3f8", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert len(data) == 1
@@ -285,8 +285,8 @@ class TestTraceCLI:
     def test_trace_show_missing_task(self, runner: click.testing.CliRunner, mock_config: Config) -> None:
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "show", "bd-nonexistent"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "show", "bd-nonexistent"])
             assert result.exit_code != 0
             assert "No audit events" in result.output
 
@@ -299,8 +299,8 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "list"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "list"])
             assert result.exit_code == 0
             assert "bd-a3f8" in result.output
             assert "bd-b7d2" in result.output
@@ -311,8 +311,8 @@ class TestTraceCLI:
 
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "list", "--json"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "list", "--json"])
             assert result.exit_code == 0
             data = json.loads(result.output)
             assert "bd-a3f8" in data
@@ -320,7 +320,7 @@ class TestTraceCLI:
     def test_trace_list_empty(self, runner: click.testing.CliRunner, mock_config: Config) -> None:
         from unittest.mock import patch
 
-        with patch("village.cli.scribe.get_config", return_value=mock_config):
-            result = runner.invoke(village, ["scribe", "ledger", "list"])
+        with patch("village.cli.watcher.get_config", return_value=mock_config):
+            result = runner.invoke(village, ["watcher", "ledger", "list"])
             assert result.exit_code == 0
             assert "No audit trails found" in result.output
