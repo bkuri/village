@@ -1,15 +1,15 @@
-# Profile: Village Keeper Query Mode
+# Profile: Village Scribe Query Mode
 
 # Mode
-mode: keeper-query
+mode: scribe-query
 
 # Modules to include (compose the prompt)
 requires:
   - base
-  - keeper-grounding
+  - scribe-grounding
 
 # Contract
-contract: keeper-answer
+contract: scribe-answer
 
 # Traits
 traits: [grounded, conservative]

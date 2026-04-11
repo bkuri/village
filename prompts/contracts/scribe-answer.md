@@ -1,6 +1,6 @@
 ---
-id: keeper-answer
-title: Keeper Answer Contract
+id: scribe-answer
+title: Scribe Answer Contract
 description: Structured answer with citations for knowledge base queries
 priority: 100
 tags: [output:structured]

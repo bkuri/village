@@ -13,8 +13,8 @@ from village.goals import (
     parse_goals,
     write_goals,
 )
-from village.keeper.curate import Curator
 from village.memory import MemoryStore
+from village.scribe.curate import Curator
 
 SAMPLE_GOALS_MD = """\
 # Project Goals
@@ -39,7 +39,7 @@ Build a reliable, CLI-native tool for parallel development.
 Self-improving documentation system.
 
 ### Objectives
-- [x] Keeper knowledge base
+- [x] Scribe knowledge base
 - [x] Cross-linking engine
 - [x] VOICE.md generation
 - [ ] Goal hierarchy integration
@@ -240,7 +240,7 @@ class TestWriteGoals:
         out_content = out_path.read_text(encoding="utf-8")
         assert "- [x] Task state machine with persistence" in out_content
         assert "- [ ] Approval gates for high-risk tasks" in out_content
-        assert "- [x] Keeper knowledge base" in out_content
+        assert "- [x] Scribe knowledge base" in out_content
         assert "- [ ] Goal hierarchy integration" in out_content
 
 
@@ -318,7 +318,7 @@ class TestCLIGoalsCommand:
     def test_goals_command_no_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.keeper import goals_cmd
+        from village.cli.scribe import goals_cmd
 
         self._init_git_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -330,7 +330,7 @@ class TestCLIGoalsCommand:
     def test_goals_command_tree(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.keeper import goals_cmd
+        from village.cli.scribe import goals_cmd
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"
@@ -345,7 +345,7 @@ class TestCLIGoalsCommand:
     def test_goals_command_coverage(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from click.testing import CliRunner
 
-        from village.cli.keeper import goals_cmd
+        from village.cli.scribe import goals_cmd
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"
@@ -362,7 +362,7 @@ class TestCLIGoalsCommand:
 
         from click.testing import CliRunner
 
-        from village.cli.keeper import goals_cmd
+        from village.cli.scribe import goals_cmd
 
         self._init_git_repo(tmp_path)
         goals_path = tmp_path / "GOALS.md"

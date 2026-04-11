@@ -1,4 +1,4 @@
-"""Tests for Keeper curation engine."""
+"""Tests for Scribe curation engine."""
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import httpx
 
-from village.keeper.curate import CurateResult, Curator
 from village.memory import MemoryStore
+from village.scribe.curate import CurateResult, Curator
 
 
 class TestFindOrphans:
@@ -112,7 +112,7 @@ class TestCheckLinks:
 
         curator = Curator(store, tmp_path / "wiki", tmp_path)
 
-        with patch("village.keeper.curate.httpx.head") as mock_head:
+        with patch("village.scribe.curate.httpx.head") as mock_head:
             mock_head.side_effect = httpx.ConnectError("connection refused")
             broken = curator.check_links()
 
@@ -132,7 +132,7 @@ class TestCheckLinks:
 
         curator = Curator(store, tmp_path / "wiki", tmp_path)
 
-        with patch("village.keeper.curate.httpx.head") as mock_head:
+        with patch("village.scribe.curate.httpx.head") as mock_head:
             mock_head.return_value = httpx.Response(
                 status_code=404, request=httpx.Request("HEAD", "https://example.com/deleted")
             )
@@ -148,7 +148,7 @@ class TestCheckLinks:
 
         curator = Curator(store, tmp_path / "wiki", tmp_path)
 
-        with patch("village.keeper.curate.httpx.head") as mock_head:
+        with patch("village.scribe.curate.httpx.head") as mock_head:
             broken = curator.check_links()
 
         mock_head.assert_not_called()
@@ -165,7 +165,7 @@ class TestCheckLinks:
 
         curator = Curator(store, tmp_path / "wiki", tmp_path)
 
-        with patch("village.keeper.curate.httpx.head") as mock_head:
+        with patch("village.scribe.curate.httpx.head") as mock_head:
             mock_head.return_value = httpx.Response(
                 status_code=200, request=httpx.Request("HEAD", "https://example.com/ok")
             )
@@ -274,7 +274,7 @@ class TestCurate:
 
         curator = Curator(store, tmp_path / "wiki", tmp_path)
 
-        with patch("village.keeper.curate.httpx.head") as mock_head:
+        with patch("village.scribe.curate.httpx.head") as mock_head:
             mock_head.side_effect = httpx.ConnectError("fail")
             result = curator.curate(check_urls=True)
 

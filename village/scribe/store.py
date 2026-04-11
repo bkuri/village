@@ -131,7 +131,7 @@ class AskResult:
     saved: bool
 
 
-class KeeperStore:
+class ScribeStore:
     def __init__(self, wiki_path: Path) -> None:
         self.wiki_path = wiki_path
         self.ingest_dir = wiki_path / "ingest"

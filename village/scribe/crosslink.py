@@ -1,4 +1,4 @@
-"""Cross-linking engine for Keeper knowledge base."""
+"""Cross-linking engine for Scribe knowledge base."""
 
 from dataclasses import dataclass
 

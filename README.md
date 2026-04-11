@@ -40,8 +40,7 @@ If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
 | **builder** | "Which workflow shall I run?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **keeper** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
-| **ledger** | "Which task are you looking for?" | `show`, `list` |
+| **scribe** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `ledger show`, `ledger list` |
 | **council** | "What shall we discuss?" | `list`, `show`, `rematch` |
 | **doctor** | "What seems to be the problem?" | `check` |
 | **greeter** | "How can I help?" | General triage, routes to all roles |
@@ -65,15 +64,17 @@ village builder run --dry-run          # Preview without executing
 village builder status                 # Show spec completion progress
 ```
 
-### Keeper Knowledge Base
+### Scribe Knowledge Base & Audit Trails
 
 ```bash
-village keeper see <url|file>           # Ingest knowledge source
-village keeper ask "question"           # Query knowledge base
-village keeper curate                   # Health check + regenerate VOICE.md
-village keeper stats                    # Show wiki statistics
-village keeper goals                    # Show goal hierarchy
-village keeper goals --coverage         # Show objective completion %
+village scribe see <url|file>           # Ingest knowledge source
+village scribe ask "question"           # Query knowledge base
+village scribe curate                   # Health check + regenerate VOICE.md
+village scribe stats                    # Show wiki statistics
+village scribe goals                    # Show goal hierarchy
+village scribe goals --coverage         # Show objective completion %
+village scribe ledger show [task]       # View audit trail for a task
+village scribe ledger list              # List tasks with traces
 ```
 
 Sources are auto-tagged, cross-linked, and stored as markdown with YAML frontmatter. The curated knowledge distills into `VOICE.md` for agent context.
@@ -151,9 +152,8 @@ flowchart TB
     subgraph Roles["Role Plane"]
         P[Planner<br/>Spec Design]
         B[Builder<br/>Spec Execution]
-        E[Keeper<br/>Knowledge Base]
+        E[Scribe<br/>Knowledge & Audit]
         C[Council<br/>Deliberation]
-        L[Ledger<br/>Audit Trails]
         D[Doctor<br/>Health Checks]
     end
 
@@ -199,8 +199,8 @@ Inspect anytime:
 
 ```bash
 village doctor check                    # Run health checks
-village keeper curate                    # Maintain knowledge base
-village ledger show bd-xyz              # View audit trail
+village scribe curate                    # Maintain knowledge base
+village scribe ledger show bd-xyz       # View audit trail
 village release --dry-run               # Preview release
 ```
 
@@ -245,16 +245,18 @@ village release --dry-run               # Preview release
 | `village builder stop` | Stop a running build loop |
 | `village builder resume` | Resume a stopped build loop |
 
-### Keeper (Knowledge Base)
+### Scribe (Knowledge Base & Audit Trails)
 
 | Command | Description |
 |---------|-------------|
-| `village keeper see <source>` | Ingest a URL or file into wiki |
-| `village keeper ask "question"` | Query the knowledge base |
-| `village keeper curate` | Health check + regenerate VOICE.md |
-| `village keeper goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
-| `village keeper stats` | Show wiki statistics |
-| `village keeper monitor` | Watch wiki/ingest/ for new files |
+| `village scribe see <source>` | Ingest a URL or file into wiki |
+| `village scribe ask "question"` | Query the knowledge base |
+| `village scribe curate` | Health check + regenerate VOICE.md |
+| `village scribe goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
+| `village scribe stats` | Show wiki statistics |
+| `village scribe monitor` | Watch wiki/ingest/ for new files |
+| `village scribe ledger show [task]` | View audit trail for a task (`--json`) |
+| `village scribe ledger list` | List tasks with traces (`--json`) |
 
 ### Council (Deliberation)
 
@@ -272,24 +274,11 @@ Start a deliberation session with `village council` (no subcommand) or use subco
 | Command | Description |
 |---------|-------------|
 | `village doctor check` | Run project health diagnostics (`--json`, `--prescribe`) |
-| `village ledger show [id]` | View audit trail for a task (`--json`) |
-| `village ledger list` | List tasks with audit trails (`--json`) |
 | `village release` | Apply pending version bumps, update changelog, create tag |
 | `village dashboard` | Real-time dashboard (`--watch`, `--refresh-interval`) |
 | `village metrics` | Export metrics (`--backend`, `--port`) |
 | `village acp` | Run as ACP agent (for editor integration) |
 | `village greeter` | Start ephemeral Q&A session |
-
-### Backward-Compatible Aliases
-
-| Alias | Maps To |
-|-------|---------|
-| `village workflow` | `village planner` |
-| `village trace` | `village ledger` |
-| `village help` / `village chat` | `village greeter` |
-| `village square` | `village dashboard` |
-| `village sweep` | `village cleanup` |
-| `village census` | `village archives` |
 
 ---
 

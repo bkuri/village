@@ -1,15 +1,15 @@
-"""Tests for Keeper cross-linking engine."""
+"""Tests for Scribe cross-linking engine."""
 
 from pathlib import Path
 
-from village.keeper.crosslink import (
+from village.memory import MemoryStore
+from village.scribe.crosslink import (
     _tag_jaccard,
     _title_keyword_overlap,
     find_related,
     suggest_links,
     update_cross_references,
 )
-from village.memory import MemoryStore
 
 
 class TestTagJaccard:

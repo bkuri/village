@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from village.keeper.store import KeeperStore
+from village.scribe.store import ScribeStore
 
 
 class TestSeeWithMarkdownFile:
@@ -9,7 +9,7 @@ class TestSeeWithMarkdownFile:
         md_file.parent.mkdir(parents=True)
         md_file.write_text("# Auth Setup\nRequires VILLAGE_AUTH_KEY env var.", encoding="utf-8")
 
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.see(str(md_file))
 
         assert result.status == "success"
@@ -24,7 +24,7 @@ class TestSeeWithTextFile:
         txt_file.parent.mkdir(parents=True)
         txt_file.write_text("Deploy using kubectl apply -f manifest.yaml", encoding="utf-8")
 
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.see(str(txt_file))
 
         assert result.status == "success"
@@ -34,7 +34,7 @@ class TestSeeWithTextFile:
 
 class TestSeeWithInvalidSource:
     def test_nonexistent_file_returns_error(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.see(str(tmp_path / "nonexistent.md"))
 
         assert result.status == "error"
@@ -48,7 +48,7 @@ class TestLogAppended:
         md_file.parent.mkdir(parents=True)
         md_file.write_text("Configuration details here", encoding="utf-8")
 
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.see(str(md_file))
 
         assert result.status == "success"
@@ -66,7 +66,7 @@ class TestIndexUpdated:
         md_file.parent.mkdir(parents=True)
         md_file.write_text("Use pytest for all testing", encoding="utf-8")
 
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.see(str(md_file))
 
         assert result.status == "success"
@@ -80,7 +80,7 @@ class TestIndexUpdated:
 
 class TestFileMovedToProcessed:
     def test_ingest_file_moved_to_processed(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         elder._ensure_dirs()
 
         ingest_file = elder.ingest_dir / "readme.md"
@@ -98,7 +98,7 @@ class TestFileMovedToProcessed:
 
 class TestAskWithMatchingPages:
     def test_returns_relevant_pages(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
 
         md1 = tmp_path / "auth.md"
         md1.write_text("# Auth Setup\nConfigure authentication tokens", encoding="utf-8")
@@ -117,7 +117,7 @@ class TestAskWithMatchingPages:
 
 class TestAskWithNoMatches:
     def test_returns_no_relevant_message(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
 
         md = tmp_path / "cooking.md"
         md.write_text("# Cooking\nHow to bake bread", encoding="utf-8")
@@ -132,7 +132,7 @@ class TestAskWithNoMatches:
 
 class TestAskWithEmptyWiki:
     def test_returns_no_relevant_on_empty_wiki(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
         result = elder.ask("anything")
 
         assert result.answer == "No relevant pages found."
@@ -141,7 +141,7 @@ class TestAskWithEmptyWiki:
 
 class TestAskWithSave:
     def test_creates_new_page_when_save_true(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
 
         md = tmp_path / "config.md"
         md.write_text("# Config\nSet VILLAGE_HOME directory", encoding="utf-8")
@@ -160,7 +160,7 @@ class TestAskWithSave:
 
 class TestAskSourcesPopulated:
     def test_sources_match_hit_ids(self, tmp_path: Path) -> None:
-        elder = KeeperStore(tmp_path / "wiki")
+        elder = ScribeStore(tmp_path / "wiki")
 
         md1 = tmp_path / "logging.md"
         md1.write_text("# Logging\nConfigure structured logging", encoding="utf-8")

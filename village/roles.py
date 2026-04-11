@@ -30,30 +30,26 @@ class RoutingResult:
 ROLE_ROUTING: dict[str, RoutingConfig] = {
     "planner": RoutingConfig(
         route=["builder"],
-        advise=["council", "keeper"],
+        advise=["council", "scribe"],
     ),
     "builder": RoutingConfig(
-        route=["planner", "ledger"],
-        advise=["keeper", "council"],
+        route=["planner"],
+        advise=["scribe", "council"],
     ),
-    "keeper": RoutingConfig(
-        route=["council", "ledger"],
+    "scribe": RoutingConfig(
+        route=["council"],
         advise=["planner", "builder"],
     ),
-    "ledger": RoutingConfig(
-        route=[],
-        advise=["keeper", "doctor", "planner"],
-    ),
     "council": RoutingConfig(
-        route=["keeper"],
+        route=["scribe"],
         advise=["planner", "builder"],
     ),
     "doctor": RoutingConfig(
-        route=["ledger"],
-        advise=["keeper", "council"],
+        route=["scribe"],
+        advise=["scribe", "council"],
     ),
     "greeter": RoutingConfig(
-        route=["planner", "builder", "keeper", "ledger", "council", "doctor"],
+        route=["planner", "builder", "scribe", "council", "doctor"],
         advise=[],
     ),
 }
@@ -62,8 +58,7 @@ ROLE_ROUTING: dict[str, RoutingConfig] = {
 GREETING_TEMPLATES: dict[str, str] = {
     "planner": "What do you want to accomplish?",
     "builder": "Which workflow shall I run?",
-    "keeper": "What do you want to know?",
-    "ledger": "Which task are you looking for?",
+    "scribe": "What do you want to know?",
     "council": "What shall we discuss?",
     "doctor": "What seems to be the problem?",
     "greeter": "How can I help?",
@@ -87,16 +82,14 @@ ROLE_SKILLS: dict[str, list[RoleSkill]] = {
         RoleSkill("run", "Execute a workflow"),
         RoleSkill("status", "Check a run's status"),
     ],
-    "keeper": [
+    "scribe": [
         RoleSkill("see", "Ingest knowledge source"),
         RoleSkill("ask", "Query the knowledge base"),
         RoleSkill("curate", "Health check and regenerate"),
         RoleSkill("goals", "Show goal hierarchy"),
         RoleSkill("stats", "Show wiki statistics"),
-    ],
-    "ledger": [
-        RoleSkill("show", "View task audit trail"),
-        RoleSkill("list", "List tasks with traces"),
+        RoleSkill("ledger show", "View task audit trail"),
+        RoleSkill("ledger list", "List tasks with traces"),
     ],
     "council": [
         RoleSkill("debate", "Start a debate"),

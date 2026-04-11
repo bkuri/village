@@ -5,11 +5,11 @@ import signal
 import time
 from pathlib import Path
 
-from village.keeper.store import KeeperStore
+from village.scribe.store import ScribeStore
 
 
 class Monitor:
-    def __init__(self, wiki_path: Path, store: KeeperStore, poll_interval: int = 30) -> None:
+    def __init__(self, wiki_path: Path, store: ScribeStore, poll_interval: int = 30) -> None:
         self.wiki_path = wiki_path
         self.store = store
         self.poll_interval = poll_interval

@@ -152,8 +152,7 @@ village/
 ├── cli/                # CLI commands (role-based)
 │   ├── planner.py      #   village planner — spec design + inspection
 │   ├── builder.py      #   village builder — spec-driven autonomous loop
-│   ├── keeper.py      #   village keeper — knowledge base + goals
-│   ├── ledger.py       #   village ledger — audit trails
+│   ├── scribe.py       #   village scribe — knowledge base + goals + audit trails
 │   ├── council.py      #   village council — multi-persona deliberation
 │   ├── greeter.py      #   village greeter — Q&A session
 │   └── ...
@@ -167,7 +166,7 @@ village/
 │   ├── planner.py      #   LLM-driven design
 │   └── mcp_tools.py    #   Perplexity/sequential-thinking
 ├── council/            # Council deliberation system
-├── keeper/              # Keeper knowledge base
+├── scribe/              # Scribe knowledge base + audit trails
 ├── onboard/            # Adaptive onboarding
 ├── goals.py            # Goal hierarchy (GOALS.md)
 ├── trace.py            # TraceWriter/Reader (JSONL)
@@ -184,21 +183,23 @@ tests/
 └── test_*.py
 ```
 
-## Village Keeper — Knowledge Base
+## Village Scribe — Knowledge Base & Audit Trails
 
 ### Commands
 ```bash
-village keeper see <url|file>         # Ingest knowledge source
-village keeper fetch <url|file>       # Alias for see
-village keeper ask "question"         # Query knowledge base
-village keeper curate                 # Health check + regenerate VOICE.md
-village keeper upkeep                 # Alias for curate
-village keeper stats                  # Show wiki statistics
-village keeper monitor                # Watch wiki/ingest/ for new files
-village keeper goals                  # Show goal hierarchy
-village keeper goals --coverage       # Show objective completion %
-village keeper goals --edit           # Interactive refinement
-village keeper goals --json           # JSON output
+village scribe see <url|file>         # Ingest knowledge source
+village scribe fetch <url|file>       # Alias for see
+village scribe ask "question"         # Query knowledge base
+village scribe curate                 # Health check + regenerate VOICE.md
+village scribe upkeep                 # Alias for curate
+village scribe stats                  # Show wiki statistics
+village scribe monitor                # Watch wiki/ingest/ for new files
+village scribe goals                  # Show goal hierarchy
+village scribe goals --coverage       # Show objective completion %
+village scribe goals --edit           # Interactive refinement
+village scribe goals --json           # JSON output
+village scribe ledger show [task]     # View audit trail for a task
+village scribe ledger list            # List tasks with traces
 ```
 
 ### Architecture
@@ -220,11 +221,12 @@ Read it first for project context, conventions, and known issues.
 
 ### Manual testing
 ```bash
-village keeper see ./docs/guide.md
-village keeper see https://docs.example.com/api
-village keeper ask "how do I configure auth?"
-village keeper curate
-village keeper stats
+village scribe see ./docs/guide.md
+village scribe see https://docs.example.com/api
+village scribe ask "how do I configure auth?"
+village scribe curate
+village scribe stats
+village scribe ledger show bd-xyz
 ```
 
 ## Adaptive Onboarding
@@ -254,7 +256,7 @@ The onboarding pipeline:
 1. **Detect** (rule-based): Scan for pyproject.toml, package.json, etc.
 2. **Interview** (LLM adaptive): 10-15 BRUTAL-method questions
 3. **Generate**: AGENTS.md + README.md + wiki/ seeds
-4. **Process**: Keeper ingests wiki seeds, curate generates VOICE.md
+4. **Process**: Scribe ingests wiki seeds, curate generates VOICE.md
 
 ## Role-Based CLI Architecture
 
@@ -264,8 +266,7 @@ The onboarding pipeline:
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
 | **builder** | "Which specs shall I work on?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **keeper** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
-| **ledger** | "Which task are you looking for?" | `show`, `list` |
+| **scribe** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `ledger show`, `ledger list` |
 | **council** | "What shall we discuss?" | `debate`, `list`, `show`, `rematch` |
 | **doctor** | "What seems to be the problem?" | `check` |
 | **greeter** | "How can I help?" | General triage, routes to all roles |

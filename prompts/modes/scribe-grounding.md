@@ -1,9 +1,9 @@
 ---
-id: keeper-grounding
-title: Keeper Grounding Rules
+id: scribe-grounding
+title: Scribe Grounding Rules
 description: 3-rule document grounding for knowledge base queries
 requires: [base]
-tags: [mode:keeper-query]
+tags: [mode:scribe-query]
 ---
 
 ## Grounding Rules

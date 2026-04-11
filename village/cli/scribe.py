@@ -1,11 +1,14 @@
-"""Village Keeper — self-improving knowledge base CLI commands."""
+"""Village Scribe — knowledge base and audit trail CLI commands."""
 
 import json
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
 
+from village.config import get_config
+from village.errors import EXIT_ERROR
 from village.goals import (
     Goal,
     get_active_goals,
@@ -13,9 +16,10 @@ from village.goals import (
     get_objective_coverage_from_file,
     parse_goals,
 )
-from village.keeper.curate import Curator
-from village.keeper.store import KeeperStore
 from village.roles import run_role_chat
+from village.scribe.curate import Curator
+from village.scribe.store import ScribeStore
+from village.trace import TraceReader, format_trace
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -33,20 +37,20 @@ def _find_wiki_path() -> Path:
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-def keeper_group(ctx: click.Context) -> None:
+def scribe_group(ctx: click.Context) -> None:
     """Manage project knowledge base."""
     if ctx.invoked_subcommand is not None:
         return
-    run_role_chat("keeper")
+    run_role_chat("scribe")
 
 
-@keeper_group.command()
+@scribe_group.command()
 @click.argument("source")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def see(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base."""
     wiki_path = _find_wiki_path()
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
 
     result = store.see(source)
 
@@ -70,13 +74,13 @@ def see(source: str, json_output: bool) -> None:
             click.echo(f"  Tags: {', '.join(result.tags)}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 @click.argument("source")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def fetch(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base. (Alias for see)"""
     wiki_path = _find_wiki_path()
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
 
     result = store.see(source)
 
@@ -100,14 +104,14 @@ def fetch(source: str, json_output: bool) -> None:
             click.echo(f"  Tags: {', '.join(result.tags)}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 @click.argument("question")
 @click.option("--save", is_flag=True, help="Save answer as new wiki page")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def ask(question: str, save: bool, json_output: bool) -> None:
     """Query the knowledge base and synthesize an answer."""
     wiki_path = _find_wiki_path()
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
 
     result = store.ask(question, save=save)
 
@@ -127,13 +131,13 @@ def ask(question: str, save: bool, json_output: bool) -> None:
             click.echo(f"\nSources: {', '.join(result.sources)}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def curate(json_output: bool) -> None:
     """Health check and maintain the knowledge base."""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
     curator = Curator(store.store, wiki_path, project_root)
 
     result = curator.curate()
@@ -164,12 +168,12 @@ def curate(json_output: bool) -> None:
         click.echo(f"VOICE.md updated: {result.voice_updated}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 def upkeep() -> None:
     """Health check and maintain the knowledge base. (Alias for curate)"""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
     curator = Curator(store.store, wiki_path, project_root)
 
     result = curator.curate()
@@ -181,11 +185,11 @@ def upkeep() -> None:
     click.echo(f"VOICE.md updated: {result.voice_updated}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 def stats() -> None:
     """Show knowledge base statistics."""
     wiki_path = _find_wiki_path()
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
 
     entries = store.store.all_entries()
     log_path = wiki_path / "log.md"
@@ -210,21 +214,91 @@ def stats() -> None:
         click.echo(f"Log entries: {len(log_lines)}")
 
 
-@keeper_group.command()
+@scribe_group.command()
 @click.option("--interval", default=30, help="Poll interval in seconds")
 def monitor(interval: int) -> None:
     """Watch wiki/ingest/ for new files and process them."""
-    from village.keeper.monitor import Monitor
+    from village.scribe.monitor import Monitor
 
     wiki_path = _find_wiki_path()
-    store = KeeperStore(wiki_path)
+    store = ScribeStore(wiki_path)
     mon = Monitor(wiki_path, store, poll_interval=interval)
 
     click.echo(f"Monitoring {wiki_path / 'ingest'} every {interval}s (Ctrl+C to stop)")
     mon.start()
 
 
-@keeper_group.command("goals")
+@scribe_group.group("ledger")
+def ledger_group() -> None:
+    """Audit trail commands."""
+
+
+@ledger_group.command("show")
+@click.argument("task_id", required=False)
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def ledger_show(task_id: str | None, json_output: bool) -> None:
+    """View audit trail for a task."""
+    config = get_config()
+    reader = TraceReader(config.traces_dir)
+
+    if task_id is None:
+        task_ids = reader.list_traced_tasks()
+        if not task_ids:
+            click.echo("No audit trails found.")
+            return
+        click.echo("Traced tasks:")
+        for i, tid in enumerate(task_ids, 1):
+            click.echo(f"  {i}. {tid}")
+        choice = click.prompt("Which task?", type=int)
+        if choice < 1 or choice > len(task_ids):
+            raise click.ClickException("Invalid selection")
+        task_id = task_ids[choice - 1]
+
+    assert task_id is not None
+    events = reader.read(task_id)
+
+    if not events:
+        click.echo(f"No audit events for {task_id}")
+        sys.exit(EXIT_ERROR)
+
+    if json_output:
+        data = []
+        for event in events:
+            data.append(
+                {
+                    "timestamp": event.timestamp,
+                    "event_type": event.event_type.value,
+                    "task_id": event.task_id,
+                    "agent": event.agent,
+                    "data": event.data,
+                    "sequence": event.sequence,
+                }
+            )
+        click.echo(json.dumps(data, indent=2, sort_keys=True))
+    else:
+        click.echo(format_trace(events))
+
+
+@ledger_group.command("list")
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def ledger_list(json_output: bool) -> None:
+    """List tasks with audit trails."""
+    config = get_config()
+    reader = TraceReader(config.traces_dir)
+    task_ids = reader.list_traced_tasks()
+
+    if not task_ids:
+        click.echo("No audit trails found")
+        return
+
+    if json_output:
+        click.echo(json.dumps(task_ids, indent=2))
+    else:
+        for task_id in task_ids:
+            click.echo(task_id)
+
+
+@scribe_group.command("goals")
 @click.option("--edit", "edit_mode", is_flag=True, help="Interactive refinement mode")
 @click.option("--coverage", "show_coverage", is_flag=True, help="Show objective coverage")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
@@ -237,7 +311,7 @@ def goals_cmd(edit_mode: bool, show_coverage: bool, json_output: bool) -> None:
     all_goals = parse_goals(goals_path)
 
     if not all_goals:
-        click.echo("No GOALS.md found. Run 'village keeper curate' to bootstrap.")
+        click.echo("No GOALS.md found. Run 'village scribe curate' to bootstrap.")
         return
 
     if show_coverage:

@@ -1,4 +1,4 @@
-"""Curation engine for Keeper knowledge base.
+"""Curation engine for Scribe knowledge base.
 
 Finds orphans, stale content, broken links, and missing cross-references.
 Generates VOICE.md at project root.
@@ -44,7 +44,7 @@ class CurateResult:
 
 
 class Curator:
-    """Health checker and maintainer for the Keeper wiki."""
+    """Health checker and maintainer for the Scribe wiki."""
 
     def __init__(self, store: MemoryStore, wiki_path: Path, project_root: Path | None = None) -> None:
         self.store = store
@@ -126,7 +126,7 @@ class Curator:
 
         lines: list[str] = []
         lines.append("# Village Voice")
-        lines.append(f"> Last updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')} by Village Keeper")
+        lines.append(f"> Last updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d')} by Village Scribe")
         lines.append("")
 
         lines.append("## Recent Activity")

@@ -36,12 +36,11 @@ from village.cli import (  # noqa: E402
     dashboard,
     doctor,
     greeter,
-    keeper,
-    ledger,
     lifecycle,
     maintenance,
     planner,
     release,
+    scribe,
     state,
     tasks,
     work,
@@ -81,8 +80,8 @@ village.add_command(release.release)
 village.add_command(greeter.greeter, name="greeter")
 village.add_command(greeter.drafts)
 
-# Keeper
-village.add_command(keeper.keeper_group, name="keeper")
+# Scribe
+village.add_command(scribe.scribe_group, name="scribe")
 
 # ACP
 village.add_command(acp.acp_command, name="gate")
@@ -100,21 +99,5 @@ village.add_command(builder.builder_group, name="builder")
 # Council
 village.add_command(council.council_group, name="council")
 
-# Ledger (audit trail)
-village.add_command(ledger.ledger_group, name="ledger")
-
 # Tasks (built-in task store)
 village.add_command(tasks.tasks, name="tasks")
-
-# Backward-compatible aliases
-village.add_command(planner.planner_group, name="workflow")
-village.add_command(ledger.ledger_group, name="trace")
-village.add_command(greeter.greeter, name="help")
-village.add_command(greeter.greeter, name="chat")
-village.add_command(tasks.tasks, name="bd")
-
-# Other aliases
-village.add_command(dashboard.dashboard, name="square")
-village.add_command(maintenance.cleanup, name="sweep")
-village.add_command(state.status, name="census")
-village.add_command(state.state, name="archives")

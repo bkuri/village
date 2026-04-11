@@ -1,15 +1,15 @@
-"""Tests for Keeper polling-based file monitor."""
+"""Tests for Scribe polling-based file monitor."""
 
 from pathlib import Path
 
-from village.keeper.monitor import Monitor
-from village.keeper.store import KeeperStore
+from village.scribe.monitor import Monitor
+from village.scribe.store import ScribeStore
 
 
 class TestPollWithNewFile:
     def test_processes_new_file(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         ingest_dir = wiki_path / "ingest"
@@ -27,7 +27,7 @@ class TestPollWithNewFile:
 class TestPollWithNoNewFiles:
     def test_returns_empty_when_no_files(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         mon = Monitor(wiki_path, store, poll_interval=5)
@@ -37,7 +37,7 @@ class TestPollWithNoNewFiles:
 
     def test_returns_empty_when_all_seen(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         ingest_dir = wiki_path / "ingest"
@@ -53,7 +53,7 @@ class TestPollWithNoNewFiles:
 class TestPollMultipleNewFiles:
     def test_processes_multiple_files(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         ingest_dir = wiki_path / "ingest"
@@ -72,7 +72,7 @@ class TestPollMultipleNewFiles:
 class TestSeenStatePersistence:
     def test_seen_files_persist_across_instances(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         ingest_dir = wiki_path / "ingest"
@@ -82,7 +82,7 @@ class TestSeenStatePersistence:
         results1 = mon1.poll()
         assert len(results1) == 1
 
-        store2 = KeeperStore(wiki_path)
+        store2 = ScribeStore(wiki_path)
         mon2 = Monitor(wiki_path, store2, poll_interval=5)
         results2 = mon2.poll()
         assert results2 == []
@@ -91,7 +91,7 @@ class TestSeenStatePersistence:
 class TestStop:
     def test_stop_sets_running_false(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         mon = Monitor(wiki_path, store, poll_interval=5)
 
         mon._running = True
@@ -103,7 +103,7 @@ class TestStop:
 class TestPollNoIngestDir:
     def test_returns_empty_when_no_ingest_dir(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
 
         mon = Monitor(wiki_path, store, poll_interval=5)
         results = mon.poll()
@@ -114,7 +114,7 @@ class TestPollNoIngestDir:
 class TestStateFileCorruption:
     def test_handles_corrupted_state_file(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = KeeperStore(wiki_path)
+        store = ScribeStore(wiki_path)
         store._ensure_dirs()
 
         state_path = tmp_path / ".village" / "monitor_state.json"
