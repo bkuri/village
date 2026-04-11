@@ -51,7 +51,7 @@ from village.cli import (  # noqa: E402
 for cmd_name in ["new", "up", "down"]:
     village.add_command(lifecycle.lifecycle_group.commands[cmd_name])
 
-village.add_command(lifecycle.lifecycle_group.commands["up"], name="onboard")
+village.add_command(lifecycle.lifecycle_group.commands["onboard"])
 
 # State inspection commands
 village.add_command(state.status)
@@ -89,7 +89,7 @@ village.add_command(acp.acp_command, name="gate")
 village.add_command(acp.acp_command)
 
 # Doctor
-village.add_command(doctor.doctor_command)
+village.add_command(doctor.doctor_group)
 
 # Planner (workflow design)
 village.add_command(planner.planner_group, name="planner")

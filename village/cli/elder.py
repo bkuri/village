@@ -42,15 +42,15 @@ def elder_group(ctx: click.Context) -> None:
 
 @elder_group.command()
 @click.argument("source")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def see(source: str, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def see(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base."""
     wiki_path = _find_wiki_path()
     store = ElderStore(wiki_path)
 
     result = store.see(source)
 
-    if as_json:
+    if json_output:
         click.echo(
             json.dumps(
                 {
@@ -72,15 +72,15 @@ def see(source: str, as_json: bool) -> None:
 
 @elder_group.command()
 @click.argument("source")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def fetch(source: str, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def fetch(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base. (Alias for see)"""
     wiki_path = _find_wiki_path()
     store = ElderStore(wiki_path)
 
     result = store.see(source)
 
-    if as_json:
+    if json_output:
         click.echo(
             json.dumps(
                 {
@@ -103,15 +103,15 @@ def fetch(source: str, as_json: bool) -> None:
 @elder_group.command()
 @click.argument("question")
 @click.option("--save", is_flag=True, help="Save answer as new wiki page")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def ask(question: str, save: bool, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def ask(question: str, save: bool, json_output: bool) -> None:
     """Query the knowledge base and synthesize an answer."""
     wiki_path = _find_wiki_path()
     store = ElderStore(wiki_path)
 
     result = store.ask(question, save=save)
 
-    if as_json:
+    if json_output:
         click.echo(
             json.dumps(
                 {
@@ -128,8 +128,8 @@ def ask(question: str, save: bool, as_json: bool) -> None:
 
 
 @elder_group.command()
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def curate(as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def curate(json_output: bool) -> None:
     """Health check and maintain the knowledge base."""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
@@ -138,7 +138,7 @@ def curate(as_json: bool) -> None:
 
     result = curator.curate()
 
-    if as_json:
+    if json_output:
         click.echo(
             json.dumps(
                 {

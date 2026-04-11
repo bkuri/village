@@ -43,14 +43,14 @@ def council_group(
 
 @council_group.command("list")
 @click.option("--type", "meeting_type", type=click.Choice(["chat", "debate"]), help="Filter by type")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def list_councils(meeting_type: Optional[str], as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def list_councils(meeting_type: Optional[str], json_output: bool) -> None:
     """List past councils."""
     wiki_path = _find_wiki_path()
     councils_dir = wiki_path / "councils"
 
     if not councils_dir.exists():
-        if as_json:
+        if json_output:
             click.echo("[]")
         else:
             click.echo("No councils found.")
@@ -80,7 +80,7 @@ def list_councils(meeting_type: Optional[str], as_json: bool) -> None:
 
         entries.append(entry)
 
-    if as_json:
+    if json_output:
         click.echo(json.dumps(entries, indent=2))
     else:
         if not entries:
@@ -92,8 +92,8 @@ def list_councils(meeting_type: Optional[str], as_json: bool) -> None:
 
 @council_group.command()
 @click.argument("council_id")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def show(council_id: str, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def show(council_id: str, json_output: bool) -> None:
     """Show a council transcript."""
     wiki_path = _find_wiki_path()
     transcript_path = wiki_path / "councils" / council_id / "transcript.md"
@@ -104,7 +104,7 @@ def show(council_id: str, as_json: bool) -> None:
 
     content = transcript_path.read_text(encoding="utf-8")
 
-    if as_json:
+    if json_output:
         lines = content.split("\n")
         metadata: dict[str, str] = {}
         turns: list[dict[str, str]] = []
@@ -129,8 +129,8 @@ def show(council_id: str, as_json: bool) -> None:
 
 @council_group.command()
 @click.argument("council_id")
-@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
-def rematch(council_id: str, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def rematch(council_id: str, json_output: bool) -> None:
     """Re-run a council with the same configuration."""
     wiki_path = _find_wiki_path()
     transcript_path = wiki_path / "councils" / council_id / "transcript.md"
@@ -189,10 +189,69 @@ def rematch(council_id: str, as_json: bool) -> None:
     if path:
         click.echo(f"\nTranscript saved: {path}")
 
-    if as_json:
+    if json_output:
         output = {
             "council_id": state.council_id,
             "original_id": council_id,
+            "topic": state.topic,
+            "meeting_type": state.meeting_type,
+            "status": state.status,
+        }
+        click.echo(json.dumps(output, indent=2))
+
+
+@council_group.command()
+@click.argument("topic")
+@click.option("--type", "meeting_type", type=click.Choice(["chat", "debate"]), default="debate", help="Meeting type")
+@click.option("--personas", type=str, help="Comma-separated persona names")
+@click.option("--rounds", type=int, help="Number of rounds")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+def debate(
+    topic: str,
+    meeting_type: str,
+    personas: Optional[str],
+    rounds: Optional[int],
+    json_output: bool,
+) -> None:
+    """Start a council debate on a topic."""
+    config = get_config()
+    engine = _get_engine(config.council)
+
+    persona_names: Optional[list[str]] = None
+    if personas:
+        persona_names = [p.strip() for p in personas.split(",") if p.strip()]
+
+    state = engine.start_meeting(
+        topic=topic,
+        meeting_type=meeting_type,
+        persona_names=persona_names,
+    )
+
+    if rounds is not None:
+        state.max_rounds = rounds
+
+    click.echo(f"Council: {state.council_id}")
+    click.echo(f"  Topic: {state.topic}")
+    click.echo(f"  Personas: {', '.join(p.name for p in state.personas)}")
+
+    for _ in range(state.max_rounds):
+        turns = engine.run_round(state)
+        if not turns:
+            break
+
+        for turn in turns:
+            click.echo(f"\n  [{turn.persona_name}]: {turn.content[:200]}")
+
+    resolution = engine.resolve(state)
+    click.echo(f"\nResolution: {resolution.summary[:300]}")
+
+    path = engine.save_and_close(state)
+    if path:
+        click.echo(f"\nTranscript saved: {path}")
+
+    if json_output:
+        output = {
+            "council_id": state.council_id,
             "topic": state.topic,
             "meeting_type": state.meeting_type,
             "status": state.status,

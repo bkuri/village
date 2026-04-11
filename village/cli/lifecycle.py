@@ -244,6 +244,28 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bo
             _run_onboard(config.git_root, force=force, skip_interview=skip_interview)
 
 
+@lifecycle_group.command("onboard")
+@click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md")
+@click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
+def onboard(force: bool, skip_interview: bool) -> None:
+    """Run adaptive onboarding for current project.
+
+    Generates AGENTS.md, README.md, and wiki seeds based on an
+    adaptive interview about your project.
+
+    Use --force to overwrite existing files.
+    Use --skip-interview to use scaffold defaults without prompts.
+    """
+    from village.probes.repo import find_git_root
+
+    try:
+        git_root = find_git_root()
+    except RuntimeError:
+        raise click.ClickException("Not in a git repository. Use 'village new' to create a project.")
+
+    _run_onboard(git_root, force=force, skip_interview=skip_interview)
+
+
 @lifecycle_group.command("down")
 @click.option("--dry-run", is_flag=True, help="Show what would be killed")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")

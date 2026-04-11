@@ -134,7 +134,7 @@ class TestRoleChatInit:
 
     def test_skills(self):
         chat = RoleChat("builder")
-        assert len(chat.skills) == 5
+        assert len(chat.skills) == 2
         assert chat.skills[0].name == "run"
 
     def test_routing(self):

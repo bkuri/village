@@ -18,20 +18,7 @@ from village.logging import get_logger
 logger = get_logger(__name__)
 
 
-@click.command()
-@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-@click.option("--output", type=click.Path(), help="Write report to file")
-@click.option("--prescribe", is_flag=True, help="Interactively create tasks from findings")
-@click.option(
-    "--preselect",
-    type=click.Choice(["all", "high", "medium"]),
-    default=None,
-    help="Pre-select findings by severity: all, high, or medium (includes high)",
-)
-@click.option("--only", type=str, help="Only run specified analyzers (comma-separated)")
-@click.option("--sequential", is_flag=True, help="Run analyzers sequentially (not in parallel)")
-@click.pass_context
-def doctor_command(
+def _run_check(
     ctx: click.Context,
     json_output: bool,
     output: str | None,
@@ -40,20 +27,6 @@ def doctor_command(
     only: str | None,
     sequential: bool,
 ) -> None:
-    """Run project health diagnostics.
-
-    Analyzes the project for issues and optionally creates tasks to fix them.
-
-    \b
-    Examples:
-        village doctor                  # Run all analyzers
-        village doctor --json           # JSON output
-        village doctor --prescribe      # Select findings to create as tasks
-        village doctor --prescribe --preselect all     # Pre-select all findings
-        village doctor --prescribe --preselect high    # Pre-select high severity
-        village doctor --prescribe --preselect medium  # Pre-select medium+high
-        village doctor --only tests     # Only run test analyzer
-    """
     config = ctx.obj.get("config") if ctx.obj else get_config()
 
     analyzers = []
@@ -92,3 +65,59 @@ def doctor_command(
             created = asyncio.run(create_tasks_from_findings(selected, config))
             for title, task_id in created.items():
                 click.echo(f"  {task_id}: {title}")
+
+
+@click.group(invoke_without_command=True)
+@click.pass_context
+def doctor_group(ctx: click.Context) -> None:
+    """Run project health diagnostics."""
+    if ctx.invoked_subcommand is not None:
+        return
+    ctx.invoke(
+        check,
+        json_output=False,
+        output=None,
+        prescribe=False,
+        preselect=None,
+        only=None,
+        sequential=False,
+    )
+
+
+@doctor_group.command("check")
+@click.option("--json", "json_output", is_flag=True, help="Output as JSON")
+@click.option("--output", type=click.Path(), help="Write report to file")
+@click.option("--prescribe", is_flag=True, help="Interactively create tasks from findings")
+@click.option(
+    "--preselect",
+    type=click.Choice(["all", "high", "medium"]),
+    default=None,
+    help="Pre-select findings by severity: all, high, or medium (includes high)",
+)
+@click.option("--only", type=str, help="Only run specified analyzers (comma-separated)")
+@click.option("--sequential", is_flag=True, help="Run analyzers sequentially (not in parallel)")
+@click.pass_context
+def check(
+    ctx: click.Context,
+    json_output: bool,
+    output: str | None,
+    prescribe: bool,
+    preselect: str | None,
+    only: str | None,
+    sequential: bool,
+) -> None:
+    """Run project health diagnostics.
+
+    Analyzes the project for issues and optionally creates tasks to fix them.
+
+    \b
+    Examples:
+        village doctor                  # Run all analyzers
+        village doctor --json           # JSON output
+        village doctor --prescribe      # Select findings to create as tasks
+        village doctor --prescribe --preselect all     # Pre-select all findings
+        village doctor --prescribe --preselect high    # Pre-select high severity
+        village doctor --prescribe --preselect medium  # Pre-select medium+high
+        village doctor --only tests     # Only run test analyzer
+    """
+    _run_check(ctx, json_output, output, prescribe, preselect, only, sequential)

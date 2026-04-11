@@ -8,134 +8,135 @@
 
 **A tiny operating system for parallel development.**
 
-Village orchestrates multiple AI agents working in parallel — safely, locally, and transparently — using tools you already trust:
+Village orchestrates multiple AI agents working in parallel — safely, locally, and transparently — using tools you already trust: tmux, git, and your task store. It provides role-based specialists for planning, building, knowledge management, and deliberation, all coordinated through a spec-driven autonomous build loop.
 
-- **Beads** for task readiness and dependencies
-- **tmux** for runtime truth and observability
-- **git worktrees** for isolation
-- **OpenCode** for execution
-- **ppc** (optional) for deterministic contracts
-
-No daemon.
-No database.
-No hidden state.
-
-**Extensible by design**: Village provides a 7-point extensibility framework for domain customization without forking.
+No daemon. No database. No hidden state.
 
 ---
 
 ## Why Village?
 
-Modern development has a coordination problem.
+Modern development has a coordination problem. We can run multiple AI agents — but we can't reliably coordinate them. Most systems fail in one of three ways:
 
-We can run multiple AI agents — but we can't reliably coordinate them.
+- **Too much magic** — Background services, opaque schedulers, hidden state.
+- **Too much ceremony** — YAML pipelines, workflow DSLs, configuration graphs.
+- **No recovery model** — When terminals close or machines reboot, work is duplicated or lost.
 
-Most systems fail in one of three ways:
+Village takes a different approach. It treats your local machine like a **tiny operating system**:
 
-### ❌ Too much magic
-Background services, opaque schedulers, hidden state.
-
-### ❌ Too much ceremony
-YAML pipelines, workflow DSLs, configuration graphs.
-
-### ❌ No recovery model
-When terminals close or machines reboot, work is duplicated or lost.
-
----
-
-### Village takes a different approach
-
-Village treats your local machine like a **tiny operating system**:
-
-- **Beads** decides *what work is ready*
+- **Task store** decides *what work is ready*
 - **Village** decides *who should work on it*
 - **tmux panes** prove *what is actually running*
 
-If the pane exists → work exists.
-If it doesn't → it doesn't.
-
-No guessing.
-
----
-
-## Village vs OpenCode + PPC: Why You Need Both
-
-### What OpenCode + PPC Provides
-
-**OpenCode + PPC** is great for:
-- Generating prompts deterministically
-- Running isolated AI sessions
-- Single-task execution
-
-### What Village Provides (That OpenCode Cannot)
-
-1. **Multi-Agent Coordination**
-   - Lock system prevents duplicate work
-   - Concurrency limits enforce fairness
-   - Priority scheduling optimizes throughput
-
-2. **State Management**
-   - Lock files survive crashes
-   - Event logs capture audit trails
-   - Orphan detection cleans up failures
-
-3. **Observability**
-   - Real-time dashboard shows system state
-   - Metrics export integrates with monitoring
-   - Event queries provide historical inspection
-
-4. **Safety Guarantees**
-   - Conflict detection prevents data corruption
-   - Automatic rollback recovers from failures
-   - Resource quotas prevent exhaustion
-
-### The "Local, Auditable" Advantage
-
-Village runs as a **local service with auditable source code**:
-- ✅ Source code can be inspected and verified
-- ✅ Log files capture exact execution paths
-- ✅ Stack traces trace through local code
-- ✅ Tests guarantee behavior (deterministic, reproducible)
-- ✅ No black-box decisions (everything is explainable)
-
-**Contrast with LLM-only approaches:**
-- ❌ LLMs are black boxes (cannot inspect reasoning)
-- ❌ Cannot guarantee what happened vs what should happen
-- ❌ No source code to review or audit
-- ❌ Behavior may be non-deterministic
-- ❌ Cannot trust execution without transparency
-
-**This matters because:**
-- **Security**: Local code can be audited; LLMs cannot
-- **Debugging**: Stack traces point to exact line; LLM outputs do not
-- **Reproducibility**: Same input → same output; LLMs may vary
-- **Trust**: You can verify Village's source code; you cannot verify an LLM
-- **Compliance**: Audit trails require verifiable source code
-
-**Village's core differentiator**: Not execution (OpenCode does that), not prompts (PPC does that), but **coordination infrastructure** with audit trails, safety guarantees, and production reliability.
+If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
 
 ---
 
 ## Features
 
-- **Multi-agent coordination**: Lock system prevents duplicate work, concurrency limits enforce fairness
-- **State management**: Lock files survive crashes, event logs capture audit trails
-- **Observability**: Real-time dashboard, metrics export, event queries
-- **Safety guarantees**: Conflict detection, automatic rollback, resource quotas
-- **Task decomposition**: Complex tasks automatically broken into subtasks using ST → AoT Light strategy (Sequential Thinking analysis + Atom of Thoughts atomization)
-- **ACP integration**: Works with Agent Client Protocol for editor integration and external agents
-  - Use Village from Zed, JetBrains, and other ACP editors
-  - Orchestrate Claude Code, Gemini CLI, and other ACP agents
-  - Real-time notifications and streaming updates
-- **Extensibility framework**: 7 extension points for domain customization without forking
-  - Custom readiness engines (replace Beads)
-  - Custom SCM backends (Git, Jujutsu, or your own)
-  - Custom probes (domain-specific runtime checks)
-  - Custom renderers (JSON, text, or your own format)
-  - Custom queue hooks (pre/post processing)
-  - Custom task contracts (domain-specific templates)
-  - Custom CLI commands (domain-specific workflows)
-- **Zero-dependency**: Runs with tools you already trust (tmux, git, beads, opencode)
+### Role-Based Specialists
+
+| Role | Default Chat | Subcommands |
+|------|-------------|-------------|
+| **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
+| **builder** | "Which workflow shall I run?" | `run`, `status`, `stop`, `resume`, `logs` |
+| **elder** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
+| **ledger** | "Which task are you looking for?" | `show`, `list` |
+| **council** | "What shall we discuss?" | `list`, `show`, `rematch` |
+| **doctor** | "What seems to be the problem?" | `check` |
+| **greeter** | "How can I help?" | General triage, routes to all roles |
+
+Each role has its own greeting, skills, and cross-routing rules. Roles hand off to each other via `ROUTE:` and `ADVISE:` markers.
+
+### Spec-Driven Build Loop
+
+The builder implements specs autonomously via the Ralph Wiggum methodology:
+
+```bash
+village planner design <goal>          # LLM pipeline → produces spec in specs/
+village planner inspect                # Review all specs (read-only)
+village planner inspect --fix          # Review + amend specs
+village planner refine <spec-id>       # Iterate on a spec
+
+village builder run                    # Loop through specs (sequential)
+village builder run -p 4               # Parallel mode, 4 worktrees
+village builder run -n 20              # Max 20 iterations
+village builder run --dry-run          # Preview without executing
+village builder status                 # Show spec completion progress
+```
+
+### Elder Knowledge Base
+
+```bash
+village elder see <url|file>           # Ingest knowledge source
+village elder ask "question"           # Query knowledge base
+village elder curate                   # Health check + regenerate VOICE.md
+village elder stats                    # Show wiki statistics
+village elder goals                    # Show goal hierarchy
+village elder goals --coverage         # Show objective completion %
+```
+
+Sources are auto-tagged, cross-linked, and stored as markdown with YAML frontmatter. The curated knowledge distills into `VOICE.md` for agent context.
+
+### Council Deliberation
+
+Multi-persona debate with transcript recording:
+
+```bash
+village council debate <topic>         # Start a deliberation
+village council list                   # Past councils
+village council show <id>              # View transcript
+village council rematch <id>           # Re-run with same config
+```
+
+### Adaptive Onboarding
+
+```bash
+village new <name>                     # Create project with adaptive interview
+village up                             # Detects incomplete setup, runs interview
+village onboard                        # Force-run onboarding
+village onboard --force                # Overwrite existing files
+```
+
+The onboarding pipeline detects your project type, runs an LLM-driven adaptive interview (10-15 questions), and generates `AGENTS.md` + `README.md` + wiki seeds.
+
+### ACP Integration
+
+Village supports the **Agent Client Protocol (ACP)** for editor integration and external agents:
+
+```bash
+# Server mode (for editors like Zed, JetBrains)
+village acp
+
+# Client mode (orchestrate external agents)
+village acp --list-agents
+village acp --test claude
+```
+
+### Workflow Engine
+
+YAML-based workflow definitions with LLM-driven planning:
+
+```bash
+village planner workflows             # List available workflows
+village planner show decomposer       # Show workflow steps
+village planner design <goal>         # Design a new workflow via LLM
+village planner refine <goal>         # Refine an existing workflow
+```
+
+Step types: `prompt`, `critique`, `decompose`, `research`, `synthesize`.
+
+### Core Infrastructure
+
+- **Multi-agent coordination** — Lock system prevents duplicate work, concurrency limits enforce fairness
+- **State management** — Lock files survive crashes, event logs capture audit trails, orphan detection cleans up failures
+- **Observability** — Real-time dashboard, metrics export (Prometheus/StatsD), event queries
+- **Safety guarantees** — Conflict detection, automatic rollback, resource quotas
+- **Doctor framework** — Built-in health checks for git, quality, and tests; extensible with custom analyzers
+- **Release automation** — Semver bumps from task metadata, categorized changelogs, git tags
+- **Native task store** — File-based task management with dependencies, search, and atomic operations
+- **File-based memory** — Markdown memory store with find/recent/related search
+- **Extensibility** — 7 extension points for domain customization without forking
 
 ---
 
@@ -144,26 +145,33 @@ Village runs as a **local service with auditable source code**:
 ```mermaid
 flowchart TB
     subgraph Intent["Intent Plane"]
-        BD[Beads<br/>Task DAG]
+        TS[Task Store<br/>DAG + Dependencies]
     end
 
-    subgraph Coordination["Coordination Plane"]
-        V[Village<br/>Scheduler]
-        L[Lock Files<br/>Pane-ID leases]
+    subgraph Roles["Role Plane"]
+        P[Planner<br/>Spec Design]
+        B[Builder<br/>Spec Execution]
+        E[Elder<br/>Knowledge Base]
+        C[Council<br/>Deliberation]
+        L[Ledger<br/>Audit Trails]
+        D[Doctor<br/>Health Checks]
     end
 
     subgraph Execution["Execution Plane"]
         TMUX[tmux panes]
         WT[git worktrees]
-        OC[OpenCode agents]
+        ACP[ACP agents]
     end
 
-    BD -->|ready tasks| V
-    V -->|claims| L
-    L -->|binds to| TMUX
+    TS -->|ready tasks| P
+    P -->|specs| B
+    B -->|claims| TMUX
     TMUX --> WT
-    TMUX --> OC
-    TMUX -->|runtime truth| V
+    TMUX --> ACP
+    E -->|context| P
+    E -->|context| B
+    C -->|advice| P
+    TMUX -->|runtime truth| B
 ```
 
 ---
@@ -171,111 +179,117 @@ flowchart TB
 ## Quickstart (60 seconds)
 
 ```bash
-village up
-village ready
-village queue --n 3
+village up                              # Initialize runtime
+village new my-project                   # Create project with onboarding
+village planner design "Add auth"        # Design a spec
+village builder run                      # Implement specs autonomously
 ```
 
-To use custom extensions, add to `.village/config`:
-```ini
-[extensions]
-readiness_engine=village.ext.research
+Task management:
+
+```bash
+village tasks list                       # List tasks
+village tasks create "Fix login bug"     # Create a task
+village tasks ready                      # Show ready tasks
+village queue --n 3                      # Start 3 tasks
+village status --workers                 # Show active workers
 ```
 
 Inspect anytime:
 
 ```bash
-village status --workers
-village resume
+village doctor check                    # Run health checks
+village elder curate                    # Maintain knowledge base
+village ledger show bd-xyz              # View audit trail
+village release --dry-run               # Preview release
 ```
 
 ---
 
-## Philosophy
+## Commands Reference
 
-Village is intentionally boring.
+### Core Operations
 
-It does not hide execution.
-It does not predict intent.
-It does not require belief.
+| Command | Description |
+|---------|-------------|
+| `village up` | Initialize Village runtime (idempotent) |
+| `village down` | Stop Village runtime (kill tmux session) |
+| `village new <name>` | Create project with adaptive onboarding |
+| `village onboard` | Force-run onboarding on existing project |
+| `village ready` | Check if Village is ready for work |
+| `village status` | Show Village status (`--workers`, `--locks`, `--orphans`, `--short`, `--json`) |
+| `village events` | Show recent events (`--task`, `--cmd`, `--limit`, `--json`) |
 
-It simply coordinates reality.
+### Task Management
 
----
+| Command | Description |
+|---------|-------------|
+| `village tasks list` | List tasks (`--status`, `--type`, `--label`, `--limit`, `--json`) |
+| `village tasks show <id>` | Show task details (`--json`) |
+| `village tasks create <title>` | Create a task (`-d`, `--type`, `-p`, `-l`, `--depends-on`, `--blocks`) |
+| `village tasks ready` | Show ready tasks (`--json`) |
+| `village tasks update <id>` | Update a task (`--status`, `-l`, `-p`, `-d`, `--title`) |
+| `village tasks search <query>` | Search tasks by keyword |
+| `village tasks prime` | Show workflow context for current project |
 
-## ACP Integration
+### Planning & Building
 
-Village supports **Agent Client Protocol (ACP)** for editor integration via stdio.
+| Command | Description |
+|---------|-------------|
+| `village planner design <goal>` | Design a spec via LLM pipeline |
+| `village planner inspect [spec]` | Review specs for cross-cutting issues (`--fix`) |
+| `village planner refine <spec>` | Iterate on a spec |
+| `village planner workflows` | List available workflow templates |
+| `village builder run` | Run autonomous spec-driven build loop |
+| `village builder status` | Show build loop status |
+| `village builder stop` | Stop a running build loop |
+| `village builder resume` | Resume a stopped build loop |
 
-### What is ACP?
+### Elder (Knowledge Base)
 
-ACP is an open protocol for standardized communication between AI agents and clients (editors, IDEs). Village runs as a stdio-based ACP agent that editors can launch directly.
+| Command | Description |
+|---------|-------------|
+| `village elder see <source>` | Ingest a URL or file into wiki |
+| `village elder ask "question"` | Query the knowledge base |
+| `village elder curate` | Health check + regenerate VOICE.md |
+| `village elder goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
+| `village elder stats` | Show wiki statistics |
+| `village elder monitor` | Watch wiki/ingest/ for new files |
 
-### Quick Start
+### Council (Deliberation)
 
-```bash
-# Enable ACP in config
-cat >> .village/config <<EOF
-[acp]
-enabled = true
-EOF
+Start a deliberation session with `village council` (no subcommand) or use subcommands:
 
-# Run Village as an ACP agent (for editors)
-village acp
+| Command | Description |
+|---------|-------------|
+| `village council` | Start a deliberation session (RoleChat) |
+| `village council list` | List past councils (`--type`, `--json`) |
+| `village council show <id>` | View a council transcript (`--json`) |
+| `village council rematch <id>` | Re-run with same configuration (`--json`) |
 
-# List configured external agents
-village acp --list-agents
+### Other Commands
 
-# Test connection to external agent
-village acp --test claude
-```
+| Command | Description |
+|---------|-------------|
+| `village doctor check` | Run project health diagnostics (`--json`, `--prescribe`) |
+| `village ledger show [id]` | View audit trail for a task (`--json`) |
+| `village ledger list` | List tasks with audit trails (`--json`) |
+| `village release` | Apply pending version bumps, update changelog, create tag |
+| `village dashboard` | Real-time dashboard (`--watch`, `--refresh-interval`) |
+| `village metrics` | Export metrics (`--backend`, `--port`) |
+| `village acp` | Run as ACP agent (for editor integration) |
+| `village greeter` | Start ephemeral Q&A session |
 
-### Editor Configuration
+### Backward-Compatible Aliases
 
-**Zed Editor** (`~/.config/zed/settings.json`):
-```json
-{
-  "assistant": {
-    "default_model": {
-      "provider": "custom",
-      "command": ["village", "acp"]
-    }
-  }
-}
-```
-
-**JetBrains IDEs:**
-1. Install ACP plugin
-2. Configure custom agent command: `village acp`
-
-### External Agents
-
-Configure external ACP agents (Claude Code, Gemini CLI):
-```ini
-[agent.claude]
-type = acp
-acp_command = claude-code
-acp_capabilities = filesystem,terminal
-```
-
-### Supported Editors
-
-- ✅ **Zed Editor** - Native ACP support
-- ✅ **JetBrains IDEs** - Via ACP plugin
-- 🔄 **VS Code** - Planned (community plugin needed)
-
-### Supported External Agents
-
-- ✅ **Claude Code** - Anthropic's CLI
-- ✅ **Gemini CLI** - Google's CLI
-- ✅ **Custom agents** - Any ACP-compliant agent
-
-### Documentation
-
-- **[ACP Integration Guide](docs/ACP_INTEGRATION.md)** - Architecture and overview
-- **[ACP Configuration](docs/ACP_CONFIGURATION.md)** - Complete config reference
-- **[ACP Examples](docs/ACP_EXAMPLES.md)** - Real-world usage examples
-- **[ACP API Reference](docs/ACP_API_REFERENCE.md)** - Detailed API docs
+| Alias | Maps To |
+|-------|---------|
+| `village workflow` | `village planner` |
+| `village trace` | `village ledger` |
+| `village help` / `village chat` | `village greeter` |
+| `village square` | `village dashboard` |
+| `village sweep` | `village cleanup` |
+| `village census` | `village archives` |
 
 ---
 
@@ -289,183 +303,111 @@ acp_capabilities = filesystem,terminal
 | `VILLAGE_WORKTREES_DIR` | Worktrees directory | `.worktrees/` |
 | `VILLAGE_MAX_WORKERS` | Max parallel workers | 2 |
 | `VILLAGE_DEFAULT_AGENT` | Default agent name | `worker` |
-| `VILLAGE_SCM` | SCM backend (Git or Jujutsu) | `git` |
-
-**Example:**
-```bash
-export VILLAGE_MAX_WORKERS=4
-export VILLAGE_SCM=git
-village queue --n 2
-```
+| `VILLAGE_SCM` | SCM backend (git or jj) | `git` |
 
 ### Config File (.village/config)
 
-Village uses an INI-style config file for agent configuration:
+Village uses an INI-style config file with sections for agents, LLM, safety, and more:
 
 ```ini
 [DEFAULT]
 DEFAULT_AGENT=worker
 SCM=git
 
+[onboard]
+interview_model=openrouter/auto
+max_questions=15
+critic_persona=red-team
+self_critique=true
+
 [agent.build]
 opencode_args=--mode patch --safe
 contract=contracts/build.md
-ppc_mode=build
-ppc_traits=conservative,terse
-ppc_format=markdown
 
-[agent.frontend]
-opencode_args=--mode patch
-contract=contracts/frontend.md
-ppc_mode=explore
-ppc_traits=verbose
-ppc_format=markdown
+[agent.claude]
+type=acp
+acp_command=claude-code
+acp_capabilities=filesystem,terminal
+
+[council]
+default_type=chat
+max_turns=10
+resolution_strategy=synthesis
 ```
 
-To use Jujutsu (jj) instead of Git:
+### ACP Editor Configuration
 
-```ini
-[DEFAULT]
-DEFAULT_AGENT=worker
-SCM=jj
+**Zed Editor** (`~/.config/zed/settings.json`):
 
-[agent.build]
-# ... rest of config
+```json
+{
+  "assistant": {
+    "default_model": {
+      "provider": "custom",
+      "command": ["village", "acp"]
+    }
+  }
+}
 ```
 
-### PPC Integration (Optional)
-
-If `ppc` is installed, Village can generate contracts automatically:
-
-```ini
-[agent.build]
-ppc_mode=build
-ppc_traits=conservative,terse
-ppc_format=markdown
-```
-
-**Priority order:**
-1. Custom contract file (if specified)
-2. PPC-generated prompt (if available)
-3. Fallback Markdown template
-
-If PPC is unavailable, Village falls back to Markdown templates.
+**JetBrains IDEs:** Install ACP plugin, configure custom agent command: `village acp`
 
 ---
 
-## Version History
+## Spec Format
 
-### v1.3 - Jujutsu (jj) Support (Released)
+Specs are numbered markdown files in `specs/`:
 
-Jujutsu (jj) backend implementation, leveraging the SCM abstraction from v1.1.
+```markdown
+# 001-core-config
 
-**What's Included:**
-- New `village/scm/jj.py` backend implementing the SCM Protocol
-- Opt-in support via `SCM=jj` in config or environment variable
-- Village workspaces use `.worktrees/bd-a3f8/` pattern (same as Git backend)
-- Identical Village commands for both Git and jj backends
-- No migration required for existing Git users
+## Overview
+Core configuration and CLI framework.
 
-**Configuration:**
-```bash
-# Default (Git)
-village queue
+## Status: incomplete
 
-# Use Jujutsu backend
-SCM=jj village queue
-# or in .village/config:
-# [DEFAULT]
-# SCM=jj
+## Requirements
+- FR-1: Load config from INI files
+  - [ ] Parses `.village/config` correctly
+  - [ ] Falls back to defaults
+
+## Completion Signal
+Run `village doctor check` and verify all pass.
+<promise>DONE</promise>
 ```
 
-**Benefits:**
-- Validates SCM abstraction design from v1.1
-- Provides early value for jj users without waiting for v2
-- Git backend remains default and fully supported
-- Zero core logic changes (pure SCM backend addition)
-
-**Implementation Details:**
-- JJSCM kind attribute returns "jj"
-- All SCM protocol methods implemented: `ensure_repo`, `check_clean`, `ensure_workspace`, `remove_workspace`, `list_workspaces`
-- Workspace management follows Village's `.worktrees/bd-a3f8/` pattern
-- Configuration validation ensures only valid SCM kinds ("git" or "jj")
-- Error handling fails fast if `jj` binary not found
-
-**Timeline:** Estimated 8-12 hours over 2-3 days
+- **Priority**: Lexicographic filename order (001, 002, ...)
+- **Completion**: `Status: COMPLETE` written by the agent when done
+- **Promise signal**: Agent outputs `<promise>DONE</promise>` when all criteria met
+- **Inspect Notes**: Appended by `planner inspect --fix`, treated as hard constraints
 
 ---
 
-### v1.2 - Reliability & Observability
-
-Event logging, queue deduplication, and enhanced cleanup for production reliability.
-
-**Event Logging:**
-- Automatic audit trail in `.village/events.log` (NDJSON)
-- All operations logged with timestamps, task IDs, and results
-- Use for crash recovery, debugging, and audit
-
-**Queue Deduplication:**
-- Prevents tasks from running twice within configurable TTL (default: 5 min)
-- Override with `village queue --force`
-- Configure via `QUEUE_TTL_MINUTES` or `VILLAGE_QUEUE_TTL_MINUTES` env var
-
-**Cleanup Enhancements:**
-- `village cleanup --apply` removes orphan and stale worktrees
-- Safer corrupted lock handling with automatic logging
-
-**JSON Output:**
-- `--plan --json` now includes lock details and workspace paths
-- Full task metadata for dry-run validation
+## Release Automation
 
 ```bash
-# View recent events
-cat .village/events.log | jq .
-
-# Plan queue (skips recent executions)
-village queue --plan --json
-
-# Cleanup with worktree removal
-village cleanup --plan --apply
+village release                      # Apply version bumps + changelog + tag
+village release --dry-run            # Preview without making changes
+village release --no-tag             # Skip git tag creation
 ```
 
----
+Release process:
 
-### v1.1 - SCM Abstraction Edition
+1. Check for unlabeled closed tasks (blocks release unless `--force`)
+2. Aggregate bump labels from task store (`bump:major` > `bump:minor` > `bump:patch` > `bump:none`)
+3. Compute next version from latest git tag (semver)
+4. Update `CHANGELOG.md` with categorized entries (Breaking, Added, Changed, Fixed)
+5. Create git tag `v{version}`
+6. Clear bump queue and record release
 
-Village now uses a pluggable SCM (Source Control Management) layer for workspace operations.
-
-**Current Support (v1.1):**
-- Git backend (default, fully functional)
-- All existing Village commands work identically
-
-**Upcoming (v1.3):**
-- Jujutsu (jj) backend support
-- Zero core logic changes required
-- Enable `SCM=jj` in configuration
-
-**Configuration:**
-```bash
-# Default (Git)
-village queue
-
-# Use Jujutsu backend (v1.3)
-SCM=jj village queue
-```
-
-**Benefits:**
-- Core Village logic remains SCM-agnostic
-- Enables jj backend without refactoring
-- Supports custom SCM backends (e.g., Mercurial, Bazaar)
-- Isolates all Git-specific commands to `village/scm/git.py`
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for complete implementation details.
+Bump labels are applied per task: `bd label add <task-id> bump:<type>`
 
 ---
 
 ## Exit Codes
 
 | Code | Meaning | Example |
-|-------|----------|---------|
+|------|---------|---------|
 | 0 | Success | `village resume bd-a3f8` completes |
 | 1 | Generic error | Worktree creation failed |
 | 2 | Not ready / precondition failed | `village queue` when no tasks ready |
@@ -473,359 +415,11 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for complete implementation details.
 | 4 | Partial success | `village queue` with some tasks failed |
 | 5 | Invalid usage | Missing required arguments |
 
-Exit codes are simple (0-5) for easy scripting:
-
-```bash
-village queue --n 3
-case $? in
-    0) echo "All started" ;;
-    4) echo "Partial success, some failed" ;;
-    *) echo "Failed" ;;
-esac
-```
-
 ---
 
-## Commands Reference
+## Philosophy
 
-### village up
-
-Initialize village runtime (idempotent).
-
-```bash
-village up
-```
-
-**What it does:**
-- Starts tmux session if not running
-- Creates `.village/` directory structure
-- Initializes Beads if available
-
-### village ready
-
-Check if village is ready for work.
-
-```bash
-village ready
-```
-
-**What it checks:**
-- Git repository exists
-- Runtime (tmux session) is initialized
-- Beads is available (optional)
-
-### village status
-
-Show village status.
-
-```bash
-village status --workers    # Workers table
-village status --orphans    # Orphan detection
-village status --locks      # Locks view
-village status --short     # Minimal status
-village status --json      # JSON output
-```
-
-**Output options:**
-- `--workers`: Tabular workers view (TASK_ID, STATUS, PANE, AGENT, WINDOW)
-- `--orphans`: Orphaned resources with suggested actions
-- `--locks`: All locks with ACTIVE/STALE status
-- `--short`: Minimal status (tmux + locks count)
-- `--json`: Full status as JSON
-
-### village resume
-
-Resume a task (explicit or planner).
-
-```bash
-village resume bd-a3f8              # Explicit resume
-village resume --agent build          # Use specific agent
-village resume bd-a3f8 --detached  # Detached mode
-village resume                          # Use planner
-village resume bd-a3f8 --html      # HTML output
-```
-
-**Planner mode** (no task ID):
-- Suggests next action based on runtime state
-- Actions: `up`, `status`, `cleanup`, `queue`, `ready`
-
-**Options:**
-- `--agent <name>`: Use specific agent
-- `--detached`: Run without attaching to tmux pane
-- `--html`: Output HTML with embedded JSON metadata
-- `--dry-run`: Preview mode (no mutations)
-
-### village queue
-
-Queue and execute ready tasks from Beads.
-
-```bash
-village queue --n 3           # Start 3 tasks
-village queue --agent frontend  # Only frontend tasks
-village queue --dry-run        # Preview mode
-village queue --json          # JSON output
-```
-
-**Options:**
-- `--n <count>`: Maximum tasks to start
-- `--agent <name>`: Only queue tasks for specific agent
-- `--dry-run`: Preview mode (show plan without executing)
-- `--json`: JSON output
-
-### village cleanup
-
-Remove stale locks and untracked worktrees.
-
-```bash
-village cleanup           # Plan mode (dry-run)
-village cleanup --apply    # Execute cleanup
-village cleanup --apply --force  # Include corrupted locks
-```
-
-**What it removes:**
-- Stale locks (panes that no longer exist)
-- Untracked worktrees (no corresponding lock)
-- (Optional with `--force`): Corrupted lock files
-
-### village down
-
-Stop village runtime.
-
-```bash
-village down
-```
-
-**What it does:**
-- Kills tmux session
-- Leaves worktrees and locks intact (use `cleanup` to remove)
-
-### village unlock
-
-Unlock a task (remove lock file).
-
-```bash
-village unlock bd-a3f8          # Remove lock file
-village unlock bd-a3f8 --force   # Force remove (if corrupted)
-```
-
-### village locks
-
-List all locks with ACTIVE/STALE status.
-
-```bash
-village locks
-```
-
-**Output format:**
-```
-TASK_ID    STATUS    PANE     AGENT     WINDOW
-bd-a3f8    ACTIVE    %12      worker    worker-1-bd-a3f8
-bd-b7c2    STALE     %13      worker    worker-2-bd-b7c2
-```
-
-### village state
-
-Show task state and history.
-
-```bash
-village state bd-a3f8           # Display state and history
-village state bd-a3f8 --json   # JSON output
-```
-
-**What it shows:**
-- Current task state (QUEUED, CLAIMED, IN_PROGRESS, PAUSED, COMPLETED, FAILED)
-- State transition history with timestamps
-- Context for each transition (error messages, pane IDs, etc.)
-
-### village pause
-
-Pause an in-progress task.
-
-```bash
-village pause bd-a3f8          # Pause task
-village pause bd-a3f8 --force  # Bypass validation
-```
-
-**When to use:**
-- Task is actively running (IN_PROGRESS state)
-- You need to temporarily stop work on a task
-- Task will remain locked and can be resumed later
-
-### village resume-task
-
-Resume a paused task (state management only).
-
-```bash
-village resume-task bd-a3f8       # Resume paused task
-village resume-task bd-a3f8 --force # Bypass validation
-```
-
-**Note:** This command manages task state only. To execute a task, use `village resume` instead.
-
-**When to use:**
-- Task is paused (PAUSED state)
-- You want to continue work on a task
-- Task transitions back to IN_PROGRESS state
-
----
-
-## Examples
-
-For practical examples and workflows, see [docs/examples/](docs/examples/):
-
-- [First Task Ever](docs/examples/01-quickstart/first-task.md) - Basic workflow
-- [Custom Agent](docs/examples/02-configuration/custom-agent.md) - Define specialized agents
-- [Queue Multiple](docs/examples/03-commands/queue-multiple.md) - Queue across agent types
-- [Multiple Agents](docs/examples/04-configuration/multiple-agents.md) - 3+ specialized agents
-- [Multi-Day Workflow](docs/examples/05-advanced/workflow.md) - Interrupts, stale locks, corrupted locks
-- [Research Domain](docs/examples/research/) - Custom readiness engine for research tasks (extensibility example)
-
----
-
-## Troubleshooting
-
-### "not in a git repository"
-
-Village must run inside a Git repository.
-
-**Fix:**
-```bash
-cd /path/to/your/repo
-git init  # if not initialized
-village up
-```
-
-### "no tmux session found"
-
-Village requires tmux runtime.
-
-**Fix:**
-```bash
-village up  # Starts tmux session
-```
-
-### "bd command not available"
-
-Beads is optional. Village works without it, but `village queue` requires it.
-
-**Fix:**
-```bash
-# Option 1: Install Beads
-cargo install beads
-
-# Option 2: Use explicit resume
-village resume bd-a3f8
-```
-
-### Stale locks remain after interrupt
-
-If `village resume` is interrupted (Ctrl+C), resources remain.
-
-**Fix:**
-```bash
-# Inspect what's orphaned
-village status --orphans
-
-# Clean up
-village cleanup --apply
-```
-
-### Corrupted lock files
-
-If lock files are corrupted, they appear in status.
-
-**Fix:**
-```bash
-# View all locks
-village status --locks
-
-# Manually remove corrupted lock
-village unlock <task-id> --force
-
-# Or cleanup with --force
-village cleanup --apply --force
-```
-
-### No color output
-
-Colors auto-disable for:
-- Piped output (`village status | less`)
-- `--json` flag
-- Non-TTY terminals
-
-**Note:** Colors use Click's auto-detection, no manual enable needed.
-
-```bash
-village status  # Colors on TTY
-village status | cat  # Plain text (no colors)
-```
-
-### "Permission denied" errors
-
-Village needs write access to `.village/` directory.
-
-**Fix:**
-```bash
-# Check directory permissions
-ls -la .village/
-
-# Ensure write access
-chmod u+w .village/ .village/locks/
-
-# Or use sudo (not recommended)
-sudo village up
-```
-
-### Workers not starting
-
-If `village queue` starts tasks but workers don't appear in status.
-
-**Fix:**
-```bash
-# Check if tmux session exists
-tmux list-sessions
-
-# Check for panes
-tmux list-panes -t village
-
-# Check OpenCode is available
-which opencode
-
-# Run with verbose logging
-village --verbose queue --n 1
-```
-
-### "Config file not found"
-
-Village can run without config file, uses defaults.
-
-**Fix:**
-```bash
-# Create minimal config
-mkdir -p .village
-cat > .village/config <<EOF
-[DEFAULT]
-DEFAULT_AGENT=worker
-EOF
-```
-
----
-
-## Shell Completion
-
-Bash and zsh completion are supported via Click 8.1+. See [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) for setup instructions.
-
-**Quick setup:**
-
-**Bash:**
-```bash
-eval "$(_VILLAGE_COMPLETE=bash_source village)"
-```
-
-**Zsh:**
-```zsh
-eval "$(_VILLAGE_COMPLETE=zsh_source village)"
-```
+Village is intentionally boring. It does not hide execution. It does not predict intent. It does not require belief. It simply coordinates reality.
 
 ---
 
@@ -840,85 +434,86 @@ uv pip install -e .
 
 ### Testing
 
-Run unit tests (fast, no external dependencies):
 ```bash
-pytest -m "not integration"
+pytest -m "not integration"          # Unit tests only (fast)
+pytest -m integration                 # Integration tests only
+pytest                                # All tests
+pytest --cov=village                  # With coverage
 ```
 
-Run integration tests (requires tmux/beads):
+### Linting & Type Checking
+
 ```bash
-pytest -m integration
+uv run ruff check .                   # Lint
+uv run ruff format .                  # Format
+uv run mypy village/                  # Type check
 ```
 
-Run all tests (unit + integration):
+---
+
+## Troubleshooting
+
+### "not in a git repository"
+
+Village must run inside a Git repository.
+
 ```bash
-pytest
+cd /path/to/your/repo
+git init  # if not initialized
+village up
 ```
 
-Run tests with coverage:
+### "no tmux session found"
+
 ```bash
-pytest --cov=village
+village up  # Starts tmux session
 ```
 
-### Linting
+### Stale locks after interrupt
 
 ```bash
-uv run ruff check .
-uv run ruff format .
+village status --orphans   # Inspect what's orphaned
+village cleanup --apply    # Clean up
 ```
 
-### Type Checking
+### Corrupted lock files
 
 ```bash
-uv run mypy village/
+village status --locks         # View all locks
+village unlock <task-id> --force  # Force remove
+village cleanup --apply --force    # Clean up including corrupted
 ```
 
-### Probes
-
-Village probes inspect runtime state without mutations:
-
-- **tmux**: Session and pane queries (cached, 5s TTL)
-- **beads**: Beads command availability and initialization
-- **repo**: Git repository root detection
-
-#### Caching
-
-Tmux pane queries use per-session caching:
-- Cache cleared on CLI entry
-- 5s TTL for automatic refresh
-- Use `refresh_panes(session_name)` after tmux mutations
-
-#### Test Commands
+### Workers not starting
 
 ```bash
-# Unit tests only (fast)
-pytest -m "not integration"
+tmux list-sessions              # Check tmux
+tmux list-panes -t village       # Check panes
+which opencode                   # Check OpenCode
+village --verbose queue --n 1    # Verbose logging
+```
 
-# Integration tests only (requires tmux/beads)
-pytest -m integration
+---
 
-# All tests (unit + integration)
-pytest
+## Shell Completion
 
-# Verbose output
-pytest -v
+Bash and zsh completion supported via Click 8.1+:
 
-# Show test execution time
-pytest --durations=10
+**Bash:**
+```bash
+eval "$(_VILLAGE_COMPLETE=bash_source village)"
+```
 
-# With coverage
-pytest --cov=village --cov-report=html
+**Zsh:**
+```zsh
+eval "$(_VILLAGE_COMPLETE=zsh_source village)"
 ```
 
 ---
 
 ## Contributing
 
-Village is intentionally small and opinionated.
-
-See [AGENTS.md](AGENTS.md) for development guidelines.
-
----
+Village is intentionally small and opinionated. See [AGENTS.md](AGENTS.md) for development guidelines.
 
 ## License
 
@@ -928,12 +523,12 @@ MIT
 
 ## See Also
 
-- [AGENTS.md](AGENTS.md) - Agent development guide
-- [docs/PRD.md](docs/PRD.md) - Product requirements document
-- [docs/ROADMAP.md](docs/ROADMAP.md) - Implementation roadmap and future versions
-- [docs/PROPOSALS.md](docs/PROPOSALS.md) - Optional extensions and proposals
-- [docs/examples/](docs/examples/) - Practical examples
-- [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) - Shell setup
-- [EXTENSIBILITY.md](EXTENSIBILITY.md) - Extensibility framework (PRD)
-- [EXTENSIBILITY_GUIDE.md](EXTENSIBILITY_GUIDE.md) - Extensibility development guide
-- [EXTENSIBILITY_API.md](EXTENSIBILITY_API.md) - Extensibility API reference
+- [AGENTS.md](AGENTS.md) — Agent development guide
+- [CHANGELOG.md](CHANGELOG.md) — Version history
+- [docs/PRD.md](docs/PRD.md) — Product requirements document
+- [docs/ROADMAP.md](docs/ROADMAP.md) — Implementation roadmap
+- [EXTENSIBILITY.md](EXTENSIBILITY.md) — Extensibility framework (PRD)
+- [EXTENSIBILITY_GUIDE.md](EXTENSIBILITY_GUIDE.md) — Extensibility development guide
+- [EXTENSIBILITY_API.md](EXTENSIBILITY_API.md) — Extensibility API reference
+- [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) — Shell setup
+- [docs/examples/](docs/examples/) — Practical examples

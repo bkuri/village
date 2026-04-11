@@ -74,6 +74,7 @@ def run_loop(
             max_iterations=max_iterations,
             dry_run=dry_run,
             config=config,
+            parallel=parallel,
         )
 
         click.echo(f"\nBuild loop finished ({result.iterations} iterations)")
@@ -121,7 +122,7 @@ def run_status(run_id: str | None) -> None:
         click.echo(f"\nComplete specs: {complete}")
 
 
-@builder_group.command("stop")
+@builder_group.command("stop", hidden=True)
 @click.argument("run_id", required=False)
 def stop_run(run_id: str | None) -> None:
     """Stop a running build loop."""
@@ -138,7 +139,7 @@ def cancel_run(run_id: str | None) -> None:
     ctx.invoke(stop_run, run_id=run_id)
 
 
-@builder_group.command("logs")
+@builder_group.command("logs", hidden=True)
 @click.argument("run_id", required=False)
 @click.option("--follow", is_flag=True, help="Follow log output")
 def show_logs(run_id: str | None, follow: bool) -> None:

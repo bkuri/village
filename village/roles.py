@@ -86,9 +86,6 @@ ROLE_SKILLS: dict[str, list[RoleSkill]] = {
     "builder": [
         RoleSkill("run", "Execute a workflow"),
         RoleSkill("status", "Check a run's status"),
-        RoleSkill("stop", "Stop a running workflow"),
-        RoleSkill("resume", "Resume a failed run"),
-        RoleSkill("logs", "View past runs"),
     ],
     "elder": [
         RoleSkill("see", "Ingest knowledge source"),

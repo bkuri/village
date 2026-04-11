@@ -121,9 +121,13 @@ def run_loop(
     retry_delay: float = DEFAULT_RETRY_DELAY,
     dry_run: bool = False,
     config: Config | None = None,
+    parallel: int = 1,
 ) -> LoopResult:
     if config is None:
         config = get_config()
+
+    if parallel > 1:
+        logger.warning(f"Parallel execution requested ({parallel}) but not yet implemented. Running sequentially.")
 
     if not specs_dir.is_dir():
         raise FileNotFoundError(f"Specs directory not found: {specs_dir}")

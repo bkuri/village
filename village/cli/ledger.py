@@ -23,8 +23,8 @@ def ledger_group(ctx: click.Context) -> None:
 
 @ledger_group.command("show")
 @click.argument("task_id", required=False)
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
-def show_ledger(task_id: str | None, as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def show_ledger(task_id: str | None, json_output: bool) -> None:
     """View audit ledger for a task."""
     config = get_config()
     reader = TraceReader(config.traces_dir)
@@ -49,7 +49,7 @@ def show_ledger(task_id: str | None, as_json: bool) -> None:
         click.echo(f"No ledger events for {task_id}")
         sys.exit(EXIT_ERROR)
 
-    if as_json:
+    if json_output:
         data = []
         for event in events:
             data.append(
@@ -68,8 +68,8 @@ def show_ledger(task_id: str | None, as_json: bool) -> None:
 
 
 @ledger_group.command("list")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
-def list_ledgers(as_json: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def list_ledgers(json_output: bool) -> None:
     """List tasks with audit ledgers."""
     config = get_config()
     reader = TraceReader(config.traces_dir)
@@ -79,7 +79,7 @@ def list_ledgers(as_json: bool) -> None:
         click.echo("No ledgers found")
         return
 
-    if as_json:
+    if json_output:
         click.echo(json.dumps(task_ids, indent=2))
     else:
         for task_id in task_ids:
