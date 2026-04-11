@@ -4,7 +4,7 @@ import json
 
 import questionary
 
-from village.chat.task_extractor import BeadsTaskSpec, create_draft_tasks
+from village.chat.task_extractor import TaskSubmissionSpec, create_draft_tasks
 from village.config import Config
 from village.doctor.base import AnalyzerResult, Finding
 from village.logging import get_logger
@@ -133,10 +133,10 @@ async def create_tasks_from_findings(
     findings: list[Finding],
     config: Config,
 ) -> dict[str, str]:
-    """Create beads tasks from selected findings."""
+    """Create tasks from selected findings."""
     specs = []
     for finding in findings:
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title=finding.title,
             description=finding.description,
             estimate="unknown",

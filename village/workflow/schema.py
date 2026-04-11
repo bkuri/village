@@ -9,7 +9,6 @@ class StepType(str, Enum):
     DECOMPOSE = "decompose"
     RESEARCH = "research"
     SYNTHESIZE = "synthesize"
-    BEADS = "beads"
 
 
 STEP_PRESETS: dict[StepType, dict[str, Any]] = {
@@ -24,7 +23,6 @@ STEP_PRESETS: dict[StepType, dict[str, Any]] = {
     StepType.DECOMPOSE: {
         "tools": ["sequential_thinking"],
         "traits": {"style": "analytical"},
-        "target": "beads",
     },
     StepType.RESEARCH: {
         "tools": ["perplexity"],
@@ -34,11 +32,6 @@ STEP_PRESETS: dict[StepType, dict[str, Any]] = {
     StepType.SYNTHESIZE: {
         "tools": [],
         "traits": {"style": "synthesizing"},
-    },
-    StepType.BEADS: {
-        "tools": [],
-        "traits": {},
-        "target": "beads",
     },
 }
 

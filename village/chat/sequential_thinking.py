@@ -76,7 +76,7 @@ class TaskBreakdown:
 def generate_task_breakdown(
     baseline: BaselineReport,
     config: Config,
-    beads_state: Optional[str] = None,
+    tasks_state: Optional[str] = None,
 ) -> TaskBreakdown:
     """
     Generate task breakdown using configured strategy.
@@ -87,7 +87,7 @@ def generate_task_breakdown(
     Args:
         baseline: Collected baseline information
         config: Village configuration
-        beads_state: Optional current Beads tasks (for context)
+        tasks_state: Optional current tasks (for context)
 
     Returns:
         TaskBreakdown with parsed task list
@@ -99,10 +99,10 @@ def generate_task_breakdown(
     strategy = config.task_breakdown.strategy
 
     if strategy == "st_aot_light":
-        return _st_aot_light_strategy(baseline, config, beads_state)
+        return _st_aot_light_strategy(baseline, config, tasks_state)
 
     # Default sequential strategy (for "sequential" and "atomic")
-    prompt = _build_sequential_thinking_prompt(baseline, beads_state)
+    prompt = _build_sequential_thinking_prompt(baseline, tasks_state)
 
     logger.info(f"Invoking {strategy} task breakdown via LLM")
 
@@ -122,7 +122,7 @@ def generate_task_breakdown(
 
 def _build_sequential_thinking_prompt(
     baseline: BaselineReport,
-    beads_state: Optional[str] = None,
+    tasks_state: Optional[str] = None,
 ) -> str:
     """
     Build prompt for Sequential Thinking invocation.
@@ -132,7 +132,7 @@ def _build_sequential_thinking_prompt(
 
     Args:
         baseline: Collected baseline information
-        beads_state: Optional current Beads tasks (for context)
+        tasks_state: Optional current tasks (for context)
 
     Returns:
         Prompt string
@@ -155,10 +155,10 @@ USER PROVIDED:
 TASK:
 """
 
-    if beads_state:
+    if tasks_state:
         prompt += f"""
-CONTEXT: Consider these existing Beads tasks:
-{beads_state}
+CONTEXT: Consider these existing tasks:
+{tasks_state}
 
 Use this context to:
 - Determine if any existing tasks should be parent/related to new tasks
@@ -167,7 +167,7 @@ Use this context to:
 """
 
     prompt += """
-1. Break down into 3-7 concrete, actionable tasks
+ 1. Break down into 3-7 concrete, actionable tasks
 2. Evaluate if the user's title is precise and descriptive enough
 3. If the title is vague, suggest a more specific/recognizable alternative
 4. Each task should be independently completable
@@ -300,7 +300,7 @@ def validate_dependencies(breakdown: TaskBreakdown) -> bool:
 
 def _build_st_analysis_prompt(
     baseline: BaselineReport,
-    beads_state: Optional[str] = None,
+    tasks_state: Optional[str] = None,
     config: Optional[Config] = None,
 ) -> str:
     """
@@ -311,7 +311,7 @@ def _build_st_analysis_prompt(
 
     Args:
         baseline: Collected baseline information
-        beads_state: Optional current Beads tasks (for context)
+        tasks_state: Optional current tasks (for context)
         config: Village configuration (for tool name pattern)
 
     Returns:
@@ -337,10 +337,10 @@ USER PROVIDED:
 TASK:
 """
 
-    if beads_state:
+    if tasks_state:
         prompt += f"""
-CONTEXT: Consider these existing Beads tasks:
-{beads_state}
+CONTEXT: Consider these existing tasks:
+{tasks_state}
 
 Use this context to:
 - Identify dependencies on existing work
@@ -469,7 +469,7 @@ Focus on creating small, manageable tasks that can be queued and executed indepe
 def _st_aot_light_strategy(
     baseline: BaselineReport,
     config: Config,
-    beads_state: Optional[str] = None,
+    tasks_state: Optional[str] = None,
 ) -> TaskBreakdown:
     """
     ST → AoT Light strategy: Deep analysis first, then atomic atomization.
@@ -480,7 +480,7 @@ def _st_aot_light_strategy(
     Args:
         baseline: Collected baseline information
         config: Village configuration
-        beads_state: Optional current Beads tasks (for context)
+        tasks_state: Optional current tasks (for context)
 
     Returns:
         TaskBreakdown with atomic task list
@@ -490,7 +490,7 @@ def _st_aot_light_strategy(
         json.JSONDecodeError: If response is not valid JSON
     """
     logger.info("Phase 1: Running Sequential Thinking for deep analysis")
-    analysis_prompt = _build_st_analysis_prompt(baseline, beads_state, config)
+    analysis_prompt = _build_st_analysis_prompt(baseline, tasks_state, config)
 
     llm_client = get_llm_client(config)
 

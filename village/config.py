@@ -290,7 +290,8 @@ class AgentConfig:
     ppc_format: str = "markdown"
     llm_provider: Optional[str] = None
     llm_model: Optional[str] = None
-    type: str = "opencode"  # Agent type: "opencode" or "acp"
+    type: str = "opencode"  # Agent type: "opencode", "pi", or "acp"
+    pi_args: str = ""
     acp_command: Optional[str] = None  # Command to spawn ACP agent
     acp_capabilities: list[str] = field(default_factory=list)  # Capability names
 
@@ -304,7 +305,7 @@ class ExtensionConfig:
     tool_invoker_module: Optional[str] = None
     thinking_refiner_module: Optional[str] = None
     chat_context_module: Optional[str] = None
-    beads_integrator_module: Optional[str] = None
+    task_hooks_module: Optional[str] = None
     server_discovery_module: Optional[str] = None
     llm_adapter_module: Optional[str] = None
 
@@ -330,8 +331,8 @@ class ExtensionConfig:
             "EXTENSIONS.CHAT_CONTEXT_MODULE"
         )
 
-        beads_integrator_module = os.environ.get("VILLAGE_EXTENSIONS_BEADS_INTEGRATOR_MODULE") or config.get(
-            "EXTENSIONS.BEADS_INTEGRATOR_MODULE"
+        task_hooks_module = os.environ.get("VILLAGE_EXTENSIONS_TASK_HOOKS_MODULE") or config.get(
+            "EXTENSIONS.TASK_HOOKS_MODULE"
         )
 
         server_discovery_module = os.environ.get("VILLAGE_EXTENSIONS_SERVER_DISCOVERY_MODULE") or config.get(
@@ -348,7 +349,7 @@ class ExtensionConfig:
             tool_invoker_module=tool_invoker_module,
             thinking_refiner_module=thinking_refiner_module,
             chat_context_module=chat_context_module,
-            beads_integrator_module=beads_integrator_module,
+            task_hooks_module=task_hooks_module,
             server_discovery_module=server_discovery_module,
             llm_adapter_module=llm_adapter_module,
         )
@@ -923,6 +924,8 @@ def _build_config(git_root: Path) -> Config:
 
             if field_name == "opencode_args":
                 agents[agent_name].opencode_args = value
+            elif field_name == "pi_args":
+                agents[agent_name].pi_args = value
             elif field_name == "contract":
                 agents[agent_name].contract = value
             elif field_name == "ppc_mode":

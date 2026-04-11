@@ -1,17 +1,18 @@
 """Test runtime lifecycle management."""
 
-import subprocess
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from village.probes.tools import SubprocessError
 from village.runtime import (
     InitializationPlan,
     RuntimeState,
     _create_dashboard,
-    _ensure_beads_initialized,
     _ensure_directories,
     _ensure_session,
+    _ensure_tasks_initialized,
     collect_runtime_state,
     execute_initialization,
     plan_initialization,
@@ -21,28 +22,22 @@ from village.runtime import (
 
 def test_collect_runtime_state():
     """Test state collection when session doesn't exist."""
-    subprocess.run(["git", "init"], cwd=Path.cwd(), check=True)
-    subprocess.run(["mkdir", "-p", ".village"], cwd=Path.cwd(), check=True)
-
-    with patch("village.probes.tmux.session_exists") as mock_session:
+    with patch("village.runtime.session_exists") as mock_session:
         mock_session.return_value = False
 
-        with patch("village.config.get_config") as mock_config:
-            mock_config.return_value = type(
-                "Config",
-                (),
-                {
-                    "village_dir": Path.cwd() / ".village",
-                    "tmux_session": "village",
-                    "beads_dir": Path.cwd() / ".beads",
-                },
-            )()
+        with patch("village.runtime.get_config") as mock_config:
+            config_mock = Mock()
+            mock_village_dir = MagicMock()
+            mock_village_dir.__truediv__ = lambda self, other: MagicMock()
+            mock_village_dir.exists.return_value = False
+            config_mock.village_dir = mock_village_dir
+            config_mock.tmux_session = "village"
+            mock_config.return_value = config_mock
 
             state = collect_runtime_state("village")
 
             assert state.session_exists is False
-            assert state.directories_exist is True
-            assert state.beads_initialized is False
+            assert state.directories_exist is False
             assert state.session_name == "village"
 
 
@@ -52,7 +47,7 @@ def test_plan_initialization_all_missing():
         mock_collect.return_value = RuntimeState(
             session_exists=False,
             directories_exist=False,
-            beads_initialized=False,
+            tasks_initialized=False,
             session_name="village",
         )
 
@@ -60,10 +55,10 @@ def test_plan_initialization_all_missing():
 
         assert plan.needs_session is True
         assert plan.needs_directories is True
-        assert plan.needs_beads_init is True
+        assert plan.needs_tasks_init is True
         assert plan.session_exists is False
         assert plan.directories_exist is False
-        assert plan.beads_initialized is False
+        assert plan.tasks_initialized is False
 
 
 def test_plan_initialization_partial():
@@ -72,7 +67,7 @@ def test_plan_initialization_partial():
         mock_collect.return_value = RuntimeState(
             session_exists=True,
             directories_exist=False,
-            beads_initialized=True,
+            tasks_initialized=True,
             session_name="village",
         )
 
@@ -80,10 +75,10 @@ def test_plan_initialization_partial():
 
         assert plan.needs_session is False
         assert plan.needs_directories is True
-        assert plan.needs_beads_init is False
+        assert plan.needs_tasks_init is False
         assert plan.session_exists is True
         assert plan.directories_exist is False
-        assert plan.beads_initialized is True
+        assert plan.tasks_initialized is True
 
 
 def test_plan_initialization_idempotent():
@@ -92,7 +87,7 @@ def test_plan_initialization_idempotent():
         mock_collect.return_value = RuntimeState(
             session_exists=True,
             directories_exist=True,
-            beads_initialized=True,
+            tasks_initialized=True,
             session_name="village",
         )
 
@@ -100,7 +95,7 @@ def test_plan_initialization_idempotent():
 
         assert plan.needs_session is False
         assert plan.needs_directories is False
-        assert plan.needs_beads_init is False
+        assert plan.needs_tasks_init is False
 
 
 def test_ensure_directories_exists():
@@ -146,68 +141,76 @@ def test_ensure_directories_dry_run():
         config_mock.ensure_exists.assert_not_called()
 
 
-def test_ensure_beads_initialized_exists():
-    """Test _ensure_beads_initialized when beads already initialized."""
+def test_ensure_tasks_initialized_exists():
+    """Test _ensure_tasks_initialized when tasks file already exists."""
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+
     with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
-        config_mock.beads_dir = Mock()
-        config_mock.beads_dir.exists.return_value = True
+        config_mock.village_dir = Path("/tmp/.village")
         config_mock.git_root = Path("/git")
         mock_config.return_value = config_mock
 
-        result = _ensure_beads_initialized(dry_run=False)
-
-        assert result is True
-
-
-def test_ensure_beads_initialized_success():
-    """Test _ensure_beads_initialized running bd init successfully."""
-    with patch("village.runtime.get_config") as mock_config:
-        config_mock = Mock()
-        config_mock.beads_dir = Mock()
-        config_mock.beads_dir.exists.return_value = False
-        config_mock.git_root = Path("/git")
-        mock_config.return_value = config_mock
-
-        with patch("village.runtime.run_command") as mock_run:
-            result = _ensure_beads_initialized(dry_run=False)
+        with patch("village.tasks.get_task_store", return_value=mock_store):
+            result = _ensure_tasks_initialized(dry_run=False)
 
             assert result is True
-            mock_run.assert_called_once_with(["bd", "init"], check=True)
 
 
-def test_ensure_beads_initialized_subprocess_error():
-    """Test _ensure_beads_initialized when bd command fails."""
+def test_ensure_tasks_initialized_success():
+    """Test _ensure_tasks_initialized running initialization successfully."""
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = False
+
     with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
-        config_mock.beads_dir = Mock()
-        config_mock.beads_dir.exists.return_value = False
+        config_mock.village_dir = Path("/tmp/.village")
         config_mock.git_root = Path("/git")
         mock_config.return_value = config_mock
 
-        with patch("village.runtime.run_command") as mock_run:
-            mock_run.side_effect = SubprocessError("Command failed")
-
-            result = _ensure_beads_initialized(dry_run=False)
+        with patch("village.tasks.get_task_store", return_value=mock_store):
+            result = _ensure_tasks_initialized(dry_run=False)
 
             assert result is True
-            mock_run.assert_called_once_with(["bd", "init"], check=True)
+            mock_store.initialize.assert_called_once()
 
 
-def test_ensure_beads_initialized_dry_run():
-    """Test _ensure_beads_initialized with dry_run=True."""
+def test_ensure_tasks_initialized_subprocess_error():
+    """Test _ensure_tasks_initialized when initialization fails."""
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = False
+    mock_store.initialize.side_effect = SubprocessError("Command failed")
+
     with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
-        config_mock.beads_dir = Mock()
-        config_mock.beads_dir.exists.return_value = False
+        config_mock.village_dir = Path("/tmp/.village")
         config_mock.git_root = Path("/git")
         mock_config.return_value = config_mock
 
-        with patch("village.runtime.run_command") as mock_run:
-            result = _ensure_beads_initialized(dry_run=True)
+        with patch("village.tasks.get_task_store", return_value=mock_store):
+            with pytest.raises(SubprocessError):
+                _ensure_tasks_initialized(dry_run=False)
 
-            assert result is False
-            mock_run.assert_not_called()
+            mock_store.initialize.assert_called_once()
+
+
+def test_ensure_tasks_initialized_dry_run():
+    """Test _ensure_tasks_initialized with dry_run=True."""
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = False
+
+    with patch("village.runtime.get_config") as mock_config:
+        config_mock = Mock()
+        config_mock.village_dir = Path("/tmp/.village")
+        config_mock.git_root = Path("/git")
+        mock_config.return_value = config_mock
+
+        with patch("village.tasks.get_task_store", return_value=mock_store):
+            result = _ensure_tasks_initialized(dry_run=True)
+
+            assert result is True
+            mock_store.initialize.assert_not_called()
 
 
 def test_ensure_session_exists():
@@ -336,10 +339,10 @@ def test_execute_initialization_all_steps():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=True,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=False,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -348,24 +351,26 @@ def test_execute_initialization_all_steps():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
                     mock_dashboard.return_value = True
 
                     with patch("village.runtime.get_config") as mock_config:
-                        config_mock = Mock()
-                        config_mock.tmux_session = "village"
-                        mock_config.return_value = config_mock
+                        with patch("village.hooks.install_hooks"):
+                            config_mock = Mock()
+                            config_mock.tmux_session = "village"
+                            config_mock.git_root = Path("/git")
+                            mock_config.return_value = config_mock
 
-                        result = execute_initialization(plan, dry_run=False, dashboard=True)
+                            result = execute_initialization(plan, dry_run=False, dashboard=True)
 
-                        assert result is True
-                        mock_dirs.assert_called_once_with(False)
-                        mock_session.assert_called_once_with(False)
-                        mock_beads.assert_called_once_with(False)
-                        mock_dashboard.assert_called_once_with("village", False)
+                            assert result is True
+                            mock_dirs.assert_called_once_with(False)
+                            mock_session.assert_called_once_with(False)
+                            mock_beads.assert_called_once_with(False)
+                            mock_dashboard.assert_called_once_with("village", False)
 
 
 def test_execute_initialization_partial_steps():
@@ -373,10 +378,10 @@ def test_execute_initialization_partial_steps():
     plan = InitializationPlan(
         needs_session=False,
         needs_directories=False,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=True,
         directories_exist=True,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -385,24 +390,26 @@ def test_execute_initialization_partial_steps():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
                     mock_dashboard.return_value = True
 
                     with patch("village.runtime.get_config") as mock_config:
-                        config_mock = Mock()
-                        config_mock.tmux_session = "village"
-                        mock_config.return_value = config_mock
+                        with patch("village.hooks.install_hooks"):
+                            config_mock = Mock()
+                            config_mock.tmux_session = "village"
+                            config_mock.git_root = Path("/git")
+                            mock_config.return_value = config_mock
 
-                        result = execute_initialization(plan, dry_run=False, dashboard=True)
+                            result = execute_initialization(plan, dry_run=False, dashboard=True)
 
-                        assert result is True
-                        mock_dirs.assert_not_called()
-                        mock_session.assert_not_called()
-                        mock_beads.assert_called_once_with(False)
-                        mock_dashboard.assert_called_once_with("village", False)
+                            assert result is True
+                            mock_dirs.assert_not_called()
+                            mock_session.assert_not_called()
+                            mock_beads.assert_called_once_with(False)
+                            mock_dashboard.assert_called_once_with("village", False)
 
 
 def test_execute_initialization_no_dashboard():
@@ -410,10 +417,10 @@ def test_execute_initialization_no_dashboard():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=True,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=False,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -422,24 +429,26 @@ def test_execute_initialization_no_dashboard():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
                     mock_dashboard.return_value = True
 
                     with patch("village.runtime.get_config") as mock_config:
-                        config_mock = Mock()
-                        config_mock.tmux_session = "village"
-                        mock_config.return_value = config_mock
+                        with patch("village.hooks.install_hooks"):
+                            config_mock = Mock()
+                            config_mock.tmux_session = "village"
+                            config_mock.git_root = Path("/git")
+                            mock_config.return_value = config_mock
 
-                        result = execute_initialization(plan, dry_run=False, dashboard=False)
+                            result = execute_initialization(plan, dry_run=False, dashboard=False)
 
-                        assert result is True
-                        mock_dirs.assert_called_once_with(False)
-                        mock_session.assert_called_once_with(False)
-                        mock_beads.assert_called_once_with(False)
-                        mock_dashboard.assert_not_called()
+                            assert result is True
+                            mock_dirs.assert_called_once_with(False)
+                            mock_session.assert_called_once_with(False)
+                            mock_beads.assert_called_once_with(False)
+                            mock_dashboard.assert_not_called()
 
 
 def test_execute_initialization_dry_run():
@@ -447,10 +456,10 @@ def test_execute_initialization_dry_run():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=True,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=False,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -459,24 +468,26 @@ def test_execute_initialization_dry_run():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
                     mock_dashboard.return_value = True
 
                     with patch("village.runtime.get_config") as mock_config:
-                        config_mock = Mock()
-                        config_mock.tmux_session = "village"
-                        mock_config.return_value = config_mock
+                        with patch("village.hooks.install_hooks"):
+                            config_mock = Mock()
+                            config_mock.tmux_session = "village"
+                            config_mock.git_root = Path("/git")
+                            mock_config.return_value = config_mock
 
-                        result = execute_initialization(plan, dry_run=True, dashboard=True)
+                            result = execute_initialization(plan, dry_run=True, dashboard=True)
 
-                        assert result is True
-                        mock_dirs.assert_called_once_with(True)
-                        mock_session.assert_called_once_with(True)
-                        mock_beads.assert_called_once_with(True)
-                        mock_dashboard.assert_called_once_with("village", True)
+                            assert result is True
+                            mock_dirs.assert_called_once_with(True)
+                            mock_session.assert_called_once_with(True)
+                            mock_beads.assert_called_once_with(True)
+                            mock_dashboard.assert_called_once_with("village", True)
 
 
 def test_execute_initialization_failure_directories():
@@ -484,10 +495,10 @@ def test_execute_initialization_failure_directories():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=True,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=False,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -496,7 +507,7 @@ def test_execute_initialization_failure_directories():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
             with patch("village.runtime._create_dashboard") as mock_dashboard:
@@ -505,6 +516,7 @@ def test_execute_initialization_failure_directories():
                 with patch("village.runtime.get_config") as mock_config:
                     config_mock = Mock()
                     config_mock.tmux_session = "village"
+                    config_mock.git_root = Path("/git")
                     mock_config.return_value = config_mock
 
                     result = execute_initialization(plan, dry_run=False, dashboard=True)
@@ -521,10 +533,10 @@ def test_execute_initialization_failure_session():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=False,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=True,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -533,7 +545,7 @@ def test_execute_initialization_failure_session():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = False
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = True
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
@@ -542,6 +554,7 @@ def test_execute_initialization_failure_session():
                     with patch("village.runtime.get_config") as mock_config:
                         config_mock = Mock()
                         config_mock.tmux_session = "village"
+                        config_mock.git_root = Path("/git")
                         mock_config.return_value = config_mock
 
                         result = execute_initialization(plan, dry_run=False, dashboard=True)
@@ -554,14 +567,14 @@ def test_execute_initialization_failure_session():
 
 
 def test_execute_initialization_failure_beads():
-    """Test execute_initialization when beads initialization fails."""
+    """Test execute_initialization when task store initialization fails."""
     plan = InitializationPlan(
         needs_session=False,
         needs_directories=False,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=True,
         directories_exist=True,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -570,7 +583,7 @@ def test_execute_initialization_failure_beads():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-            with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+            with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
                 mock_beads.return_value = False
 
                 with patch("village.runtime._create_dashboard") as mock_dashboard:
@@ -579,6 +592,7 @@ def test_execute_initialization_failure_beads():
                     with patch("village.runtime.get_config") as mock_config:
                         config_mock = Mock()
                         config_mock.tmux_session = "village"
+                        config_mock.git_root = Path("/git")
                         mock_config.return_value = config_mock
 
                         result = execute_initialization(plan, dry_run=False, dashboard=True)
@@ -595,10 +609,10 @@ def test_execute_initialization_failure_dashboard():
     plan = InitializationPlan(
         needs_session=False,
         needs_directories=False,
-        needs_beads_init=False,
+        needs_tasks_init=False,
         session_exists=True,
         directories_exist=True,
-        beads_initialized=True,
+        tasks_initialized=True,
     )
 
     with patch("village.runtime._ensure_directories") as mock_dirs:
@@ -607,24 +621,26 @@ def test_execute_initialization_failure_dashboard():
         with patch("village.runtime._ensure_session") as mock_session:
             mock_session.return_value = True
 
-        with patch("village.runtime._ensure_beads_initialized") as mock_beads:
+        with patch("village.runtime._ensure_tasks_initialized") as mock_beads:
             mock_beads.return_value = True
 
             with patch("village.runtime._create_dashboard") as mock_dashboard:
                 mock_dashboard.return_value = False
 
                 with patch("village.runtime.get_config") as mock_config:
-                    config_mock = Mock()
-                    config_mock.tmux_session = "village"
-                    mock_config.return_value = config_mock
+                    with patch("village.hooks.install_hooks"):
+                        config_mock = Mock()
+                        config_mock.tmux_session = "village"
+                        config_mock.git_root = Path("/git")
+                        mock_config.return_value = config_mock
 
-                    result = execute_initialization(plan, dry_run=False, dashboard=True)
+                        result = execute_initialization(plan, dry_run=False, dashboard=True)
 
-                    assert result is False
-                    mock_dirs.assert_not_called()
-                    mock_session.assert_not_called()
-                    mock_beads.assert_not_called()
-                    mock_dashboard.assert_called_once_with("village", False)
+                        assert result is False
+                        mock_dirs.assert_not_called()
+                        mock_session.assert_not_called()
+                        mock_beads.assert_not_called()
+                        mock_dashboard.assert_called_once_with("village", False)
 
 
 def test_shutdown_runtime_success():

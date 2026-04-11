@@ -14,35 +14,33 @@ class AgentArgs:
     """Resolved agent invocation arguments."""
 
     agent: str
-    opencode_args: list[str]
+    command_args: list[str]
+    agent_type: str = "opencode"
+
+    @property
+    def opencode_args(self) -> list[str]:
+        """Backward compat alias for command_args."""
+        return self.command_args
 
 
 def resolve_agent_args(agent: str, config: Config) -> AgentArgs:
-    """
-    Resolve OpenCode invocation arguments for agent.
-
-    Pure function - no side effects.
-
-    Priority:
-    1. Config mapping ([agent.<name>])
-    2. Convention fallback (default_agent, empty args)
-
-    Args:
-        agent: Agent name (e.g., "build", "test")
-        config: Config object
-
-    Returns:
-        AgentArgs with resolved arguments
-    """
+    """Resolve agent invocation arguments from config."""
     if agent in config.agents:
         agent_config = config.agents[agent]
-        try:
-            opencode_args = shlex.split(agent_config.opencode_args)
-        except ValueError as e:
-            logger.warning(f"Invalid opencode_args for agent '{agent}': {e}")
-            opencode_args = []
-        return AgentArgs(agent, opencode_args)
+        agent_type = agent_config.type
 
-    # Convention fallback
+        raw_args = ""
+        if agent_type == "pi":
+            raw_args = agent_config.pi_args
+        else:
+            raw_args = agent_config.opencode_args
+
+        try:
+            command_args = shlex.split(raw_args)
+        except ValueError as e:
+            logger.warning(f"Invalid args for agent '{agent}': {e}")
+            command_args = []
+        return AgentArgs(agent, command_args, agent_type=agent_type)
+
     logger.debug(f"No config for agent '{agent}', using convention fallback")
     return AgentArgs(agent, [])

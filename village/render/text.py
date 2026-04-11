@@ -263,7 +263,7 @@ def render_ready_text(assessment: ReadyAssessment) -> str:
     elif assessment.work_available == "not_available":
         lines.append("Work Available:      ✓ No ready tasks available")
     elif assessment.work_available == "unknown":
-        lines.append("Work Available:      ? Cannot determine (Beads not available)")
+        lines.append("Work Available:      ? Cannot determine (task store not available)")
 
     # Orphans
     if assessment.orphans_count > 0:
@@ -296,7 +296,7 @@ def render_initialization_plan(plan: "InitializationPlan", session_name: str, *,
     DRY RUN: Would initialize village runtime
       Session: village (new)
       Directories: .village/ (create)
-      Beads: .beads/ (create)
+      Tasks: .village/tasks.jsonl (create)
       Dashboard: yes
 
     Args:
@@ -318,10 +318,10 @@ def render_initialization_plan(plan: "InitializationPlan", session_name: str, *,
     else:
         lines.append("  Directories: .village/ (create)")
 
-    if plan.beads_initialized:
-        lines.append("  Beads: .beads/ (exists)")
+    if plan.tasks_initialized:
+        lines.append("  Tasks: .village/tasks.jsonl (exists)")
     else:
-        lines.append("  Beads: would initialize (not found)")
+        lines.append("  Tasks: .village/tasks.jsonl (create)")
 
     return "\n".join(lines)
 

@@ -45,7 +45,7 @@ def test_plan_scaffold():
     assert "README.md" in plan.steps[3]
     assert "AGENTS.md" in plan.steps[4]
     assert ".village/config" in plan.steps[5]
-    assert "bd init" in plan.steps[6]
+    assert "Initialize: tasks.jsonl" in plan.steps[6]
 
 
 def test_execute_scaffold_directory_exists(tmp_path: Path):
@@ -176,7 +176,7 @@ def test_execute_scaffold_bd_init_success(tmp_path: Path):
         result = execute_scaffold("bdproject", tmp_path, onboard=False)
 
         assert result.success is True
-        assert "bd init" in result.created
+        assert "tasks init" in result.created
 
 
 def test_execute_scaffold_bd_init_failure_skipped(tmp_path: Path):
@@ -244,7 +244,6 @@ def test_execute_scaffold_creates_gitignore_content(tmp_path: Path):
         content = gitignore_path.read_text()
         assert ".village/" in content
         assert ".worktrees/" in content
-        assert ".beads/" in content
 
 
 def test_execute_scaffold_creates_config_template(tmp_path: Path):
@@ -336,10 +335,23 @@ def test_execute_scaffold_onboard_pipeline_failure_fallback(tmp_path: Path):
 
 def test_slugify_from_description():
     """Test slug derivation from a description."""
-    assert _slugify("A task queue for Python") == "a-task-queue"
-    assert _slugify("CLI tool that manages git worktrees") == "cli-tool-that"
+    assert _slugify("A task queue for Python") == "task-queue-python"
+    assert _slugify("CLI tool that manages git worktrees") == "cli-tool-manages"
     assert _slugify("   fast api   server  ") == "fast-api-server"
-    assert _slugify("it's a test") == "a-test"
+    assert _slugify("it's a test") == "test"
+
+
+def test_slugify_stops_words():
+    """Test that common stop words are stripped."""
+    assert _slugify("the best app") == "best-app"
+    assert _slugify("a splitwise clone with cli") == "splitwise-clone-cli"
+    assert _slugify("an api server") == "api-server"
+
+
+def test_slugify_hyphenated_name():
+    """Test that hyphenated names are preserved."""
+    assert _slugify("direct-project") == "direct-project"
+    assert _slugify("my-cool-app") == "my-cool-app"
 
 
 def test_slugify_fallback():
@@ -350,21 +362,23 @@ def test_slugify_fallback():
 
 
 def test_create_project_workflow_returns_slug():
-    """Test workflow returns a slug derived from the description."""
+    """Test workflow returns a slug and description derived from the description."""
     with (
         patch("village.cli.lifecycle.click.prompt", return_value="a task queue for python"),
         patch("village.cli.lifecycle.click.echo"),
     ):
-        name = _run_create_project_workflow()
-    assert name == "a-task-queue"
+        name, description = _run_create_project_workflow()
+    assert name == "task-queue-python"
+    assert description == "a task queue for python"
 
 
 def test_create_project_workflow_aborted():
-    """Test workflow returns empty when prompt is aborted."""
+    """Test workflow returns empty tuple when prompt is aborted."""
     with patch("village.cli.lifecycle.click.prompt", side_effect=KeyboardInterrupt):
         with patch("village.cli.lifecycle.click.echo"):
-            name = _run_create_project_workflow()
+            name, description = _run_create_project_workflow()
     assert name == ""
+    assert description == ""
 
 
 def test_create_project_workflow_fallback_slug():
@@ -373,8 +387,9 @@ def test_create_project_workflow_fallback_slug():
         patch("village.cli.lifecycle.click.prompt", return_value="!@# $%^"),
         patch("village.cli.lifecycle.click.echo"),
     ):
-        name = _run_create_project_workflow()
+        name, description = _run_create_project_workflow()
     assert name == "new-project"
+    assert description == "!@# $%^"
 
 
 def test_new_command_without_name_prompts(tmp_path: Path):
@@ -387,18 +402,19 @@ def test_new_command_without_name_prompts(tmp_path: Path):
     ):
         mock_exec.return_value = Mock(
             success=True,
-            project_dir=tmp_path / "a-task-queue",
+            project_dir=tmp_path / "task-queue",
             created=[".gitignore", ".village/"],
             error=None,
         )
         result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
         assert result.exit_code == 0
-        assert "a-task-queue" in result.output
+        assert "task-queue" in result.output
         mock_exec.assert_called_once_with(
-            "a-task-queue",
+            "task-queue",
             tmp_path.resolve(),
             dashboard=True,
             onboard=True,
+            description="a task queue",
         )
 
 
@@ -424,6 +440,7 @@ def test_new_command_with_name_skips_prompt(tmp_path: Path):
             tmp_path.resolve(),
             dashboard=True,
             onboard=True,
+            description="",
         )
 
 
@@ -432,7 +449,7 @@ def test_new_command_without_name_aborted(tmp_path: Path):
     runner = CliRunner()
     with (
         patch("village.scaffold.is_inside_git_repo", return_value=False),
-        patch("village.cli.lifecycle._run_create_project_workflow", return_value=""),
+        patch("village.cli.lifecycle._run_create_project_workflow", return_value=("", "")),
     ):
         result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
         assert result.exit_code != 0

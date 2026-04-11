@@ -47,7 +47,7 @@ def queue(
     reject_task_id: str | None,
 ) -> None:
     """
-    Queue and execute ready tasks from Beads.
+    Queue and execute ready tasks.
 
     Default: Show queue plan (no execution).
     Use --n N or just N to start N tasks.
@@ -246,7 +246,7 @@ def queue(
 @click.option(
     "--agent",
     type=str,
-    help="Agent name (auto-detect from Beads if not provided)",
+    help="Agent name (auto-detect from task store if not provided)",
 )
 @click.option(
     "--detached",
@@ -286,8 +286,8 @@ def resume(
 
     Agent Selection:
       - If --agent provided: Use specified agent
-      - If no --agent: Auto-detect from Beads
-      - If Beads unavailable: Use config.default_agent (falls back to "worker")
+      - If no --agent: Auto-detect from task store
+      - If task store unavailable: Use config.default_agent (falls back to "worker")
 
     Flags:
       --detached: Run without attaching to tmux pane
@@ -386,7 +386,7 @@ def resume(
 
     # Validate agent selection
     if agent is None:
-        # Use config default as fallback (Beads auto-detect in resume module)
+        # Use config default as fallback (task store auto-detect in resume module)
         agent = config.default_agent
 
     # Execute resume

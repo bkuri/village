@@ -13,7 +13,6 @@ class TestStepType:
         assert StepType.DECOMPOSE.value == "decompose"
         assert StepType.RESEARCH.value == "research"
         assert StepType.SYNTHESIZE.value == "synthesize"
-        assert StepType.BEADS.value == "beads"
 
     def test_from_string(self):
         assert StepType("prompt") == StepType.PROMPT
@@ -61,7 +60,6 @@ class TestStepConfig:
         s = StepConfig(name="dec", type=StepType.DECOMPOSE, prompt="break down")
         resolved = s.resolve()
         assert "sequential_thinking" in resolved.tools
-        assert resolved.target == "beads"
 
     def test_resolve_research_type(self):
         s = StepConfig(name="res", type=StepType.RESEARCH, prompt="search for")

@@ -1,6 +1,6 @@
 """Chat extensions for research domain."""
 
-from examples.research.chat.beads_integrators import ResearchBeadsIntegrator
+from examples.research.chat.beads_integrators import ResearchTaskHooks
 from examples.research.chat.bootstrap import bootstrap_research_extensions
 from examples.research.chat.context import ResearchChatContext
 from examples.research.chat.processors import ResearchChatProcessor
@@ -12,6 +12,6 @@ __all__ = [
     "ResearchThinkingRefiner",
     "ResearchToolInvoker",
     "ResearchChatContext",
-    "ResearchBeadsIntegrator",
+    "ResearchTaskHooks",
     "bootstrap_research_extensions",
 ]

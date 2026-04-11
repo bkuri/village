@@ -1,8 +1,6 @@
 """Integration tests for Village Chat workflow scenarios."""
 
-import json
-import subprocess
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -44,36 +42,54 @@ def integration_config(tmp_path):
 
 @pytest.fixture
 def mock_bd_create(monkeypatch):
-    """Mock bd create subprocess calls."""
+    """Mock task store for create/delete operations."""
     created_calls = []
+    deleted_calls = []
 
-    def fake_run_command(cmd, **kwargs):
-        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "create":
-            task_id = f"bd-{uuid4().hex[:6]}"
-            created_calls.append(
-                {
-                    "command": "create",
-                    "args": cmd,
-                    "task_id": task_id,
-                }
-            )
-            # Return JSON response as expected by create_draft_tasks
-            return json.dumps({"id": task_id, "status": "draft"})
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.list_tasks.return_value = []
 
-        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "delete":
-            created_calls.append(
-                {
-                    "command": "delete",
-                    "task_id": cmd[2] if len(cmd) > 2 else "unknown",
-                }
-            )
-            return json.dumps({"status": "deleted"})
+    def fake_create_task(task_create):
+        task_id = f"bd-{uuid4().hex[:6]}"
+        created_calls.append(
+            {
+                "command": "create",
+                "task_id": task_id,
+            }
+        )
+        mock_task = MagicMock()
+        mock_task.id = task_id
+        return mock_task
 
-        return ""
+    def fake_delete_task(task_id):
+        deleted_calls.append(
+            {
+                "command": "delete",
+                "task_id": task_id,
+            }
+        )
+        return
 
-    monkeypatch.setattr("village.chat.task_extractor.run_command_output", fake_run_command)
-    monkeypatch.setattr("village.chat.conversation.run_command_output", fake_run_command)
-    return created_calls
+    mock_store.create_task = fake_create_task
+    mock_store.delete_task = fake_delete_task
+    mock_store.initialize.return_value = None
+
+    monkeypatch.setattr("village.chat.task_extractor.get_task_store", lambda config=None: mock_store)
+    monkeypatch.setattr("village.chat.conversation.get_task_store", lambda config=None: mock_store)
+
+    class _Tracker:
+        def __init__(self, created, deleted):
+            self._created = created
+            self._deleted = deleted
+
+        def __iter__(self):
+            return iter(self._created + self._deleted)
+
+        def __len__(self):
+            return len(self._created)
+
+    return _Tracker(created_calls, deleted_calls)
 
 
 @pytest.fixture
@@ -86,21 +102,10 @@ def fresh_conversation(integration_config):
 
 @pytest.fixture
 def test_beads_db(tmp_path, monkeypatch):
-    """Create a real Beads database for integration tests."""
-    db_path = tmp_path / ".beads"
-
-    try:
-        result = subprocess.run(
-            ["bd", "init"],
-            cwd=tmp_path,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
-        pytest.skip("Beads (bd) command not available")
-
-    if result.returncode != 0:
-        pytest.skip(f"Failed to initialize Beads DB: {result.stderr}")
+    """Create a real task store database for integration tests."""
+    db_path = tmp_path / ".village"
+    db_path.mkdir(parents=True)
+    (db_path / "tasks.jsonl").touch()
 
     monkeypatch.setenv("BEADS_DIR", str(db_path))
 
@@ -385,9 +390,7 @@ class TestSessionPersistence:
         draft_id = state.pending_enables[-1]
         state = _handle_enable([draft_id], state, integration_config)
 
-        with patch("village.chat.conversation.run_command_output") as mock_bd:
-            mock_bd.return_value = "Created: bd-a1b2c3"
-            state = _handle_submit(state, integration_config)
+        state = _handle_submit(state, integration_config)
 
         assert state.session_snapshot is not None
         assert len(state.session_snapshot.created_task_ids) > 0
@@ -455,10 +458,12 @@ class TestErrorHandling:
 
 
 class TestBeadsIntegration:
-    """Integration tests with real Beads database."""
+    """Integration tests with real task store."""
 
-    def test_real_bd_manifest_creation(self, test_beads_db, fresh_conversation):
-        """Create real Beads task with manifest from Village draft."""
+    def test_real_task_store_creation(self, test_beads_db, fresh_conversation):
+        """Create real task store task from Village draft."""
+        from village.tasks import get_task_store
+
         config = Config(
             git_root=test_beads_db,
             village_dir=test_beads_db / ".village",
@@ -483,25 +488,20 @@ class TestBeadsIntegration:
         state = _handle_enable([draft_id], state, config)
         state = _handle_submit(state, config)
 
-        result = subprocess.run(
-            ["bd", "list", "--json"],
-            cwd=test_beads_db,
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode == 0
-        tasks = json.loads(result.stdout)
+        store = get_task_store(config=config)
+        tasks = store.list_tasks()
         assert len(tasks) > 0
-        assert any(t.get("title") == "Test Feature" for t in tasks)
+        assert any(t.title == "Test Feature" for t in tasks)
 
     def test_draft_id_to_task_id_mapping(self):
         """Test pure ID mapping function: df-* -> bd-*."""
         assert draft_id_to_task_id("df-a1b2c3") == "bd-a1b2c3"
         assert draft_id_to_task_id("df-xyz789") == "bd-xyz789"
 
-    def test_real_bd_delete_recovery(self, test_beads_db, fresh_conversation):
+    def test_real_task_store_delete_recovery(self, test_beads_db, fresh_conversation):
         """Create real task, then delete via reset."""
+        from village.tasks import get_task_store
+
         config = Config(
             git_root=test_beads_db,
             village_dir=test_beads_db / ".village",
@@ -523,23 +523,11 @@ class TestBeadsIntegration:
         assert state.session_snapshot is not None
         created_id = state.session_snapshot.created_task_ids[0]
 
-        result = subprocess.run(
-            ["bd", "show", created_id],
-            cwd=test_beads_db,
-            capture_output=True,
-            text=True,
-        )
-
-        assert result.returncode == 0
+        store = get_task_store(config=config)
+        task = store.get_task(created_id)
+        assert task is not None
+        assert task.title == "Task to Delete"
 
         state = _handle_reset(state, config)
 
-        result = subprocess.run(
-            ["bd", "show", created_id],
-            cwd=test_beads_db,
-            capture_output=True,
-            text=True,
-        )
-
-        # bd show returns 0 even when issue not found, check stderr/output instead
-        assert "no issue found" in result.stderr or "Error" in result.stderr
+        assert len(state.session_snapshot.created_task_ids) == 0

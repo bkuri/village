@@ -71,17 +71,17 @@ class TestBuildSequentialThinkingPrompt:
 
         assert "Tags: frontend, backend, api" in prompt
 
-    def test_prompt_includes_beads_state(self) -> None:
-        """Test that beads_state is included when provided."""
+    def test_prompt_includes_tasks_state(self) -> None:
+        """Test that tasks_state is included when provided."""
         baseline = BaselineReport(
             title="Test task",
             reasoning="Test reasoning",
         )
-        beads_state = "bd-a1b2c3: Task 1\nbd-d4e5f6: Task 2"
+        tasks_state = "bd-a1b2c3: Task 1\nbd-d4e5f6: Task 2"
 
-        prompt = _build_sequential_thinking_prompt(baseline, beads_state)
+        prompt = _build_sequential_thinking_prompt(baseline, tasks_state)
 
-        assert "CONTEXT: Consider these existing Beads tasks:" in prompt
+        assert "CONTEXT: Consider these existing tasks:" in prompt
         assert "bd-a1b2c3: Task 1" in prompt
         assert "bd-d4e5f6: Task 2" in prompt
 

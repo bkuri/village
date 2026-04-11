@@ -1,16 +1,16 @@
-"""Research Beads integrator for task management."""
+"""Research task hooks for task management."""
 
-from village.extensibility.beads_integrators import (
-    BeadCreated,
-    BeadsIntegrator,
-    BeadSpec,
+from village.extensibility.task_hooks import (
+    TaskCreated,
+    TaskHooks,
+    TaskHookSpec,
 )
 
 
-class ResearchBeadsIntegrator(BeadsIntegrator):
-    """Beads integrator for research domain.
+class ResearchTaskHooks(TaskHooks):
+    """Task hooks for research domain.
 
-    Creates Beads tasks for research projects with metadata:
+    Creates tasks for research projects with metadata:
     - Research field
     - Methodology (qualitative/quantitative/mixed)
     - Number of sources
@@ -18,12 +18,12 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
     """
 
     def __init__(self) -> None:
-        """Initialize research beads integrator."""
+        """Initialize research task hooks."""
 
-    async def should_create_bead(self, context: dict) -> bool:
-        """Determine if bead should be created.
+    async def should_create_task_hook(self, context: dict) -> bool:
+        """Determine if task hook should fire.
 
-        Creates beads for research tasks.
+        Creates hooks for research tasks.
 
         Args:
             context: Context dictionary with task info
@@ -34,10 +34,10 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
         task_type = context.get("task_type", "")
         return "research" in task_type.lower() or "research" in str(context.values()).lower()
 
-    async def create_bead_spec(self, context: dict) -> BeadSpec:
-        """Create bead specification from context.
+    async def create_hook_spec(self, context: dict) -> TaskHookSpec:
+        """Create hook specification from context.
 
-        Creates BeadSpec with research metadata:
+        Creates TaskHookSpec with research metadata:
         - research_field: Academic domain
         - methodology: qualitative/quantitative/mixed
         - sources: Number of sources cited
@@ -46,7 +46,7 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
             context: Context dictionary with task info
 
         Returns:
-            BeadSpec for bead creation
+            TaskHookSpec for task creation
         """
         title = context.get("title", "Research Task")
         description = context.get("description", "")
@@ -64,7 +64,7 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
             "citation_style": "APA",
         }
 
-        return BeadSpec(
+        return TaskHookSpec(
             title=title,
             description=description,
             issue_type="task",
@@ -73,25 +73,25 @@ class ResearchBeadsIntegrator(BeadsIntegrator):
             metadata=metadata,
         )
 
-    async def on_bead_created(self, bead: BeadCreated, context: dict) -> None:
-        """Handle bead creation.
+    async def on_task_created(self, created_task: TaskCreated, context: dict) -> None:
+        """Handle task creation.
 
-        Logs bead creation to console.
+        Logs task creation to console.
 
         Args:
-            bead: Created bead
+            created: Created task
             context: Original context
         """
-        research_field = bead.metadata.get("research_field", "Unknown") if bead.metadata else "Unknown"
-        print(f"[RESEARCH] Created bead {bead.bead_id} for {research_field} research")
+        research_field = created_task.metadata.get("research_field", "Unknown") if created_task.metadata else "Unknown"
+        print(f"[RESEARCH] Created task {created_task.task_id} for {research_field} research")
 
-    async def on_bead_updated(self, bead_id: str, updates: dict) -> None:
-        """Handle bead update.
+    async def on_task_updated(self, task_id: str, updates: dict) -> None:
+        """Handle task update.
 
         Minimal implementation: does nothing.
 
         Args:
-            bead_id: ID of updated bead
+            task_id: ID of updated task
             updates: Dictionary of updates
         """
         pass

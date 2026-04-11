@@ -1,4 +1,4 @@
-"""Queue scheduler for executing ready tasks from Beads."""
+"""Queue scheduler for executing ready tasks."""
 
 import logging
 import re
@@ -14,10 +14,9 @@ from village.conflict_detection import (
 )
 from village.event_log import is_task_recent, log_task_start, read_events
 from village.locks import Lock, parse_lock
-from village.probes.beads import beads_available
-from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
 from village.state_machine import TaskState, TaskStateMachine
+from village.tasks import TaskStoreError, get_task_store
 from village.trace import TraceEventType, TraceWriter
 
 logger = logging.getLogger(__name__)
@@ -55,93 +54,75 @@ class QueuePlan:
     concurrency_limit: int
 
 
-def extract_agent_from_metadata(output_line: str, config: Config) -> str:
+def extract_agent_from_labels(labels: list[str], config: Config) -> str:
     """
-    Extract agent type from task metadata.
+    Extract agent type from task labels.
 
     Priority:
     1. Task labels (agent:build, agent=build, agent/build)
     2. Config default agent
 
     Args:
-        output_line: Single line from `bd ready` output
+        labels: List of task label strings
         config: Config object for default agent
 
     Returns:
         Detected agent type
     """
-    # Check for agent label in various formats
     agent_patterns = [
-        r"agent:(\w+)",  # agent:build
-        r"agent=(\w+)",  # agent=build
-        r"agent/(\w+)",  # agent/build
+        r"agent:(\w+)",
+        r"agent=(\w+)",
+        r"agent/(\w+)",
     ]
 
-    for pattern in agent_patterns:
-        match = re.search(pattern, output_line, re.IGNORECASE)
-        if match:
-            return match.group(1).lower()
+    for label in labels:
+        for pattern in agent_patterns:
+            match = re.search(pattern, label, re.IGNORECASE)
+            if match:
+                return match.group(1).lower()
 
-    # Default to config default_agent
     logger.debug(f"agent={config.default_agent} (reason: no agent label)")
     return config.default_agent
 
 
 def extract_ready_tasks(config: Config) -> list[QueueTask]:
     """
-    Extract ready tasks from Beads.
+    Extract ready tasks from the task store.
 
     Args:
         config: Config object
 
     Returns:
-        List of QueueTask objects (empty if no tasks or beads not available)
+        List of QueueTask objects (empty if no tasks or store not available)
     """
-    beads_status = beads_available()
-    if not (beads_status.command_available and beads_status.repo_initialized):
-        logger.debug("Beads not available, no ready tasks")
+    try:
+        store = get_task_store(config=config)
+    except TaskStoreError:
+        logger.debug("Task store not available, no ready tasks")
         return []
 
     try:
-        output = run_command_output(["bd", "ready"])
-        if not output.strip():
+        task_models = store.get_ready_tasks()
+        if not task_models:
             return []
 
         tasks = []
-        for line in output.splitlines():
-            line = line.strip()
-            if not line:
-                continue
+        for task_model in task_models:
+            agent = extract_agent_from_labels(task_model.labels, config)
+            tasks.append(
+                QueueTask(
+                    task_id=task_model.id,
+                    agent=agent,
+                    agent_metadata={"priority": str(task_model.priority)},
+                    title=task_model.title,
+                    description=task_model.description,
+                )
+            )
 
-            # Skip header lines (e.g., "📋 Ready work...")
-            if not re.match(r"^\d+\.", line):
-                continue
-
-            # Extract task_id from format: "1. [● P2] [task] village-5dr: Title"
-            # Pattern: number prefix, brackets with metadata, then task ID before colon
-            match = re.search(r"\[task\]\s+([a-zA-Z0-9_-]+):", line)
-            if not match:
-                # Fallback: try old pattern for "bd-xxxx" format
-                match = re.search(r"\b(bd-[a-f0-9]+)\b", line)
-            if not match:
-                logger.debug(f"Could not parse task_id from line: {line}")
-                continue
-
-            task_id = match.group(1)
-
-            title = ""
-            title_match = re.search(r"\[task\]\s+[a-zA-Z0-9_-]+:\s*(.+)$", line)
-            if title_match:
-                title = title_match.group(1).strip()
-
-            agent = extract_agent_from_metadata(line, config)
-
-            tasks.append(QueueTask(task_id=task_id, agent=agent, agent_metadata={}, title=title))
-
-        logger.debug(f"Extracted {len(tasks)} ready tasks from Beads")
+        logger.debug(f"Extracted {len(tasks)} ready tasks from task store")
         return tasks
 
-    except SubprocessError as e:
+    except TaskStoreError as e:
         logger.warning(f"Failed to extract ready tasks: {e}")
         return []
 
@@ -174,7 +155,7 @@ def arbitrate_locks(
     Arbitrate locks and apply concurrency limits.
 
     Args:
-        tasks: Ready tasks from Beads
+        tasks: Ready tasks from task store
         session_name: Tmux session name
         max_workers: Maximum concurrent workers
         config: Config object
@@ -330,7 +311,7 @@ def generate_queue_plan(
     if config is None:
         config = get_config()
 
-    # Extract ready tasks from Beads
+    # Extract ready tasks from task store
     tasks = extract_ready_tasks(config)
 
     # Arbitrate locks and apply concurrency limits

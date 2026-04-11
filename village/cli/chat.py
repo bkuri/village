@@ -49,7 +49,7 @@ def chat() -> None:
       - /refine <clarification>: Revise current task
       - /revise <clarification>: Alias for /refine
       - /undo: Undo last refinement
-      - /confirm: Create task in Beads
+      - /confirm: Create task in task store
       - /discard: Discard current task
       - /tasks, /task <id>, /ready, /status, /history, /help
 
@@ -57,16 +57,10 @@ def chat() -> None:
 
     Type /help for command reference.
     """
-    from village.chat.beads_client import BeadsClient, BeadsError
     from village.chat.llm_chat import LLMChat
     from village.llm.factory import get_llm_client
 
     config = get_config()
-
-    try:
-        beads_client = BeadsClient()
-    except Exception:
-        beads_client = None
 
     llm_client = get_llm_client(config)
 
@@ -81,11 +75,7 @@ def chat() -> None:
 
     async def setup_chat() -> None:
         extensions, discovered_servers = await _initialize_extensions_and_mcp(config)
-
         await llm_chat.set_extensions(extensions)
-
-        if beads_client:
-            await llm_chat.set_beads_client(beads_client)
 
     try:
         asyncio.run(setup_chat())
@@ -104,8 +94,6 @@ def chat() -> None:
             try:
                 response = asyncio.run(llm_chat.handle_message(user_input))
                 click.echo("\n" + response + "\n")
-            except BeadsError as e:
-                click.echo(f"\n❌ Beads error: {e}\n")
             except Exception as e:
                 click.echo(f"\n❌ Error: {e}\n")
     except click.exceptions.Abort:

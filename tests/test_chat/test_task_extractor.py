@@ -6,15 +6,15 @@ import pytest
 
 from village.chat.baseline import BaselineReport
 from village.chat.sequential_thinking import TaskBreakdown, TaskBreakdownItem
-from village.chat.task_extractor import BeadsTaskSpec, extract_beads_specs
+from village.chat.task_extractor import TaskSubmissionSpec, extract_task_specs
 
 
-class TestBeadsTaskSpecDefaults:
-    """Tests for BeadsTaskSpec default values."""
+class TestTaskSubmissionSpecDefaults:
+    """Tests for TaskSubmissionSpec default values."""
 
-    def test_beads_task_spec_defaults(self) -> None:
-        """Test creating BeadsTaskSpec with minimal required fields."""
-        spec = BeadsTaskSpec(
+    def test_task_submission_spec_defaults(self) -> None:
+        """Test creating TaskSubmissionSpec with minimal required fields."""
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",
@@ -37,12 +37,12 @@ class TestBeadsTaskSpecDefaults:
         assert spec.custom_fields == {}
 
 
-class TestBeadsTaskSpecPostInit:
-    """Tests for BeadsTaskSpec __post_init__ method."""
+class TestTaskSubmissionSpecPostInit:
+    """Tests for TaskSubmissionSpec __post_init__ method."""
 
     def test_post_init_defaults_depends_on(self) -> None:
         """Test that depends_on defaults to empty list if None."""
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",
@@ -58,7 +58,7 @@ class TestBeadsTaskSpecPostInit:
 
     def test_post_init_defaults_success_criteria(self) -> None:
         """Test that success_criteria defaults to empty list if None."""
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",
@@ -74,7 +74,7 @@ class TestBeadsTaskSpecPostInit:
 
     def test_post_init_defaults_blockers(self) -> None:
         """Test that blockers defaults to empty list if None."""
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",
@@ -90,7 +90,7 @@ class TestBeadsTaskSpecPostInit:
 
     def test_post_init_defaults_custom_fields(self) -> None:
         """Test that custom_fields defaults to empty dict if None."""
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",
@@ -106,7 +106,7 @@ class TestBeadsTaskSpecPostInit:
 
 
 class TestExtractBeadsSpecs:
-    """Tests for extract_beads_specs function."""
+    """Tests for extract_task_specs function."""
 
     @pytest.fixture
     def mock_baseline(self) -> BaselineReport:
@@ -146,43 +146,43 @@ class TestExtractBeadsSpecs:
             created_at=datetime.now().isoformat(),
         )
 
-    def test_extract_beads_specs_returns_list(
+    def test_extract_task_specs_returns_list(
         self, mock_baseline: BaselineReport, mock_breakdown: TaskBreakdown
     ) -> None:
-        """Test that extract_beads_specs returns list of BeadsTaskSpec."""
+        """Test that extract_task_specs returns list of TaskSubmissionSpec."""
         session_id = "test-session-123"
-        specs = extract_beads_specs(mock_baseline, mock_breakdown, session_id)
+        specs = extract_task_specs(mock_baseline, mock_breakdown, session_id)
 
         assert isinstance(specs, list)
         assert len(specs) == 2
-        assert all(isinstance(spec, BeadsTaskSpec) for spec in specs)
+        assert all(isinstance(spec, TaskSubmissionSpec) for spec in specs)
 
-    def test_extract_beads_specs_batch_id_generated(
+    def test_extract_task_specs_batch_id_generated(
         self, mock_baseline: BaselineReport, mock_breakdown: TaskBreakdown
     ) -> None:
         """Test that batch_id is generated correctly."""
         session_id = "test-session-456"
-        specs = extract_beads_specs(mock_baseline, mock_breakdown, session_id)
+        specs = extract_task_specs(mock_baseline, mock_breakdown, session_id)
 
         for spec in specs:
             assert spec.batch_id.startswith(f"batch-{session_id}")
 
-    def test_extract_beads_specs_parent_task_id_preserved(
+    def test_extract_task_specs_parent_task_id_preserved(
         self, mock_baseline: BaselineReport, mock_breakdown: TaskBreakdown
     ) -> None:
         """Test that baseline.parent_task_id is preserved in specs."""
         session_id = "test-session-789"
-        specs = extract_beads_specs(mock_baseline, mock_breakdown, session_id)
+        specs = extract_task_specs(mock_baseline, mock_breakdown, session_id)
 
         for spec in specs:
             assert spec.parent_task_id == "bd-a1b2c3d"
 
-    def test_extract_beads_specs_custom_fields_include_batch_and_source(
+    def test_extract_task_specs_custom_fields_include_batch_and_source(
         self, mock_baseline: BaselineReport, mock_breakdown: TaskBreakdown
     ) -> None:
         """Test that custom fields include 'batch' and 'source' keys."""
         session_id = "test-session-abc"
-        specs = extract_beads_specs(mock_baseline, mock_breakdown, session_id)
+        specs = extract_task_specs(mock_baseline, mock_breakdown, session_id)
 
         for spec in specs:
             assert "batch" in spec.custom_fields
@@ -190,12 +190,12 @@ class TestExtractBeadsSpecs:
             assert spec.custom_fields["source"] == "village-brainstorm"
             assert spec.batch_id == spec.custom_fields["batch"]
 
-    def test_extract_beads_specs_fields_mapped_correctly(
+    def test_extract_task_specs_fields_mapped_correctly(
         self, mock_baseline: BaselineReport, mock_breakdown: TaskBreakdown
     ) -> None:
-        """Test that TaskBreakdown fields are mapped correctly to BeadsTaskSpec."""
+        """Test that TaskBreakdown fields are mapped correctly to TaskSubmissionSpec."""
         session_id = "test-session-mapping"
-        specs = extract_beads_specs(mock_baseline, mock_breakdown, session_id)
+        specs = extract_task_specs(mock_baseline, mock_breakdown, session_id)
 
         spec1, spec2 = specs
 
@@ -215,8 +215,8 @@ class TestExtractBeadsSpecs:
         assert "tags" in spec2.custom_fields
         assert spec2.custom_fields["tags"] == "auth"
 
-    def test_extract_beads_specs_with_no_parent_task_id(self) -> None:
-        """Test extract_beads_specs when baseline has no parent_task_id."""
+    def test_extract_task_specs_with_no_parent_task_id(self) -> None:
+        """Test extract_task_specs when baseline has no parent_task_id."""
         baseline = BaselineReport(
             title="Test task",
             reasoning="Test reasoning",
@@ -239,13 +239,13 @@ class TestExtractBeadsSpecs:
         )
 
         session_id = "test-session-noparent"
-        specs = extract_beads_specs(baseline, breakdown, session_id)
+        specs = extract_task_specs(baseline, breakdown, session_id)
 
         assert specs[0].parent_task_id is None
 
 
 class TestExtractBeadsSpecsWithDependencies:
-    """Tests for extract_beads_specs with dependency handling."""
+    """Tests for extract_task_specs with dependency handling."""
 
     @pytest.fixture
     def breakdown_with_dependencies(self) -> TaskBreakdown:
@@ -297,7 +297,7 @@ class TestExtractBeadsSpecsWithDependencies:
     ) -> None:
         """Test that dependencies are converted to task IDs (indices → bd-xxxx format)."""
         session_id = "test-session-deps"
-        specs = extract_beads_specs(baseline_simple, breakdown_with_dependencies, session_id)
+        specs = extract_task_specs(baseline_simple, breakdown_with_dependencies, session_id)
 
         assert len(specs) == 3
 
@@ -331,17 +331,17 @@ class TestExtractBeadsSpecsWithDependencies:
         )
 
         session_id = "test-session-nodeps"
-        specs = extract_beads_specs(baseline_simple, breakdown, session_id)
+        specs = extract_task_specs(baseline_simple, breakdown, session_id)
 
         assert specs[0].depends_on == []
 
 
-class TestBeadsTaskSpecRequiredFields:
-    """Tests for BeadsTaskSpec required fields."""
+class TestTaskSubmissionSpecRequiredFields:
+    """Tests for TaskSubmissionSpec required fields."""
 
     def test_beads_task_spec_required_fields(self) -> None:
         """Test that all required fields (title, description, estimate, etc.) are present."""
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title="Test Task",
             description="Test description",
             estimate="2 hours",

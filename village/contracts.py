@@ -139,14 +139,14 @@ def generate_fallback_contract(
     Pure function - no side effects.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         agent: Agent name (e.g., "build")
         worktree_path: Path to worktree directory
         git_root: Git repository root
         window_name: Tmux window name
         created_at: Contract creation timestamp
-        task_title: Task title from Beads
-        task_description: Task description from Beads
+        task_title: Task title from task store
+        task_description: Task description from task store
 
     Returns:
         Markdown contract string
@@ -231,7 +231,7 @@ def generate_contract(
     3. Fallback Markdown template (always available)
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         agent: Agent name (e.g., "build", "frontend")
         worktree_path: Path to worktree directory
         window_name: Tmux window name

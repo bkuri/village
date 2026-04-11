@@ -8,7 +8,7 @@ Extension Points:
 2. ToolInvoker: Customize MCP tool invocation
 3. ThinkingRefiner: Domain-specific query refinement
 4. ChatContext: Session state/context management
-5. BeadsIntegrator: Customize bead creation/updates
+ 5. TaskHooks: Customize task creation/updates
 6. ServerDiscovery: Dynamic MCP server discovery
 7. LLMProviderAdapter: Customize LLM provider config
 
@@ -26,7 +26,6 @@ Example Usage:
     registry.register_processor(MyCustomProcessor())
 """
 
-from village.extensibility.beads_integrators import BeadsIntegrator, DefaultBeadsIntegrator
 from village.extensibility.context import ChatContext, DefaultChatContext
 from village.extensibility.llm_adapters import DefaultLLMProviderAdapter, LLMProviderAdapter
 from village.extensibility.loader import discover_mcp_servers, initialize_extensions
@@ -37,6 +36,7 @@ from village.extensibility.server_discovery import (
     MCPServer,
     ServerDiscovery,
 )
+from village.extensibility.task_hooks import DefaultTaskHooks, TaskHooks
 from village.extensibility.thinking_refiners import DefaultThinkingRefiner, ThinkingRefiner
 from village.extensibility.tool_invokers import DefaultToolInvoker, ToolInvoker
 
@@ -50,8 +50,8 @@ __all__ = [
     "DefaultThinkingRefiner",
     "ChatContext",
     "DefaultChatContext",
-    "BeadsIntegrator",
-    "DefaultBeadsIntegrator",
+    "TaskHooks",
+    "DefaultTaskHooks",
     "ServerDiscovery",
     "DefaultServerDiscovery",
     "LLMProviderAdapter",

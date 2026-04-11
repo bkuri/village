@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -15,7 +16,7 @@ from village.release import (
     get_changelog_category,
     get_pending_bumps,
     get_release_history,
-    get_task_type_from_beads,
+    get_task_type_from_store,
     queue_bump,
     record_release,
     scope_to_bump,
@@ -261,50 +262,46 @@ class TestGetChangelogCategory:
 
 
 class TestGetTaskTypeFromBeads:
-    """Tests for get_task_type_from_beads function."""
+    """Tests for get_task_type_from_store function."""
 
-    def test_returns_empty_when_beads_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda *args, **kwargs: (_ for _ in ()).throw(FileNotFoundError()),
-        )
-        assert get_task_type_from_beads("bd-123") == ""
+    @patch("village.release.get_task_store")
+    def test_returns_empty_when_store_unavailable(self, mock_get_store):
+        from village.tasks import TaskStoreError
 
-    def test_returns_empty_on_nonzero_exit(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        class MockResult:
-            returncode = 1
-            stdout = ""
+        mock_get_store.side_effect = TaskStoreError("not available")
+        assert get_task_type_from_store("bd-123") == ""
 
-        monkeypatch.setattr("village.release.subprocess.run", lambda *args, **kwargs: MockResult())
-        assert get_task_type_from_beads("bd-123") == ""
+    @patch("village.release.get_task_store")
+    def test_returns_empty_on_task_not_found(self, mock_get_store):
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = None
+        mock_get_store.return_value = mock_store
+        assert get_task_type_from_store("bd-123") == ""
 
-    def test_returns_type_from_valid_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import json
+    @patch("village.release.get_task_store")
+    def test_returns_type_from_valid_task(self, mock_get_store):
+        mock_task = MagicMock()
+        mock_task.issue_type = "feature"
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = mock_task
+        mock_get_store.return_value = mock_store
+        assert get_task_type_from_store("bd-123") == "feature"
 
-        class MockResult:
-            returncode = 0
-            stdout = json.dumps({"id": "bd-123", "type": "feature"})
+    @patch("village.release.get_task_store")
+    def test_handles_store_error(self, mock_get_store):
+        from village.tasks import TaskStoreError
 
-        monkeypatch.setattr("village.release.subprocess.run", lambda *args, **kwargs: MockResult())
-        assert get_task_type_from_beads("bd-123") == "feature"
+        mock_get_store.side_effect = TaskStoreError("error")
+        assert get_task_type_from_store("bd-123") == ""
 
-    def test_handles_invalid_json(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        class MockResult:
-            returncode = 0
-            stdout = "not json"
-
-        monkeypatch.setattr("village.release.subprocess.run", lambda *args, **kwargs: MockResult())
-        assert get_task_type_from_beads("bd-123") == ""
-
-    def test_handles_missing_type_field(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import json
-
-        class MockResult:
-            returncode = 0
-            stdout = json.dumps({"id": "bd-123"})
-
-        monkeypatch.setattr("village.release.subprocess.run", lambda *args, **kwargs: MockResult())
-        assert get_task_type_from_beads("bd-123") == ""
+    @patch("village.release.get_task_store")
+    def test_handles_missing_type_field(self, mock_get_store):
+        mock_task = MagicMock()
+        mock_task.issue_type = "task"
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = mock_task
+        mock_get_store.return_value = mock_store
+        assert get_task_type_from_store("bd-123") == "task"
 
 
 class TestUpdateChangelogCategorization:
@@ -316,9 +313,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [
@@ -344,9 +343,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [
@@ -371,9 +372,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [
@@ -398,9 +401,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [
@@ -443,9 +448,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [
@@ -470,9 +477,11 @@ class TestUpdateChangelogCategorization:
 
         monkeypatch.setattr(
             "village.release.subprocess.run",
-            lambda args, **kwargs: type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})(),
+            lambda args, **kwargs: (
+                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+                if "rev-parse" in args
+                else type("obj", (object,), {"returncode": 0})()
+            ),
         )
 
         pending = [

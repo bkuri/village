@@ -35,37 +35,12 @@ class InterviewEngine:
         config: OnboardConfig,
         project_info: ProjectInfo,
         scaffold: ScaffoldTemplate,
+        preseeded_answers: dict[str, str] | None = None,
     ) -> None:
         self.config = config
         self.project_info = project_info
         self.scaffold = scaffold
-
-    def _build_system_prompt(self) -> str:
-        return (
-            "You are an experienced software project architect who has seen "
-            "thousands of projects succeed and fail. Your job is to interview "
-            "a user about their project to generate complete documentation. "
-            "Ask one question at a time. Use previous answers to inform your "
-            "next question. Be probing and specific -- not vague. "
-            f"Ask a maximum of {self.config.max_questions} questions. "
-            "End with INTERVIEW_COMPLETE when done."
-        )
-
-    def _build_context_seed(self) -> str:
-        parts = [f"Project: {self.project_info.project_name}"]
-        if self.project_info.language != "unknown":
-            parts.append(f"Language: {self.project_info.language}")
-        if self.project_info.framework:
-            parts.append(f"Framework: {self.project_info.framework}")
-        if self.project_info.build_tool:
-            parts.append(f"Build tool: {self.project_info.build_tool}")
-        if self.project_info.test_runner:
-            parts.append(f"Test runner: {self.project_info.test_runner}")
-        if self.project_info.linter:
-            parts.append(f"Linter: {self.project_info.linter}")
-        if self.scaffold.conventions:
-            parts.append(f"Common conventions: {', '.join(self.scaffold.conventions[:3])}")
-        return "\n".join(parts)
+        self.preseeded_answers = preseeded_answers or {}
 
     def get_default_questions(self) -> list[str]:
         questions = list(_DEFAULT_QUESTIONS)
@@ -80,34 +55,51 @@ class InterviewEngine:
         if answers is None:
             answers = {}
 
+        merged = dict(self.preseeded_answers)
+        merged.update(answers)
+
         questions = self.get_default_questions()
         transcript: list[tuple[str, str]] = []
 
         for question in questions:
-            answer = answers.get(question, "")
+            answer = merged.get(question, "")
             transcript.append((question, answer))
 
-        summary_parts = [f"{k}: {v}" for k, v in answers.items() if v]
+        summary_parts = [f"{k}: {v}" for k, v in merged.items() if v]
         summary = "\n".join(summary_parts) if summary_parts else "No answers provided."
 
         return InterviewResult(
-            answers=dict(answers),
+            answers=dict(merged),
             project_summary=summary,
             raw_transcript=transcript,
         )
 
     def run_interactive(self) -> InterviewResult:
         questions = self.get_default_questions()
-        answers: dict[str, str] = {}
+        answers: dict[str, str] = dict(self.preseeded_answers)
         transcript: list[tuple[str, str]] = []
 
-        click.echo(f"\nProject detected: {self.project_info.language}")
-        if self.project_info.framework:
-            click.echo(f"Framework: {self.project_info.framework}")
-        click.echo(f"I'll ask up to {self.config.max_questions} questions.\n")
+        preseeded_count = sum(1 for q in questions if q in self.preseeded_answers)
+        remaining = len(questions) - preseeded_count
+
+        if self.project_info.language != "unknown":
+            click.echo(f"\nProject detected: {self.project_info.language}")
+            if self.project_info.framework:
+                click.echo(f"Framework: {self.project_info.framework}")
+        else:
+            click.echo("\nI'll need more details to determine the project type.")
+        if remaining > 0:
+            click.echo(f"I'll ask {remaining} question{'s' if remaining != 1 else ''}.\n")
+        else:
+            click.echo("All questions answered.\n")
         click.echo("Type your answer and press Enter. Empty line to skip. 'done' to finish.\n")
 
         for question in questions:
+            if question in self.preseeded_answers:
+                answer = self.preseeded_answers[question]
+                transcript.append((question, answer))
+                continue
+
             click.echo(f"? {question}")
             lines: list[str] = []
 

@@ -33,7 +33,7 @@ def generate_window_name(task_id: str, worker_num: int = 1) -> str:
     For initial creation, uses worker_num=1 (generic "worker").
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         worker_num: Worker number (defaults to 1)
 
     Returns:

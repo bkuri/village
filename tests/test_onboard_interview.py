@@ -13,6 +13,7 @@ def _make_engine(
     linter: str | None = "ruff",
     project_name: str = "test-project",
     conventions: list[str] | None = None,
+    preseeded_answers: dict[str, str] | None = None,
 ) -> InterviewEngine:
     config = OnboardConfig(max_questions=max_questions)
     project_info = ProjectInfo(
@@ -28,7 +29,9 @@ def _make_engine(
         framework=framework,
         conventions=conventions or [],
     )
-    return InterviewEngine(config=config, project_info=project_info, scaffold=scaffold)
+    return InterviewEngine(
+        config=config, project_info=project_info, scaffold=scaffold, preseeded_answers=preseeded_answers
+    )
 
 
 class TestGetDefaultQuestions:
@@ -110,85 +113,6 @@ class TestRunDefault:
         assert result.answers == {}
 
 
-class TestBuildSystemPrompt:
-    def test_includes_max_questions(self) -> None:
-        engine = _make_engine(max_questions=7)
-        prompt = engine._build_system_prompt()
-
-        assert "7" in prompt
-        assert "maximum of 7 questions" in prompt
-
-    def test_mentions_interview_complete(self) -> None:
-        engine = _make_engine()
-        prompt = engine._build_system_prompt()
-
-        assert "INTERVIEW_COMPLETE" in prompt
-
-
-class TestBuildContextSeed:
-    def test_includes_project_name(self) -> None:
-        engine = _make_engine(project_name="my-cool-app")
-        seed = engine._build_context_seed()
-
-        assert "Project: my-cool-app" in seed
-
-    def test_includes_language_when_known(self) -> None:
-        engine = _make_engine(language="python")
-        seed = engine._build_context_seed()
-
-        assert "Language: python" in seed
-
-    def test_omits_language_when_unknown(self) -> None:
-        engine = _make_engine(language="unknown")
-        seed = engine._build_context_seed()
-
-        assert "Language:" not in seed
-
-    def test_includes_framework(self) -> None:
-        engine = _make_engine(framework="fastapi")
-        seed = engine._build_context_seed()
-
-        assert "Framework: fastapi" in seed
-
-    def test_omits_framework_when_none(self) -> None:
-        engine = _make_engine(framework=None)
-        seed = engine._build_context_seed()
-
-        assert "Framework:" not in seed
-
-    def test_includes_build_tool(self) -> None:
-        engine = _make_engine(build_tool="uv")
-        seed = engine._build_context_seed()
-
-        assert "Build tool: uv" in seed
-
-    def test_includes_test_runner(self) -> None:
-        engine = _make_engine(test_runner="pytest")
-        seed = engine._build_context_seed()
-
-        assert "Test runner: pytest" in seed
-
-    def test_includes_linter(self) -> None:
-        engine = _make_engine(linter="ruff")
-        seed = engine._build_context_seed()
-
-        assert "Linter: ruff" in seed
-
-    def test_includes_conventions(self) -> None:
-        engine = _make_engine(conventions=["Use pathlib.Path", "Type hints required", "No print()"])
-        seed = engine._build_context_seed()
-
-        assert "Common conventions:" in seed
-        assert "Use pathlib.Path" in seed
-
-    def test_limits_conventions_to_three(self) -> None:
-        engine = _make_engine(conventions=["conv1", "conv2", "conv3", "conv4", "conv5"])
-        seed = engine._build_context_seed()
-
-        assert "conv1" in seed
-        assert "conv4" not in seed
-
-
 class TestInterviewResult:
     def test_default_values(self) -> None:
         result = InterviewResult()
@@ -225,4 +149,45 @@ class TestBuildResult:
         engine = _make_engine()
         result = engine._build_result({}, [])
 
+        assert result.project_summary == "No answers provided."
+
+
+class TestPreseededAnswers:
+    def test_preseeded_answers_passed_to_run_default(self) -> None:
+        engine = _make_engine(
+            preseeded_answers={"What does this project do?": "A CLI tool"},
+        )
+        result = engine.run_default()
+        assert result.answers["What does this project do?"] == "A CLI tool"
+
+    def test_preseeded_answers_merged_with_provided(self) -> None:
+        engine = _make_engine(
+            preseeded_answers={"What does this project do?": "A CLI tool"},
+        )
+        result = engine.run_default(
+            answers={"How do you run tests?": "pytest"},
+        )
+        assert result.answers["What does this project do?"] == "A CLI tool"
+        assert result.answers["How do you run tests?"] == "pytest"
+
+    def test_provided_answers_override_preseeded(self) -> None:
+        engine = _make_engine(
+            preseeded_answers={"What does this project do?": "original"},
+        )
+        result = engine.run_default(
+            answers={"What does this project do?": "overridden"},
+        )
+        assert result.answers["What does this project do?"] == "overridden"
+
+    def test_preseeded_answers_in_summary(self) -> None:
+        engine = _make_engine(
+            preseeded_answers={"What does this project do?": "A CLI tool"},
+        )
+        result = engine.run_default()
+        assert "A CLI tool" in result.project_summary
+
+    def test_empty_preseeded_answers(self) -> None:
+        engine = _make_engine()
+        result = engine.run_default()
+        assert result.answers == {}
         assert result.project_summary == "No answers provided."

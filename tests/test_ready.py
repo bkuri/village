@@ -4,7 +4,7 @@ import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from village.locks import Lock, write_lock
 from village.ready import (
@@ -75,10 +75,15 @@ def test_check_runtime_ready_false():
 
 
 def test_check_work_available_with_beads():
-    """Test work check when beads returns tasks."""
-    with patch("village.ready.run_command_output") as mock_beads:
-        mock_beads.return_value = "bd-xxxx\nbd-yyyy\nbd-zzzz\n"
+    """Test work check when task store returns tasks."""
+    mock_store = MagicMock()
+    mock_store.get_ready_tasks.return_value = [
+        MagicMock(id="bd-xxxx"),
+        MagicMock(id="bd-yyyy"),
+        MagicMock(id="bd-zzzz"),
+    ]
 
+    with patch("village.ready.get_task_store", return_value=mock_store):
         status, count = check_work_available(True)
 
         assert status == "available"
@@ -94,12 +99,13 @@ def test_check_work_available_no_beads():
 
 
 def test_check_work_available_error():
-    """Test work check when beads command fails."""
-    from village.probes.tools import SubprocessError
+    """Test work check when task store query fails."""
+    from village.tasks import TaskStoreError
 
-    with patch("village.ready.run_command_output") as mock_beads:
-        mock_beads.side_effect = SubprocessError("bd failed")
+    mock_store = MagicMock()
+    mock_store.get_ready_tasks.side_effect = TaskStoreError("query failed")
 
+    with patch("village.ready.get_task_store", return_value=mock_store):
         status, count = check_work_available(True)
 
         assert status == "unknown"
@@ -117,32 +123,24 @@ def test_collect_readiness_data_all_good(tmp_path: Path):
     config.ensure_exists()
     config.config_path.touch()
 
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.get_ready_tasks.return_value = [MagicMock(id="bd-xxxx"), MagicMock(id="bd-yyyy")]
+
     with patch("village.ready.session_exists") as mock_session:
         mock_session.return_value = True
 
-        with patch("village.ready.beads_available") as mock_beads:
-            mock_beads.return_value = type(
-                "BeadsStatus",
-                (),
-                {
-                    "command_available": True,
-                    "repo_initialized": True,
-                },
-            )()
+        with patch("village.ready.get_task_store", return_value=mock_store):
+            with patch("village.ready.get_config") as mock_config:
+                mock_config.return_value = config
 
-            with patch("village.ready.run_command_output") as mock_output:
-                mock_output.return_value = "bd-xxxx\nbd-yyyy\n"
+                data = collect_readiness_data("village", config)
 
-                with patch("village.ready.get_config") as mock_config:
-                    mock_config.return_value = config
-
-                    data = collect_readiness_data("village", config)
-
-                    assert data["environment_ready"] is True
-                    assert data["runtime_ready"] is True
-                    assert data["work_available"] == "available"
-                    assert data["ready_tasks_count"] == 2
-                    assert data["beads_capable"] is True
+                assert data["environment_ready"] is True
+                assert data["runtime_ready"] is True
+                assert data["work_available"] == "available"
+                assert data["ready_tasks_count"] == 2
+                assert data["store_capable"] is True
 
 
 def test_collect_readiness_data_with_orphans(tmp_path: Path):
@@ -158,7 +156,6 @@ def test_collect_readiness_data_with_orphans(tmp_path: Path):
     config.locks_dir.mkdir(parents=True, exist_ok=True)
     config.worktrees_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create a stale lock (no pane)
     lock1 = Lock(
         task_id="bd-a3f8",
         pane_id="%12",
@@ -168,34 +165,25 @@ def test_collect_readiness_data_with_orphans(tmp_path: Path):
     )
     write_lock(lock1)
 
-    # Create untracked worktree
     worktree_dir = config.worktrees_dir / "bd-b4f2"
     worktree_dir.mkdir()
+
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.get_ready_tasks.return_value = []
 
     with patch("village.ready.session_exists") as mock_session:
         mock_session.return_value = True
 
-        with patch("village.ready.beads_available") as mock_beads:
-            mock_beads.return_value = type(
-                "BeadsStatus",
-                (),
-                {
-                    "command_available": True,
-                    "repo_initialized": True,
-                },
-            )()
+        with patch("village.ready.get_task_store", return_value=mock_store):
+            with patch("village.ready.get_config") as mock_config:
+                mock_config.return_value = config
 
-            with patch("village.ready.run_command_output") as mock_output:
-                mock_output.return_value = ""
+                data = collect_readiness_data("village", config)
 
-                with patch("village.ready.get_config") as mock_config:
-                    mock_config.return_value = config
-
-                    data = collect_readiness_data("village", config)
-
-                    assert data["orphans_count"] == 2
-                    assert data["stale_locks_count"] == 1
-                    assert data["untracked_worktrees_count"] == 1
+                assert data["orphans_count"] == 2
+                assert data["stale_locks_count"] == 1
+                assert data["untracked_worktrees_count"] == 1
 
                 lock1.path.unlink(missing_ok=True)
 
@@ -297,32 +285,24 @@ def test_assess_readiness_ready(tmp_path: Path):
     config.ensure_exists()
     config.config_path.touch()
 
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.get_ready_tasks.return_value = [MagicMock(id="bd-xxxx")]
+
     with patch("village.ready.session_exists") as mock_session:
         mock_session.return_value = True
 
-        with patch("village.ready.beads_available") as mock_beads:
-            mock_beads.return_value = type(
-                "BeadsStatus",
-                (),
-                {
-                    "command_available": True,
-                    "repo_initialized": True,
-                },
-            )()
+        with patch("village.ready.get_task_store", return_value=mock_store):
+            with patch("village.ready.get_config") as mock_config:
+                mock_config.return_value = config
 
-            with patch("village.ready.run_command_output") as mock_output:
-                mock_output.return_value = "bd-xxxx\n"
+                assessment = assess_readiness("village")
 
-                with patch("village.ready.get_config") as mock_config:
-                    mock_config.return_value = config
-
-                    assessment = assess_readiness("village")
-
-                    assert assessment.overall == ReadyState.READY
-                    assert assessment.environment_ready is True
-                    assert assessment.runtime_ready is True
-                    assert assessment.work_available == "available"
-                    assert assessment.ready_tasks_count == 1
+                assert assessment.overall == ReadyState.READY
+                assert assessment.environment_ready is True
+                assert assessment.runtime_ready is True
+                assert assessment.work_available == "available"
+                assert assessment.ready_tasks_count == 1
 
 
 def test_assess_readiness_ready_with_actions(tmp_path: Path):
@@ -337,33 +317,24 @@ def test_assess_readiness_ready_with_actions(tmp_path: Path):
     config.config_path.touch()
     config.worktrees_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create untracked worktree
     worktree_dir = config.worktrees_dir / "bd-b4f2"
     worktree_dir.mkdir()
+
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.get_ready_tasks.return_value = [MagicMock(id="bd-xxxx")]
 
     with patch("village.ready.session_exists") as mock_session:
         mock_session.return_value = True
 
-        with patch("village.ready.beads_available") as mock_beads:
-            mock_beads.return_value = type(
-                "BeadsStatus",
-                (),
-                {
-                    "command_available": True,
-                    "repo_initialized": True,
-                },
-            )()
+        with patch("village.ready.get_task_store", return_value=mock_store):
+            with patch("village.ready.get_config") as mock_config:
+                mock_config.return_value = config
 
-            with patch("village.ready.run_command_output") as mock_output:
-                mock_output.return_value = "bd-xxxx\n"
+                assessment = assess_readiness("village")
 
-                with patch("village.ready.get_config") as mock_config:
-                    mock_config.return_value = config
-
-                    assessment = assess_readiness("village")
-
-                    assert assessment.overall == ReadyState.READY_WITH_ACTIONS
-                    assert assessment.orphans_count == 1
+                assert assessment.overall == ReadyState.READY_WITH_ACTIONS
+                assert assessment.orphans_count == 1
 
 
 def test_assess_readiness_ready_no_work(tmp_path: Path):
@@ -377,26 +348,18 @@ def test_assess_readiness_ready_no_work(tmp_path: Path):
     config.ensure_exists()
     config.config_path.touch()
 
+    mock_store = MagicMock()
+    mock_store.is_available.return_value = True
+    mock_store.get_ready_tasks.return_value = []
+
     with patch("village.ready.session_exists") as mock_session:
         mock_session.return_value = True
 
-        with patch("village.ready.beads_available") as mock_beads:
-            mock_beads.return_value = type(
-                "BeadsStatus",
-                (),
-                {
-                    "command_available": True,
-                    "repo_initialized": True,
-                },
-            )()
+        with patch("village.ready.get_task_store", return_value=mock_store):
+            with patch("village.ready.get_config") as mock_config:
+                mock_config.return_value = config
 
-            with patch("village.ready.run_command_output") as mock_output:
-                mock_output.return_value = ""
+                assessment = assess_readiness("village")
 
-                with patch("village.ready.get_config") as mock_config:
-                    mock_config.return_value = config
-
-                    assessment = assess_readiness("village")
-
-                    assert assessment.overall == ReadyState.READY_NO_WORK
-                    assert assessment.work_available == "not_available"
+                assert assessment.overall == ReadyState.READY_NO_WORK
+                assert assessment.work_available == "not_available"

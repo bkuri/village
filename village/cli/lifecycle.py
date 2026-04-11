@@ -34,27 +34,41 @@ def _prompt(question: str) -> str:
         return ""
 
 
+_STOP_WORDS = frozenset(
+    {"a", "an", "the", "and", "or", "but", "with", "for", "in", "on", "of", "to", "is", "it", "that"}
+)
+
+
 def _slugify(description: str) -> str:
     """Derive a working directory name from a description.
 
     Takes the first few meaningful words and joins them with hyphens.
-    Falls back to 'new-project' if nothing useful can be derived.
+    Strips common stop words. Falls back to 'new-project' if nothing
+    useful can be derived.
 
     Args:
-        description: A short project description.
+        description: A short project description or desired name.
 
     Returns:
         A slug-style directory name.
     """
     import re
 
-    words = re.split(r"\s+", description.strip().lower())
-    keep = [w for w in words if re.match(r"^[a-z][a-z0-9]*$", w)]
+    normalized = description.strip().lower()
+    segments = re.split(r"[\s_]+", normalized)
+    keep: list[str] = []
+    for segment in segments:
+        cleaned = re.sub(r"[^a-z0-9]+", "-", segment).strip("-")
+        if not cleaned:
+            continue
+        word = cleaned.split("-")[0]
+        if word not in _STOP_WORDS and re.match(r"^[a-z]", word):
+            keep.append(cleaned)
     keep = keep[:3]
     return "-".join(keep) or "new-project"
 
 
-def _run_create_project_workflow() -> str:
+def _run_create_project_workflow() -> tuple[str, str]:
     """Interactive reverse-prompt workflow for creating a new project.
 
     Asks what the user is building, then derives a working directory name
@@ -62,19 +76,19 @@ def _run_create_project_workflow() -> str:
     workflow or ``village onboard``.
 
     Returns:
-        A working directory name, or empty string if aborted.
+        A (working directory name, description) tuple, or ("", "") if aborted.
     """
     click.echo("Let's set up a new project.\n")
 
     description = _prompt("What are you building?")
     if not description:
         click.echo("Aborted.")
-        return ""
+        return "", ""
 
     slug = _slugify(description)
     click.echo(f"  Working directory: {slug}")
     click.echo("")
-    return slug
+    return slug, description
 
 
 @lifecycle_group.command("new")
@@ -90,10 +104,10 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
 
     Creates a new project directory with:
       - git init
-      - .gitignore (with .village/, .worktrees/, .beads/ entries)
+      - .gitignore (with .village/, .worktrees/ entries)
       - Adaptive onboarding interview (AGENTS.md, README.md, wiki seeds)
       - .village/config with commented defaults
-      - bd init (if beads available)
+      - bd init (if available)
       - tmux session + dashboard window
 
     When called without a name, starts an interactive create-project workflow
@@ -117,14 +131,18 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
     if is_inside_git_repo():
         raise click.ClickException("Already inside a git repository. Use `village up` instead.")
 
-    if name is None:
-        name = _run_create_project_workflow()
-        if not name:
+    description = ""
+    project_name = name
+    if project_name is None:
+        project_name, description = _run_create_project_workflow()
+        if not project_name:
             raise click.ClickException("Project name is required.")
+    else:
+        project_name = _slugify(project_name)
 
     if dry_run or plan:
         parent_dir = Path(path).resolve()
-        scaffold_plan = plan_scaffold(name, parent_dir)
+        scaffold_plan = plan_scaffold(project_name, parent_dir)
         click.echo(f"Would create project: {scaffold_plan.project_dir}")
         click.echo("\nSteps:")
         for step in scaffold_plan.steps:
@@ -132,7 +150,13 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
         return
 
     parent_dir = Path(path).resolve()
-    result = execute_scaffold(name, parent_dir, dashboard=dashboard, onboard=not skip_onboard)
+    result = execute_scaffold(
+        project_name,
+        parent_dir,
+        dashboard=dashboard,
+        onboard=not skip_onboard,
+        description=description,
+    )
 
     if result.success:
         click.echo(f"Created project: {result.project_dir}")
@@ -144,7 +168,7 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool,
                 "\nOnboarding skipped. AGENTS.md contains placeholder values. Run `village onboard` to complete setup."
             )
         click.echo("\nNext steps:")
-        click.echo(f"  cd {name}")
+        click.echo(f"  cd {project_name}")
         click.echo("  village chat   # create your first task")
     else:
         click.echo(f"Failed to create project: {result.error}", err=True)
@@ -165,7 +189,7 @@ def up(dry_run: bool, plan: bool, dashboard: bool, skip_onboard: bool, force: bo
     Brings system to desired state:
       - Creates .village/ directories
       - Creates .village/config (with defaults)
-      - Initializes Beads (if needed)
+      - Initializes task store (if needed)
       - Creates tmux session (if missing)
       - Creates dashboard window (if enabled)
       - Runs onboarding if project setup is incomplete

@@ -4,9 +4,9 @@
 import asyncio
 
 from examples.research.chat import (
-    ResearchBeadsIntegrator,
     ResearchChatContext,
     ResearchChatProcessor,
+    ResearchTaskHooks,
     ResearchThinkingRefiner,
     ResearchToolInvoker,
 )
@@ -85,10 +85,10 @@ async def test_chat_context():
     print("  ✓ Chat context passed\n")
 
 
-async def test_beads_integrator():
-    """Test ResearchBeadsIntegrator."""
-    print("Testing ResearchBeadsIntegrator...")
-    integrator = ResearchBeadsIntegrator()
+async def test_task_hooks():
+    """Test ResearchTaskHooks."""
+    print("Testing ResearchTaskHooks...")
+    hooks = ResearchTaskHooks()
 
     context = {
         "task_type": "research",
@@ -96,15 +96,15 @@ async def test_beads_integrator():
         "description": "Research machine learning interpretability methods",
     }
 
-    should_create = await integrator.should_create_bead(context)
-    print(f"  Should create bead: {should_create}")
+    should_create = await hooks.should_create_task_hook(context)
+    print(f"  Should create hook: {should_create}")
 
     if should_create:
-        bead_spec = await integrator.create_bead_spec(context)
-        print(f"  Title: {bead_spec.title}")
-        print(f"  Tags: {bead_spec.tags}")
-        print(f"  Metadata: {list(bead_spec.metadata.keys())}")
-    print("  ✓ Beads integrator passed\n")
+        hook_spec = await hooks.create_hook_spec(context)
+        print(f"  Title: {hook_spec.title}")
+        print(f"  Tags: {hook_spec.tags}")
+        print(f"  Metadata: {list(hook_spec.metadata.keys())}")
+    print("  ✓ Task hooks passed\n")
 
 
 async def test_bootstrap():
@@ -130,7 +130,7 @@ async def main():
     await test_thinking_refiner()
     await test_tool_invoker()
     await test_chat_context()
-    await test_beads_integrator()
+    await test_task_hooks()
     await test_bootstrap()
 
     print("=" * 60)

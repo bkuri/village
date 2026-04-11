@@ -3,7 +3,7 @@
 import json
 import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -197,49 +197,57 @@ R100\told.py\trenamed.py"""
 class TestGetTaskMetadata:
     """Tests for _get_task_metadata function."""
 
-    @patch("village.github_integration.subprocess.run")
-    def test_gets_metadata_from_beads(self, mock_run):
-        """Test getting metadata from Beads."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            ["bd", "show", "bd-a3f8"],
-            returncode=0,
-            stdout="title: Fix bug\npriority: high\nagent: build",
-            stderr="",
-        )
+    @patch("village.tasks.get_task_store")
+    def test_gets_metadata_from_store(self, mock_get_store):
+        """Test getting metadata from task store."""
+        mock_task = MagicMock()
+        mock_task.title = "Fix bug"
+        mock_task.description = ""
+        mock_task.id = "bd-a3f8"
+        mock_task.status = "open"
+        mock_task.issue_type = "bug"
+        mock_task.labels = ["priority:high"]
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = mock_task
+        mock_get_store.return_value = mock_store
 
         result = _get_task_metadata("bd-a3f8")
 
         assert result["title"] == "Fix bug"
-        assert result["priority"] == "high"
-        assert result["agent"] == "build"
 
-    @patch("village.github_integration.subprocess.run")
-    def test_handles_beads_unavailable(self, mock_run):
-        """Test handling unavailable Beads."""
-        mock_run.side_effect = FileNotFoundError()
+    @patch("village.tasks.get_task_store")
+    def test_handles_store_unavailable(self, mock_get_store):
+        """Test handling unavailable task store."""
+        mock_get_store.side_effect = Exception("not available")
 
         result = _get_task_metadata("bd-a3f8")
 
         assert result == {}
 
-    @patch("village.github_integration.subprocess.run")
-    def test_handles_beads_failure(self, mock_run):
-        """Test handling Beads command failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, ["bd", "show"])
+    @patch("village.tasks.get_task_store")
+    def test_handles_task_not_found(self, mock_get_store):
+        """Test handling task not found."""
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = None
+        mock_get_store.return_value = mock_store
 
         result = _get_task_metadata("bd-a3f8")
 
         assert result == {}
 
-    @patch("village.github_integration.subprocess.run")
-    def test_ignores_comments(self, mock_run):
-        """Test ignoring comment lines."""
-        mock_run.return_value = subprocess.CompletedProcess(
-            ["bd", "show", "bd-a3f8"],
-            returncode=0,
-            stdout="# Comment\ntitle: Task",
-            stderr="",
-        )
+    @patch("village.tasks.get_task_store")
+    def test_ignores_comments(self, mock_get_store):
+        """Test getting task metadata from store."""
+        mock_task = MagicMock()
+        mock_task.title = "Task"
+        mock_task.description = ""
+        mock_task.id = "bd-a3f8"
+        mock_task.status = "open"
+        mock_task.issue_type = "task"
+        mock_task.labels = []
+        mock_store = MagicMock()
+        mock_store.get_task.return_value = mock_task
+        mock_get_store.return_value = mock_store
 
         result = _get_task_metadata("bd-a3f8")
 

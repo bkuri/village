@@ -13,9 +13,6 @@ _GITIGNORE_ENTRIES = """\
 # Village orchestration state (local only)
 .village/
 .worktrees/
-
-# Beads task DAG (local only)
-.beads/
 """
 
 _MINIMAL_CONFIG = """\
@@ -40,6 +37,10 @@ _MINIMAL_CONFIG = """\
 # [agent.worker]
 # opencode_args = --verbose
 # contract = path/to/contract.md
+#
+# For pi agent backend:
+# type = pi
+# pi_args = --thinking high
 """
 
 _MINIMAL_AGENTS_MD = """\
@@ -139,18 +140,19 @@ def plan_scaffold(name: str, parent_dir: Path) -> ScaffoldPlan:
         "Create: README.md",
         "Create: AGENTS.md",
         "Create: .village/config (with defaults)",
-        "Run: bd init (if available)",
+        "Initialize: tasks.jsonl",
         "Create tmux session + dashboard window",
     ]
     return ScaffoldPlan(project_dir=project_dir, steps=steps)
 
 
-def _run_onboard_pipeline(project_dir: Path, name: str) -> list[str]:
+def _run_onboard_pipeline(project_dir: Path, name: str, description: str = "") -> list[str]:
     """Run the adaptive onboard pipeline for a new project.
 
     Args:
         project_dir: Root directory of the new project.
         name: Project name.
+        description: Initial project description from the create workflow.
 
     Returns:
         List of created file descriptions.
@@ -168,10 +170,15 @@ def _run_onboard_pipeline(project_dir: Path, name: str) -> list[str]:
     info.project_name = name
     scaffold = get_scaffold(info)
 
+    preseeded: dict[str, str] = {}
+    if description:
+        preseeded["What does this project do?"] = description
+
     engine = InterviewEngine(
         config=OnboardConfig(),
         project_info=info,
         scaffold=scaffold,
+        preseeded_answers=preseeded,
     )
     interview_result = engine.run_interactive()
 
@@ -234,6 +241,7 @@ def execute_scaffold(
     *,
     dashboard: bool = True,
     onboard: bool = True,
+    description: str = "",
 ) -> ScaffoldResult:
     """
     Execute scaffolding for a new project.
@@ -246,6 +254,7 @@ def execute_scaffold(
         parent_dir: Parent directory in which to create the project.
         dashboard: Whether to create the tmux dashboard window.
         onboard: Whether to run the adaptive onboard pipeline.
+        description: Initial project description (pre-seeds interview).
 
     Returns:
         ScaffoldResult with success flag and list of created items.
@@ -295,7 +304,7 @@ def execute_scaffold(
     # 4. Generate project files (onboard pipeline or minimal placeholders)
     if onboard:
         try:
-            onboard_created = _run_onboard_pipeline(project_dir, name)
+            onboard_created = _run_onboard_pipeline(project_dir, name, description)
             created.extend(onboard_created)
         except Exception as e:
             logger.warning(f"Onboard pipeline failed, falling back to minimal files: {e}")
@@ -319,27 +328,32 @@ def execute_scaffold(
     created.append(".village/config")
     logger.debug(f"Created {config_path}")
 
-    # 6. bd init (optional -- skip silently if unavailable)
+    # 6. task store init
     try:
-        result = subprocess.run(
-            ["bd", "init"],
-            capture_output=True,
-            text=True,
-            check=False,
-            cwd=project_dir,
-        )
-        if result.returncode == 0:
-            created.append("bd init")
-            logger.debug("Beads initialised")
-        else:
-            logger.debug("bd init failed -- skipping Beads init")
-    except FileNotFoundError:
-        logger.debug("bd not available -- skipping Beads init")
+        from village.config import Config as _Config
+        from village.tasks import get_task_store
 
-    # 7. tmux session + dashboard
+        _cfg = _Config(git_root=Path(project_dir), village_dir=village_dir, worktrees_dir=worktrees_dir)
+        store = get_task_store(tasks_file=village_dir / "tasks.jsonl", config=_cfg)
+        store.initialize()
+        created.append("tasks init")
+        logger.debug("Task store initialized")
+    except Exception as e:
+        logger.debug(f"Task store init skipped: {e}")
+
+    # 7. git hooks
+    try:
+        from village.hooks import install_hooks
+
+        install_hooks(project_dir, dry_run=False)
+        created.append("git hooks")
+    except Exception as e:
+        logger.debug(f"Git hook install skipped: {e}")
+
+    # 8. tmux session + dashboard
     from village.probes.tmux import create_session, create_window, session_exists
 
-    tmux_session = "village"
+    tmux_session = name
 
     if not session_exists(tmux_session):
         if create_session(tmux_session):
@@ -350,15 +364,15 @@ def execute_scaffold(
     else:
         logger.debug(f"tmux session '{tmux_session}' already exists -- skipping")
 
-    if dashboard:
+    if dashboard and session_exists(tmux_session):
         from village.probes.tmux import list_windows
 
-        dashboard_name = "village:dashboard"
+        dashboard_name = f"{tmux_session}:dashboard"
         dashboard_cmd = "watch -n 2 village status --short"
         windows = list_windows(tmux_session)
         if dashboard_name not in windows:
             if create_window(tmux_session, dashboard_name, dashboard_cmd):
-                created.append("tmux window: village:dashboard")
+                created.append(f"tmux window: {dashboard_name}")
                 logger.debug("Created dashboard window")
             else:
                 logger.warning("Failed to create dashboard window")

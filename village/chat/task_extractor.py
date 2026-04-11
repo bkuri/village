@@ -1,6 +1,5 @@
-"""Task extraction and Beads integration."""
+"""Task extraction and task store integration."""
 
-import json
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -8,16 +7,16 @@ from typing import Optional
 from village.chat.baseline import BaselineReport, generate_batch_id
 from village.chat.sequential_thinking import TaskBreakdown
 from village.config import Config
-from village.probes.tools import SubprocessError, run_command_output
 from village.release import BumpType
+from village.tasks import TaskCreate, TaskUpdate, get_task_store
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class BeadsTaskSpec:
+class TaskSubmissionSpec:
     """
-    Specification for creating a Beads task.
+    Specification for creating a task.
 
     Attributes:
         title: Task title
@@ -25,7 +24,7 @@ class BeadsTaskSpec:
         estimate: Effort estimate (hours|days|weeks)
         success_criteria: List of success criteria
         blockers: List of blockers
-        depends_on: List of task IDs in Beads
+        depends_on: List of task IDs
         batch_id: Group ID for tasks from one brainstorm
         parent_task_id: Optional parent task ID
         custom_fields: Additional custom fields
@@ -55,13 +54,13 @@ class BeadsTaskSpec:
             self.custom_fields = {}
 
 
-def extract_beads_specs(
+def extract_task_specs(
     baseline: BaselineReport,
     breakdown: TaskBreakdown,
     session_id: str,
-) -> list[BeadsTaskSpec]:
+) -> list[TaskSubmissionSpec]:
     """
-    Convert TaskBreakdown items into Beads create commands.
+    Convert TaskBreakdown items into task create specs.
 
     - Generate batch ID from session_id
     - Link dependencies using indices
@@ -73,7 +72,7 @@ def extract_beads_specs(
         session_id: Current chat session ID
 
     Returns:
-        List of BeadsTaskSpec ready for creation
+        List of TaskSubmissionSpec ready for creation
     """
     batch_id = generate_batch_id(session_id)
 
@@ -82,7 +81,7 @@ def extract_beads_specs(
     for item in breakdown.items:
         bump = _extract_bump_from_tags(item.tags) if item.tags else "patch"
 
-        spec = BeadsTaskSpec(
+        spec = TaskSubmissionSpec(
             title=item.title,
             description=item.description,
             estimate=item.estimated_effort,
@@ -106,25 +105,25 @@ def extract_beads_specs(
 
     _resolve_dependencies(specs, breakdown)
 
-    logger.info(f"Extracted {len(specs)} Beads task specs for batch {batch_id}")
+    logger.info(f"Extracted {len(specs)} task specs for batch {batch_id}")
 
     return specs
 
 
 def _resolve_dependencies(
-    specs: list[BeadsTaskSpec],
+    specs: list[TaskSubmissionSpec],
     breakdown: TaskBreakdown,
 ) -> None:
     """
     Resolve dependency indices to task IDs.
 
-    After task creation, update specs with actual Beads task IDs.
+    After task creation, update specs with actual task IDs.
 
     Note: This is a placeholder. Actual ID resolution happens after creation
     when we have the mapping from index → task_id.
 
     Args:
-        specs: BeadsTaskSpec list (will be mutated)
+        specs: TaskSubmissionSpec list (will be mutated)
         breakdown: Original breakdown with index-based dependencies
     """
     for i, item in enumerate(breakdown.items):
@@ -159,24 +158,11 @@ def _extract_bump_from_tags(tags: list[str]) -> BumpType:
 
 
 async def create_draft_tasks(
-    specs: list[BeadsTaskSpec],
+    specs: list[TaskSubmissionSpec],
     config: Config,
 ) -> dict[str, str]:
-    """
-    Create draft tasks in Beads.
-
-    For each spec, calls `bd create --status draft --json`.
-
-    Args:
-        specs: List of BeadsTaskSpec to create
-        config: Village configuration
-
-    Returns:
-        Mapping of spec title → task ID
-
-    Raises:
-        SubprocessError: If Beads command fails
-    """
+    store = get_task_store(config=config)
+    store.initialize()
 
     created_tasks = {}
 
@@ -189,91 +175,56 @@ async def create_draft_tasks(
             logger.error(f"Failed to create draft task '{spec.title}': {e}")
             raise
 
-    _resolve_task_ids(created_tasks, specs)
+    _resolve_task_ids(created_tasks, specs, config)
 
     return created_tasks
 
 
 async def _create_single_draft(
-    spec: BeadsTaskSpec,
+    spec: TaskSubmissionSpec,
     config: Config,
 ) -> str:
-    """
-    Create a single draft task in Beads.
+    store = get_task_store(config=config)
+    store.initialize()
 
-    Args:
-        spec: Task specification
-        config: Village configuration
-
-    Returns:
-        Created task ID
-
-    Raises:
-        SubprocessError: If creation fails
-    """
-    cmd = [
-        "bd",
-        "create",
-        "--json",
-        "--title",
-        spec.title,
-        "--description",
-        spec.description,
-    ]
-
-    if spec.estimate and spec.estimate != "unknown":
-        # Convert estimate to minutes (Beads expects integer minutes)
-        estimate_map = {
-            "minutes": "60",
-            "hours": "60",
-            "hour": "60",
-            "days": "480",  # 8 hours
-            "day": "480",
-            "weeks": "2400",  # 5 days
-            "week": "2400",
-        }
-        estimate_minutes = estimate_map.get(spec.estimate.lower(), spec.estimate)
-        cmd.extend(["--estimate", estimate_minutes])
-
+    labels: list[str] = []
     if spec.batch_id:
-        cmd.extend(["--label", f"batch:{spec.batch_id}"])
-
+        labels.append(f"batch:{spec.batch_id}")
     if spec.bump and spec.bump != "none":
-        cmd.extend(["--label", f"bump:{spec.bump}"])
-
-    if spec.parent_task_id:
-        cmd.extend(["--relates-to", spec.parent_task_id])
-
+        labels.append(f"bump:{spec.bump}")
     if spec.custom_fields.get("tags"):
         for tag in spec.custom_fields["tags"].split(","):
             if tag.strip():
-                cmd.extend(["--label", tag.strip()])
+                labels.append(tag.strip())
 
-    result = run_command_output(cmd)
+    depends_on: list[str] = []
+    if spec.parent_task_id:
+        depends_on.append(spec.parent_task_id)
 
-    try:
-        response = json.loads(result)
-        task_id = response.get("id") or response.get("task_id")
-        if not task_id:
-            raise ValueError("No task ID in response")
-        return str(task_id)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse Beads response: {result}")
-        raise ValueError(f"Invalid Beads response: {e}")
+    task_create = TaskCreate(
+        title=spec.title,
+        description=spec.description,
+        labels=labels,
+        depends_on=depends_on,
+    )
+
+    task = store.create_task(task_create)
+    return task.id
 
 
 def _resolve_task_ids(
     created_tasks: dict[str, str],
-    specs: list[BeadsTaskSpec],
+    specs: list[TaskSubmissionSpec],
+    config: Config,
 ) -> None:
     """
-    Update specs with actual Beads task IDs for dependencies.
+    Update specs with actual task IDs for dependencies.
 
     This replaces placeholder "index-X" dependencies with real task IDs.
 
     Args:
         created_tasks: Mapping of title → task ID
-        specs: BeadsTaskSpec list (will be mutated)
+        specs: TaskSubmissionSpec list (will be mutated)
     """
     title_to_id = {title: tid for title, tid in created_tasks.items()}
 
@@ -295,87 +246,32 @@ def _resolve_task_ids(
         spec.depends_on = resolved_deps
 
         if resolved_deps:
-            _update_task_dependencies(created_tasks[spec.title], resolved_deps)
+            _update_task_dependencies(created_tasks[spec.title], resolved_deps, config)
 
 
-def _update_task_dependencies(task_id: str, dependencies: list[str]) -> None:
-    """
-    Update task dependencies in Beads.
-
-    Args:
-        task_id: Task to update
-        dependencies: List of task IDs to depend on
-
-    Raises:
-        SubprocessError: If update fails
-    """
+def _update_task_dependencies(task_id: str, dependencies: list[str], config: Config) -> None:
     if not dependencies:
         return
 
-    dep_str = ",".join(dependencies)
-
-    try:
-        run_command_output(
-            [
-                "bd",
-                "set-state",
-                task_id,
-                f"depends_on={dep_str}",
-            ]
-        )
-        logger.debug(f"Updated dependencies for {task_id}: {dep_str}")
-    except SubprocessError as e:
-        logger.error(f"Failed to update dependencies for {task_id}: {e}")
-        raise
+    store = get_task_store(config=config)
+    store.update_task(task_id, TaskUpdate(add_depends_on=dependencies))
+    logger.debug(f"Updated dependencies for {task_id}: {', '.join(dependencies)}")
 
 
 async def update_task_status(
     task_id: str,
     from_status: str,
     to_status: str,
+    config: Config | None = None,
 ) -> None:
-    """
-    Update task status in Beads.
+    logger.debug(f"Transitioning {task_id}: {from_status} -> {to_status}")
 
-    Args:
-        task_id: Task ID to update
-        from_status: Current status (for idempotency)
-        to_status: Target status
-
-    Raises:
-        SubprocessError: If update fails
-    """
-    logger.debug(f"Transitioning {task_id}: {from_status} → {to_status}")
-
-    try:
-        run_command_output(
-            [
-                "bd",
-                "set-state",
-                task_id,
-                f"status={from_status}",
-                f"status={to_status}",
-            ]
-        )
-    except SubprocessError as e:
-        logger.error(f"Failed to update status for {task_id}: {e}")
-        raise
+    store = get_task_store(config=config)
+    store.update_task(task_id, TaskUpdate(status=to_status))
 
 
-async def delete_task(task_id: str) -> None:
-    """
-    Delete a task in Beads.
-
-    Args:
-        task_id: Task ID to delete
-
-    Raises:
-        SubprocessError: If deletion fails
-    """
+async def delete_task(task_id: str, config: Config | None = None) -> None:
     logger.warning(f"Deleting task {task_id}")
 
-    try:
-        run_command_output(["bd", "delete", task_id])
-    except SubprocessError as e:
-        logger.error(f"Failed to delete task {task_id}: {e}")
-        raise
+    store = get_task_store(config=config)
+    store.delete_task(task_id)

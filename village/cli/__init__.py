@@ -43,6 +43,7 @@ from village.cli import (  # noqa: E402
     planner,
     release,
     state,
+    tasks,
     work,
 )
 
@@ -102,11 +103,15 @@ village.add_command(council.council_group, name="council")
 # Ledger (audit trail)
 village.add_command(ledger.ledger_group, name="ledger")
 
+# Tasks (built-in task store)
+village.add_command(tasks.tasks, name="tasks")
+
 # Backward-compatible aliases
 village.add_command(planner.planner_group, name="workflow")
 village.add_command(ledger.ledger_group, name="trace")
 village.add_command(greeter.greeter, name="help")
 village.add_command(greeter.greeter, name="chat")
+village.add_command(tasks.tasks, name="bd")
 
 # Other aliases
 village.add_command(dashboard.dashboard, name="square")

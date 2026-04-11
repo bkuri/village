@@ -33,16 +33,10 @@ async def _initialize_extensions_and_mcp(
 @click.command()
 def greeter() -> None:
     """Start ephemeral LLM Q&A session."""
-    from village.chat.beads_client import BeadsClient, BeadsError
     from village.chat.llm_chat import LLMChat
     from village.llm.factory import get_llm_client
 
     config = get_config()
-
-    try:
-        beads_client = BeadsClient()
-    except Exception:
-        beads_client = None
 
     llm_client = get_llm_client(config)
 
@@ -57,11 +51,7 @@ def greeter() -> None:
 
     async def setup_chat() -> None:
         extensions, discovered_servers = await _initialize_extensions_and_mcp(config)
-
         await llm_chat.set_extensions(extensions)
-
-        if beads_client:
-            await llm_chat.set_beads_client(beads_client)
 
     try:
         asyncio.run(setup_chat())
@@ -81,9 +71,6 @@ def greeter() -> None:
 
             try:
                 response = asyncio.run(llm_chat.handle_message(user_input))
-            except BeadsError as e:
-                click.echo(f"\n❌ Beads error: {e}\n")
-                continue
             except Exception as e:
                 click.echo(f"\n❌ Error: {e}\n")
                 continue

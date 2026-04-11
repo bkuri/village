@@ -5,10 +5,9 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from village.config import get_config
-from village.probes.beads import beads_available
 from village.probes.tmux import session_exists
-from village.probes.tools import SubprocessError, run_command_output
 from village.status import collect_full_status
+from village.tasks import TaskStoreError, get_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -81,31 +80,31 @@ def check_runtime_ready(session_name: str) -> tuple[bool, Optional[str]]:
     return True, None
 
 
-def check_work_available(beads_capable: bool) -> tuple[str, Optional[int]]:
+def check_work_available(store_available: bool, config: Any = None) -> tuple[str, Optional[int]]:
     """
-    Check if ready work is available via Beads.
+    Check if ready work is available via the task store.
 
     Args:
-        beads_capable: True if beads is available and repo initialized
+        store_available: True if the task store is operational
+        config: Config object (optional, for task store initialization)
 
     Returns:
         ("available", count) if work found
         ("not_available", None) if no work
         ("unknown", None) if can't determine
     """
-    if not beads_capable:
+    if not store_available:
         return "unknown", None
 
     try:
-        output = run_command_output(["bd", "ready"])
-        if not output.strip():
+        cfg = config or get_config()
+        store = get_task_store(config=cfg)
+        ready_tasks = store.get_ready_tasks()
+        if not ready_tasks:
             return "not_available", None
-
-        # Count lines (each line is a ready task)
-        ready_count = len([line for line in output.splitlines() if line.strip()])
-        return "available", ready_count
-    except SubprocessError as e:
-        logger.debug(f"bd ready command failed: {e}")
+        return "available", len(ready_tasks)
+    except TaskStoreError as e:
+        logger.debug(f"Task store query failed: {e}")
         return "unknown", None
 
 
@@ -124,12 +123,15 @@ def collect_readiness_data(session_name: str, config: Any) -> dict[str, Any]:
     env_ready, env_error = check_environment_ready(config)
     runtime_ready, runtime_error = check_runtime_ready(session_name)
 
-    # Beads capability
-    beads_status = beads_available()
-    beads_capable = beads_status.command_available and beads_status.repo_initialized
+    # Task store capability
+    try:
+        store = get_task_store(config=config)
+        store_capable = store.is_available()
+    except TaskStoreError:
+        store_capable = False
 
     # Work availability
-    work_status, ready_count = check_work_available(beads_capable)
+    work_status, ready_count = check_work_available(store_capable, config)
 
     # Orphans and workers (from status system)
     full_status = collect_full_status(session_name)
@@ -149,7 +151,7 @@ def collect_readiness_data(session_name: str, config: Any) -> dict[str, Any]:
         "runtime_error": runtime_error,
         "work_available": work_status,
         "ready_tasks_count": ready_count,
-        "beads_capable": beads_capable,
+        "store_capable": store_capable,
         "orphans_count": orphans_count,
         "stale_locks_count": stale_locks_count,
         "untracked_worktrees_count": untracked_worktrees_count,

@@ -1,5 +1,6 @@
 """GitHub PR integration via GitHub CLI."""
 
+import json
 import logging
 import subprocess
 from dataclasses import dataclass, field
@@ -128,10 +129,10 @@ def _parse_file_changes(diff_output: str) -> dict[str, list[str]]:
 
 def _get_task_metadata(task_id: str) -> dict[str, str]:
     """
-    Get task metadata from Beads if available.
+    Get task metadata from the task store.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
 
     Returns:
         Dict of metadata key-value pairs
@@ -139,18 +140,19 @@ def _get_task_metadata(task_id: str) -> dict[str, str]:
     metadata: dict[str, str] = {}
 
     try:
-        result = subprocess.run(
-            ["bd", "show", task_id],
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding="utf-8",
-        )
-        for line in result.stdout.split("\n"):
-            if ":" in line and not line.startswith("#"):
-                key, value = line.split(":", 1)
-                metadata[key.strip()] = value.strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+        from village.tasks import get_task_store
+
+        store = get_task_store()
+        task = store.get_task(task_id)
+        if task is not None:
+            metadata["title"] = task.title
+            metadata["description"] = task.description
+            metadata["id"] = task.id
+            metadata["status"] = task.status
+            metadata["type"] = task.issue_type
+            if task.labels:
+                metadata["labels"] = ", ".join(task.labels)
+    except Exception:
         pass
 
     return metadata
@@ -161,7 +163,7 @@ def _generate_summary(task_id: str, metadata: dict[str, str]) -> str:
     Generate PR summary from task metadata.
 
     Args:
-        task_id: Beads task ID
+        task_id: Task ID
         metadata: Task metadata
 
     Returns:
@@ -251,7 +253,7 @@ def generate_pr_description(task_id: str, worktree_path: Path) -> PRDescription:
     Generate PR description from task metadata and git diff.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         worktree_path: Path to worktree directory
 
     Returns:
@@ -281,10 +283,10 @@ def generate_pr_description(task_id: str, worktree_path: Path) -> PRDescription:
 
 def sync_pr_status(task_id: str, pr_number: int) -> SyncResult:
     """
-    Sync PR status with Beads task completion.
+    Sync PR status with task completion.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         pr_number: GitHub PR number
 
     Returns:
@@ -292,8 +294,6 @@ def sync_pr_status(task_id: str, pr_number: int) -> SyncResult:
     """
     try:
         pr_data = _run_gh_command(["pr", "view", str(pr_number), "--json", "state,merged,mergedAt"])
-        import json
-
         pr_info = json.loads(pr_data)
         pr_state = pr_info.get("state", "")
         is_merged = pr_info.get("merged", False)
