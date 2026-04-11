@@ -1,0 +1,48 @@
+name: name-design
+description: Generate, critique, and refine name candidates for a project or entity
+version: 1
+inputs:
+  - entity_description
+
+steps:
+  - name: generate
+    type: prompt
+    prompt: >
+      Generate 10 creative name candidates for the following entity.
+      Consider memorability, uniqueness, pronounceability, and domain availability.
+
+      Entity: {{entity_description}}
+
+      Output one name per line, numbered 1-10.
+
+  - name: critique
+    type: critique
+    prompt: >
+      Critically evaluate these name candidates. For each name, assess:
+      - Memorability (1-10)
+      - Uniqueness (1-10)
+      - Pronounceability (1-10)
+      - Potential conflicts or trademark issues
+      - Overall recommendation (keep/drop)
+
+      Eliminate the bottom 5 names and explain why.
+
+  - name: research
+    type: research
+    prompt: >
+      Search for the top 5 remaining name candidates to check:
+      - If the name is already used by a major product/company
+      - Domain availability (.com, .io, .dev)
+      - GitHub/npm/PyPI availability
+      Names to check: {{critique}}
+
+  - name: refine
+    type: synthesize
+    prompt: >
+      Based on the critique and research results, refine the top 3 names.
+      For each, suggest:
+      - Final recommendation with rationale
+      - Suggested tagline
+      - Any variations or alternatives worth considering
+
+      Present as a ranked recommendation.

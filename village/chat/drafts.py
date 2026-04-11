@@ -34,6 +34,7 @@ class DraftTask:
     tags: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     llm_notes: list[str] = field(default_factory=list)
+    search_hints: dict[str, list[str]] = field(default_factory=dict)
 
 
 def _get_drafts_dir(config: _Config) -> Path:
@@ -168,7 +169,7 @@ def generate_draft_id() -> str:
 
 def draft_id_to_task_id(draft_id: str) -> str:
     """
-    Convert draft ID to Beads task ID.
+    Convert draft ID to task ID.
 
     Example: df-a1b2c3 -> bd-a1b2c3
 

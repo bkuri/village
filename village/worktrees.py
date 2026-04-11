@@ -50,7 +50,7 @@ def get_worktree_path(task_id: str, config: Optional[Config] = None) -> Path:
     Resolve task_id to workspace path.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         config: Optional config (uses default if not provided)
 
     Returns:
@@ -70,7 +70,7 @@ def create_worktree(
     Create a workspace for the given task.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         session_name: Tmux session name (for window naming)
         config: Optional config (uses default if not provided)
 
@@ -94,8 +94,7 @@ def create_worktree(
     if not scm.check_clean(config.git_root):
         logger.warning(f"Git repository is dirty: {config.git_root}")
         raise RuntimeError(
-            "Cannot create workspace: repository has uncommitted changes. "
-            "Please commit or stash changes first."
+            "Cannot create workspace: repository has uncommitted changes. Please commit or stash changes first."
         )
 
     branch_name = f"worktree-{task_id}"
@@ -109,7 +108,7 @@ def delete_worktree(task_id: str, config: Optional[Config] = None) -> bool:
     Delete a workspace.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         config: Optional config (uses default if not provided)
 
     Returns:
@@ -163,7 +162,7 @@ def get_worktree_info(task_id: str, config: Optional[Config] = None) -> Optional
     Get information about a specific workspace.
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         config: Optional config (uses default if not provided)
 
     Returns:
@@ -183,7 +182,7 @@ def reset_worktree(task_id: str, config: Optional[Config] = None) -> None:
     Reset workspace to clean state (discard all modifications).
 
     Args:
-        task_id: Beads task ID (e.g., "bd-a3f8")
+        task_id: Task ID (e.g., "bd-a3f8")
         config: Optional config (uses default if not provided)
 
     Raises:

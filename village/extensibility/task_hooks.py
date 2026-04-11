@@ -1,4 +1,4 @@
-"""Beads integration hooks for customizing task management."""
+"""Task hooks for customizing task management."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -6,8 +6,8 @@ from typing import Any, Optional
 
 
 @dataclass
-class BeadSpec:
-    """Beads task specification."""
+class TaskHookSpec:
+    """Task hook specification."""
 
     title: str
     description: str
@@ -19,7 +19,6 @@ class BeadSpec:
     metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        """Initialize optional fields."""
         if self.tags is None:
             self.tags = []
         if self.deps is None:
@@ -29,31 +28,29 @@ class BeadSpec:
 
 
 @dataclass
-class BeadCreated:
-    """Result of bead creation."""
+class TaskCreated:
+    """Result of task creation."""
 
-    bead_id: str
+    task_id: str
     parent_id: Optional[str]
     created_at: str
     metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
-        """Initialize metadata if not provided."""
         if self.metadata is None:
             self.metadata = {}
 
 
-class BeadsIntegrator(ABC):
-    """Base class for beads task management customization.
+class TaskHooks(ABC):
+    """Base class for task management customization.
 
-    Allows domains to create and manage beads tasks with domain-specific
+    Allows domains to create and manage tasks with domain-specific
     metadata, links, and hierarchy.
 
     Example:
-        class TradingBeadsIntegrator(BeadsIntegrator):
-            async def on_task_created(self, task: Task) -> BeadSpec:
-                # Create bead for trading task
-                return BeadSpec(
+        class TradingTaskHooks(TaskHooks):
+            async def on_task_created(self, task: Task) -> TaskHookSpec:
+                return TaskHookSpec(
                     title=task.title,
                     description=task.description,
                     issue_type="task",
@@ -68,72 +65,68 @@ class BeadsIntegrator(ABC):
     """
 
     @abstractmethod
-    async def should_create_bead(self, context: dict[str, Any]) -> bool:
-        """Determine if bead should be created.
+    async def should_create_task_hook(self, context: dict[str, Any]) -> bool:
+        """Determine if task hook should fire.
 
         Args:
             context: Context dictionary with task info
 
         Returns:
-            True if bead should be created
+            True if hook should fire
         """
         pass
 
     @abstractmethod
-    async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
-        """Create bead specification from context.
+    async def create_hook_spec(self, context: dict[str, Any]) -> TaskHookSpec:
+        """Create hook specification from context.
 
         Args:
             context: Context dictionary with task info
 
         Returns:
-            BeadSpec for bead creation
+            TaskHookSpec for task creation
         """
         pass
 
     @abstractmethod
-    async def on_bead_created(self, bead: BeadCreated, context: dict[str, Any]) -> None:
-        """Handle bead creation.
+    async def on_task_created(self, created_task: TaskCreated, context: dict[str, Any]) -> None:
+        """Handle task creation.
 
-        Can link bead to domain objects, update metadata, etc.
+        Can link task to domain objects, update metadata, etc.
 
         Args:
-            bead: Created bead
+            created_task: Created task
             context: Original context
         """
         pass
 
     @abstractmethod
-    async def on_bead_updated(self, bead_id: str, updates: dict[str, Any]) -> None:
-        """Handle bead update.
+    async def on_task_updated(self, task_id: str, updates: dict[str, Any]) -> None:
+        """Handle task update.
 
         Args:
-            bead_id: ID of updated bead
+            task_id: ID of updated task
             updates: Dictionary of updates
         """
         pass
 
 
-class DefaultBeadsIntegrator(BeadsIntegrator):
-    """Default no-op beads integrator."""
+class DefaultTaskHooks(TaskHooks):
+    """Default no-op task hooks."""
 
-    async def should_create_bead(self, context: dict[str, Any]) -> bool:
-        """Never create beads."""
+    async def should_create_task_hook(self, context: dict[str, Any]) -> bool:
         return False
 
-    async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
-        """Return minimal spec."""
-        return BeadSpec(
+    async def create_hook_spec(self, context: dict[str, Any]) -> TaskHookSpec:
+        return TaskHookSpec(
             title="Task",
             description="",
             issue_type="task",
             priority=2,
         )
 
-    async def on_bead_created(self, bead: BeadCreated, context: dict[str, Any]) -> None:
-        """Do nothing."""
+    async def on_task_created(self, created_task: TaskCreated, context: dict[str, Any]) -> None:
         pass
 
-    async def on_bead_updated(self, bead_id: str, updates: dict[str, Any]) -> None:
-        """Do nothing."""
+    async def on_task_updated(self, task_id: str, updates: dict[str, Any]) -> None:
         pass

@@ -11,7 +11,6 @@ from village.probes.tmux import (
     list_windows,
     session_exists,
 )
-from village.probes.tools import SubprocessError, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +21,10 @@ class InitializationPlan:
 
     needs_session: bool
     needs_directories: bool
-    needs_beads_init: bool
+    needs_tasks_init: bool
     session_exists: bool
     directories_exist: bool
-    beads_initialized: bool
+    tasks_initialized: bool
 
 
 @dataclass
@@ -34,19 +33,19 @@ class RuntimeState:
 
     session_exists: bool
     directories_exist: bool
-    beads_initialized: bool
+    tasks_initialized: bool
     session_name: str
 
 
 def collect_runtime_state(session_name: str) -> RuntimeState:
     """Gather current runtime state via probes."""
     config = get_config()
-    beads_dir = config.git_root / ".beads"
+    tasks_file = config.village_dir / "tasks.jsonl"
 
     return RuntimeState(
         session_exists=session_exists(session_name),
         directories_exist=config.village_dir.exists(),
-        beads_initialized=beads_dir.exists(),
+        tasks_initialized=tasks_file.exists(),
         session_name=session_name,
     )
 
@@ -56,10 +55,10 @@ def plan_initialization(state: RuntimeState) -> InitializationPlan:
     return InitializationPlan(
         needs_session=not state.session_exists,
         needs_directories=not state.directories_exist,
-        needs_beads_init=not state.beads_initialized,
+        needs_tasks_init=not state.tasks_initialized,
         session_exists=state.session_exists,
         directories_exist=state.directories_exist,
-        beads_initialized=state.beads_initialized,
+        tasks_initialized=state.tasks_initialized,
     )
 
 
@@ -79,24 +78,20 @@ def _ensure_directories(dry_run: bool) -> bool:
     return False
 
 
-def _ensure_beads_initialized(dry_run: bool) -> bool:
-    """Ensure Beads is initialized (if available)."""
-    config = get_config()
+def _ensure_tasks_initialized(dry_run: bool) -> bool:
+    from village.tasks import get_task_store
 
-    if (config.git_root / ".beads").exists():
-        logger.debug("Beads already initialized")
+    config = get_config()
+    store = get_task_store(config=config)
+
+    if not store.is_available():
+        if not dry_run:
+            store.initialize()
+            logger.debug(f"Initialized task store in {config.git_root}")
         return True
 
-    if not dry_run:
-        try:
-            run_command(["bd", "init"], check=True)
-            logger.debug(f"Initialized Beads in {config.git_root}")
-            return True
-        except (SubprocessError, FileNotFoundError):
-            logger.debug("Beads command not available, skipping initialization")
-            return True
-
-    return False
+    logger.debug("Task store already initialized")
+    return True
 
 
 def _ensure_session(dry_run: bool) -> bool:
@@ -164,12 +159,17 @@ def execute_initialization(
         if not _ensure_session(dry_run):
             return False
 
-    # Step 3: Initialize Beads (if needed)
-    if plan.needs_beads_init:
-        if not _ensure_beads_initialized(dry_run):
+    # Step 3: Initialize task store (if needed)
+    if plan.needs_tasks_init:
+        if not _ensure_tasks_initialized(dry_run):
             return False
 
-    # Step 4: Create dashboard (idempotent, with cheap check)
+    # Step 4: Install git hooks (idempotent)
+    from village.hooks import install_hooks
+
+    install_hooks(config.git_root, dry_run=dry_run)
+
+    # Step 5: Create dashboard (idempotent, with cheap check)
     if dashboard:
         if not _create_dashboard(config.tmux_session, dry_run):
             return False

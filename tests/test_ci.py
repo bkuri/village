@@ -434,10 +434,7 @@ class TestUpdateTaskOnFailure:
         with open(event_log, "r") as f:
             events = [json.loads(line) for line in f]
 
-        assert any(
-            e["cmd"] == "ci_failure" and e["task_id"] == "bd-a3f8" and e["reason"] == ""
-            for e in events
-        )
+        assert any(e["cmd"] == "ci_failure" and e["task_id"] == "bd-a3f8" and e["reason"] == "" for e in events)
 
 
 class TestTriggerGitHubActions:

@@ -292,6 +292,178 @@ def test_config_queue_ttl_env_override(tmp_path: Path):
         del os.environ["VILLAGE_QUEUE_TTL_MINUTES"]
 
 
+# === ACP Configuration Tests ===
+
+
+def test_acp_config_defaults(tmp_path: Path):
+    """Test default ACP configuration."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.acp.enabled is False
+    assert config.acp.server_host == "localhost"
+    assert config.acp.server_port == 9876
+    assert config.acp.protocol_version == 1
+    assert config.acp.capabilities == []
+
+
+def test_acp_config_from_env(tmp_path: Path):
+    """Test ACP configuration from environment variables."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    os.chdir(tmp_path)
+    os.environ["VILLAGE_ACP_ENABLED"] = "true"
+    os.environ["VILLAGE_ACP_HOST"] = "0.0.0.0"
+    os.environ["VILLAGE_ACP_PORT"] = "9999"
+    os.environ["VILLAGE_ACP_VERSION"] = "2"
+
+    try:
+        config = get_config()
+        assert config.acp.enabled is True
+        assert config.acp.server_host == "0.0.0.0"
+        assert config.acp.server_port == 9999
+        assert config.acp.protocol_version == 2
+    finally:
+        del os.environ["VILLAGE_ACP_ENABLED"]
+        del os.environ["VILLAGE_ACP_HOST"]
+        del os.environ["VILLAGE_ACP_PORT"]
+        del os.environ["VILLAGE_ACP_VERSION"]
+
+
+def test_acp_config_from_file(tmp_path: Path):
+    """Test ACP configuration from config file."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[acp]
+enabled = true
+host = 127.0.0.1
+port = 8765
+version = 1
+capability_filesystem = Read and write files in worktrees
+capability_terminal = Execute commands in terminal
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert config.acp.enabled is True
+    assert config.acp.server_host == "127.0.0.1"
+    assert config.acp.server_port == 8765
+    assert config.acp.protocol_version == 1
+    assert len(config.acp.capabilities) == 2
+    assert any(cap.name == "filesystem" for cap in config.acp.capabilities)
+    assert any(cap.name == "terminal" for cap in config.acp.capabilities)
+
+
+def test_agent_config_type_default(tmp_path: Path):
+    """Test default agent type is opencode."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[agent.build]
+opencode_args=--mode patch
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert "build" in config.agents
+    assert config.agents["build"].type == "opencode"
+    assert config.agents["build"].acp_command is None
+    assert config.agents["build"].acp_capabilities == []
+
+
+def test_agent_config_acp_type(tmp_path: Path):
+    """Test ACP agent configuration."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[agent.claude]
+type = acp
+acp_command = claude-code
+acp_capabilities = filesystem,terminal,mcp
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert "claude" in config.agents
+    claude_agent = config.agents["claude"]
+    assert claude_agent.type == "acp"
+    assert claude_agent.acp_command == "claude-code"
+    assert claude_agent.acp_capabilities == ["filesystem", "terminal", "mcp"]
+
+
+def test_agent_config_mixed_types(tmp_path: Path):
+    """Test mixed opencode and ACP agents."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[agent.build]
+opencode_args=--mode patch
+
+[agent.claude]
+type = acp
+acp_command = claude-code
+acp_capabilities = filesystem
+
+[agent.gemini]
+type = acp
+acp_command = gemini-cli
+acp_capabilities = filesystem,terminal
+""")
+
+    os.chdir(tmp_path)
+    config = get_config()
+
+    assert len(config.agents) == 3
+
+    # OpenCode agent
+    assert config.agents["build"].type == "opencode"
+    assert config.agents["build"].opencode_args == "--mode patch"
+
+    # ACP agents
+    assert config.agents["claude"].type == "acp"
+    assert config.agents["claude"].acp_command == "claude-code"
+    assert config.agents["claude"].acp_capabilities == ["filesystem"]
+
+    assert config.agents["gemini"].type == "acp"
+    assert config.agents["gemini"].acp_command == "gemini-cli"
+    assert config.agents["gemini"].acp_capabilities == ["filesystem", "terminal"]
+
+
+def test_agent_config_acp_validation_missing_command(tmp_path: Path):
+    """Test ACP agent validation logs warning for missing command."""
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
+
+    village_dir = tmp_path / ".village"
+    village_dir.mkdir(parents=True, exist_ok=True)
+    config_file = village_dir / "config"
+    config_file.write_text("""[agent.bad-acp]
+type = acp
+# Missing acp_command
+""")
+
+    os.chdir(tmp_path)
+    # Should not raise, but should log warning
+    config = get_config()
+
+    assert "bad-acp" in config.agents
+    assert config.agents["bad-acp"].type == "acp"
+    assert config.agents["bad-acp"].acp_command is None
+
+
 def test_config_queue_ttl_file_override(tmp_path: Path):
     """Test config file QUEUE_TTL_MINUTES."""
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)

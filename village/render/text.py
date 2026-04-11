@@ -129,10 +129,8 @@ def render_summary(summary: StatusSummary) -> str:
     """
     lines = [
         f"Village directory: {summary.tmux_session}",
-        f"TMUX session: {summary.tmux_session} "
-        f"{'running' if summary.tmux_running else 'not running'}",
-        f"Lock files: {summary.locks_count} "
-        f"({summary.locks_active} ACTIVE, {summary.locks_stale} STALE)",
+        f"TMUX session: {summary.tmux_session} {'running' if summary.tmux_running else 'not running'}",
+        f"Lock files: {summary.locks_count} ({summary.locks_active} ACTIVE, {summary.locks_stale} STALE)",
     ]
 
     if summary.worktrees_count > 0:
@@ -265,7 +263,7 @@ def render_ready_text(assessment: ReadyAssessment) -> str:
     elif assessment.work_available == "not_available":
         lines.append("Work Available:      ✓ No ready tasks available")
     elif assessment.work_available == "unknown":
-        lines.append("Work Available:      ? Cannot determine (Beads not available)")
+        lines.append("Work Available:      ? Cannot determine (task store not available)")
 
     # Orphans
     if assessment.orphans_count > 0:
@@ -291,16 +289,14 @@ def render_ready_text(assessment: ReadyAssessment) -> str:
     return "\n".join(lines)
 
 
-def render_initialization_plan(
-    plan: "InitializationPlan", session_name: str, *, plan_mode: bool = False
-) -> str:
+def render_initialization_plan(plan: "InitializationPlan", session_name: str, *, plan_mode: bool = False) -> str:
     """Render initialization plan as concise one-screen summary.
 
     Example output:
     DRY RUN: Would initialize village runtime
       Session: village (new)
       Directories: .village/ (create)
-      Beads: .beads/ (create)
+      Tasks: .village/tasks.jsonl (create)
       Dashboard: yes
 
     Args:
@@ -322,10 +318,10 @@ def render_initialization_plan(
     else:
         lines.append("  Directories: .village/ (create)")
 
-    if plan.beads_initialized:
-        lines.append("  Beads: .beads/ (exists)")
+    if plan.tasks_initialized:
+        lines.append("  Tasks: .village/tasks.jsonl (exists)")
     else:
-        lines.append("  Beads: would initialize (not found)")
+        lines.append("  Tasks: .village/tasks.jsonl (create)")
 
     return "\n".join(lines)
 

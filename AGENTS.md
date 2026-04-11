@@ -105,29 +105,223 @@ uv run pytest --cov=village                # With coverage
 - Use descriptive test names
 - Keep tests focused and independent
 
+### ACP Testing
+- **Server tests**: `tests/test_acp_server.py` - Village as ACP agent
+- **Client tests**: `tests/test_acp_client.py` - Village as ACP client
+- **Bridge tests**: `tests/test_acp_bridge.py` - Protocol translation
+- **Integration tests**: `tests/test_acp_integration.py` - End-to-end flows
+- **Fixtures**: `tests/fixtures/acp_fixtures.py` - Mock agents and clients
+
+**Test commands:**
+```bash
+# Test ACP server
+pytest tests/test_acp_server.py -v
+
+# Test ACP client
+pytest tests/test_acp_client.py -v
+
+# Test bridge
+pytest tests/test_acp_bridge.py -v
+
+# Test integration
+pytest tests/test_acp_integration.py -v
+
+# Test all ACP
+pytest tests/ -k acp -v
+```
+
+**Manual testing:**
+```bash
+# Start ACP server
+village acp --server start
+
+# Test agent connection
+village acp --client test claude
+
+# Spawn agent
+village acp --client spawn claude
+
+# Check status
+village acp --server status
+```
+
 ## Project Structure
 
 ```
 village/
-├── cli.py              # Click commands
+├── cli/                # CLI commands (role-based)
+│   ├── planner.py      #   village planner — spec design + inspection
+│   ├── builder.py      #   village builder — spec-driven autonomous loop
+│   ├── elder.py        #   village elder — knowledge base + goals
+│   ├── ledger.py       #   village ledger — audit trails
+│   ├── council.py      #   village council — multi-persona deliberation
+│   ├── greeter.py      #   village greeter — Q&A session
+│   └── ...
 ├── config.py           # Config loading
-├── locks.py            # Lock file handling
-├── worktrees.py        # Git worktree management
+├── roles.py            # RoleChat base, routing table, greetings
+├── loop.py             # Spec-driven autonomous build loop
+├── workflow/            # Workflow engine (planner infrastructure)
+│   ├── schema.py       #   Step types, WorkflowSchema
+│   ├── loader.py       #   YAML loader
+│   ├── builder.py      #   Execution engine
+│   ├── planner.py      #   LLM-driven design
+│   └── mcp_tools.py    #   Perplexity/sequential-thinking
+├── council/            # Council deliberation system
+├── elder/              # Elder knowledge base
+├── onboard/            # Adaptive onboarding
+├── goals.py            # Goal hierarchy (GOALS.md)
+├── trace.py            # TraceWriter/Reader (JSONL)
+├── builder_state.py    # Run state (manifest + step log)
+├── memory.py           # MemoryStore (markdown + YAML frontmatter)
 ├── queue.py            # Task queue scheduler
-├── resume.py           # Resume logic
-├── cleanup.py          # Cleanup ops
-├── ready.py            # Readiness engine
-├── status.py           # Status reporting
+├── state_machine.py    # Task lifecycle states
+├── locks.py            # Lock file handling
 ├── probes/             # Runtime probes
-│   ├── tmux.py
-│   ├── beads.py
-│   └── repo.py
 └── render/             # Output renderers
-    ├── text.py
-    └── json.py
+workflows/              # Built-in workflow YAML files
+personas/               # Council persona definitions
 tests/
 └── test_*.py
 ```
+
+## Village Elder — Knowledge Base
+
+### Commands
+```bash
+village elder see <url|file>         # Ingest knowledge source
+village elder fetch <url|file>       # Alias for see
+village elder ask "question"         # Query knowledge base
+village elder curate                 # Health check + regenerate VOICE.md
+village elder upkeep                 # Alias for curate
+village elder stats                  # Show wiki statistics
+village elder monitor                # Watch wiki/ingest/ for new files
+village elder goals                  # Show goal hierarchy
+village elder goals --coverage       # Show objective completion %
+village elder goals --edit           # Interactive refinement
+village elder goals --json           # JSON output
+```
+
+### Architecture
+```
+wiki/
+├── ingest/              # Drop sources here
+├── processed/           # Moved after ingestion
+├── pages/               # Wiki pages (markdown + YAML frontmatter)
+├── index.md             # Auto-generated catalog
+└── log.md               # Chronological record
+
+.village/memory/         # Agent cross-session memory (same format)
+VOICE.md                 # Distilled project knowledge for agents
+```
+
+### Village Voice
+Current project knowledge is maintained in `VOICE.md` at the repository root.
+Read it first for project context, conventions, and known issues.
+
+### Manual testing
+```bash
+village elder see ./docs/guide.md
+village elder see https://docs.example.com/api
+village elder ask "how do I configure auth?"
+village elder curate
+village elder stats
+```
+
+## Adaptive Onboarding
+
+### Commands
+```bash
+village new <name>                # Create project with adaptive interview
+village new <name> --skip-onboard # Create with minimal templates
+village up                        # Detects incomplete setup, runs interview if needed
+village up --skip-onboard         # Skip onboarding check
+village onboard                   # Force-run onboarding on existing project
+village onboard --force           # Overwrite existing AGENTS.md/README.md
+village onboard --skip-interview  # Use scaffold defaults without interview
+```
+
+### Configuration
+```ini
+[onboard]
+interview_model = openrouter/auto
+max_questions = 15
+critic_persona = red-team        # devil's-advocate | red-team | gordon-ramsay
+self_critique = true
+```
+
+### Architecture
+The onboarding pipeline:
+1. **Detect** (rule-based): Scan for pyproject.toml, package.json, etc.
+2. **Interview** (LLM adaptive): 10-15 BRUTAL-method questions
+3. **Generate**: AGENTS.md + README.md + wiki/ seeds
+4. **Process**: Elder ingests wiki seeds, curate generates VOICE.md
+
+## Role-Based CLI Architecture
+
+### Planner Produces Specs, Builder Implements Specs
+
+| Role | Default Chat | Subcommands |
+|------|-------------|-------------|
+| **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
+| **builder** | "Which specs shall I work on?" | `run`, `status`, `stop`, `resume`, `logs` |
+| **elder** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
+| **ledger** | "Which task are you looking for?" | `show`, `list` |
+| **council** | "What shall we discuss?" | `debate`, `list`, `show`, `rematch` |
+| **doctor** | "What seems to be the problem?" | `check` |
+| **greeter** | "How can I help?" | General triage, routes to all roles |
+
+### Spec-Driven Build Loop
+
+The builder implements specs autonomously via the Ralph Wiggum methodology.
+
+```bash
+# Planning — decides what, produces specs
+village planner design <goal>          # LLM pipeline → produces spec in specs/
+village planner inspect                # Review all specs (read-only)
+village planner inspect --fix          # Review + amend specs with Inspect Notes
+village planner inspect <spec-id>      # Review one spec
+village planner refine <spec-id>       # Iterate on a spec
+
+# Building — implements specs via autonomous loop
+village builder run                    # Loop through specs (sequential, 1 worktree)
+village builder run -p 4               # Parallel mode, 4 worktrees
+village builder run -n 20              # Max 20 iterations
+village builder run -m zai/glm-5-turbo # Override agent model
+village builder run --dry-run          # Preview without executing
+village builder status                 # Show spec completion progress
+village builder stop                   # Halt the loop
+village builder resume                 # Resume a stopped loop
+village builder logs                   # View iteration logs
+```
+
+### Spec Format
+
+Specs are numbered markdown files in `specs/`:
+
+```markdown
+# 001-core-config
+
+## Overview
+Core configuration and CLI framework.
+
+## Status: incomplete
+
+## Requirements
+- FR-1: Load config from INI files
+  - [ ] Parses `.village/config` correctly
+  - [ ] Falls back to defaults
+
+## Completion Signal
+Run `village doctor check` and verify all pass.
+<promise>DONE</promise>
+```
+
+- **Priority**: Lexicographic filename order (001, 002, ...)
+- **Completion**: `Status: COMPLETE` written by the agent when done
+- **Promise signal**: Agent outputs `<promise>DONE</promise>` when all criteria met
+- **Inspect Notes**: Appended by `planner inspect --fix`, treated as hard constraints
+
+### Cross-Role Routing
 
 ## Key Integration Points
 
@@ -151,6 +345,27 @@ tests/
 - Run as subprocess in tmux pane
 - Inject contract via stdin or file
 - Worker = one tmux pane + one OpenCode instance
+
+### ACP Integration
+- **Server mode**: Village exposes ACP interface for editors (Zed, JetBrains)
+- **Client mode**: Village spawns external ACP agents (Claude Code, Gemini CLI)
+- **Bridge**: `village/acp/bridge.py` translates ACP ↔ Village operations
+- **Configuration**: `[acp]` section in `.village/config` and `type=acp` agents
+- **Testing**: Use `village acp --client test <agent-name>` to verify connections
+- **Commands**: See `village acp --help` for server/client operations
+
+**CLI Commands:**
+```bash
+# Server operations
+village acp --server start [--host HOST] [--port PORT]
+village acp --server stop
+village acp --server status
+
+# Client operations
+village acp --client list
+village acp --client spawn <agent-name>
+village acp --client test <agent-name>
+```
 
 ## Constraints
 
@@ -205,3 +420,181 @@ tests/
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
+
+<!-- BEGIN BEADS INTEGRATION -->
+## Issue Tracking with bd (beads)
+
+**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+
+### Why bd?
+
+- Dependency-aware: Track blockers and relationships between issues
+- Git-friendly: Dolt-powered version control with native sync
+- Agent-optimized: JSON output, ready work detection, discovered-from links
+- Prevents duplicate tracking systems and confusion
+
+### Quick Start
+
+**Check for ready work:**
+
+```bash
+bd ready --json
+```
+
+**Create new issues:**
+
+```bash
+bd create "Issue title" --description="Detailed context" -t bug|feature|task -p 0-4 --json
+bd create "Issue title" --description="What this issue is about" -p 1 --deps discovered-from:bd-123 --json
+```
+
+**Claim and update:**
+
+```bash
+bd update <id> --claim --json
+bd update bd-42 --priority 1 --json
+```
+
+**Complete work:**
+
+```bash
+bd close bd-42 --reason "Completed" --json
+```
+
+### Issue Types
+
+- `bug` - Something broken
+- `feature` - New functionality
+- `task` - Work item (tests, docs, refactoring)
+- `epic` - Large feature with subtasks
+- `chore` - Maintenance (dependencies, tooling)
+
+### Priorities
+
+- `0` - Critical (security, data loss, broken builds)
+- `1` - High (major features, important bugs)
+- `2` - Medium (default, nice-to-have)
+- `3` - Low (polish, optimization)
+- `4` - Backlog (future ideas)
+
+### Workflow for AI Agents
+
+1. **Check ready work**: `bd ready` shows unblocked issues
+2. **Claim your task atomically**: `bd update <id> --claim`
+3. **Work on it**: Implement, test, document
+4. **Discover new work?** Create linked issue:
+   - `bd create "Found bug" --description="Details about what was found" -p 1 --deps discovered-from:<parent-id>`
+5. **Complete**: `bd close <id> --reason "Done"`
+
+### Auto-Sync
+
+bd automatically syncs via Dolt:
+
+- Each write auto-commits to Dolt history
+- Use `bd dolt push`/`bd dolt pull` for remote sync
+- No manual export/import needed!
+
+### Important Rules
+
+- ✅ Use bd for ALL task tracking
+- ✅ Always use `--json` flag for programmatic use
+- ✅ Link discovered work with `discovered-from` dependencies
+- ✅ Check `bd ready` before asking "what should I work on?"
+- ❌ Do NOT create markdown TODO lists
+- ❌ Do NOT use external issue trackers
+- ❌ Do NOT duplicate tracking systems
+
+For more details, see README.md and docs/QUICKSTART.md.
+
+## Landing the Plane (Session Completion)
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd sync
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+
+<!-- END BEADS INTEGRATION -->
+
+## Changelog Management
+
+**All notable changes are documented in CHANGELOG.md following [Keep a Changelog](https://keepachangelog.com/).**
+
+### Categorization
+
+Changes are automatically categorized during `village release` based on task metadata:
+
+- **Added**: New features (`feature` tasks in Beads)
+- **Changed**: Enhancements, refactors (`task`/`chore` tasks)
+- **Fixed**: Bug fixes (`bug` tasks)
+- **Breaking**: Breaking changes (tasks with `bump:major` label)
+
+### During Development
+
+When completing a task:
+
+1. **Apply bump label**: `bd label add <task-id> bump:<type>`
+   - `major` for breaking changes
+   - `minor` for new features
+   - `patch` for bug fixes
+   - `none` for docs/tests/internal work
+2. **Ensure task title is clear and user-facing** (will appear in changelog)
+   - ✅ "Add retry logic to queue processing"
+   - ✅ "Fix deadlock in lock acquisition"
+   - ❌ "Refactor _internal_helper function"
+3. **Close task**: `bd close <task-id> --reason "Completed"`
+
+### During Release
+
+`village release` automatically:
+
+1. Queries Beads for task types
+2. Groups closed tasks by changelog category
+3. Updates CHANGELOG.md with new version section
+4. Creates git tag
+
+**No manual changelog editing required.**
+
+### Example Changelog Entry
+
+```markdown
+## [1.2.0] - 2026-03-11
+
+### Breaking
+- Remove deprecated `--old-flag` CLI option (`bd-a3f8`)
+
+### Added
+- Automatic task decomposition with LLM analysis (`bd-b4c9`)
+- Extensibility framework for custom processors (`bd-d2e7`)
+
+### Fixed
+- Beads CLI compatibility with missing `--status` flag (`bd-c1d6`)
+
+### Changed
+- Improved error messages for lock conflicts (`bd-e5f2`)
+```
+
+### Edge Cases
+
+- **Missing task type**: Defaults to "Changed" category
+- **Beads unavailable**: Gracefully falls back to generic categorization
+- **Empty categories**: Skipped in final changelog entry
+- **bump:none tasks**: Excluded from changelog entirely

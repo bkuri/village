@@ -1,0 +1,12 @@
+[Unit]
+Description=Village Daily Analysis Timer
+Documentation=https://github.com/anomalyco/village
+
+[Timer]
+OnCalendar=*-*-* 06:00 America/Chicago
+Persistent=true
+AccuracySec=1h
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

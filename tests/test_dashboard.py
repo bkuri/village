@@ -379,12 +379,8 @@ def test_render_dashboard_with_many_tasks(tmp_path: Path):
         orphans=[],
     )
 
-    available_tasks = [
-        QueueTask(task_id=f"bd-task{i}", agent="worker", agent_metadata={}) for i in range(10)
-    ]
-    blocked_tasks = [
-        QueueTask(task_id=f"bd-blocked{i}", agent="worker", skip_reason="test") for i in range(10)
-    ]
+    available_tasks = [QueueTask(task_id=f"bd-task{i}", agent="worker", agent_metadata={}) for i in range(10)]
+    blocked_tasks = [QueueTask(task_id=f"bd-blocked{i}", agent="worker", skip_reason="test") for i in range(10)]
 
     queue_plan = QueuePlan(
         ready_tasks=available_tasks + blocked_tasks,

@@ -7,6 +7,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased] - Task Decomposition & Extensibility
 
 ### Added
+- **Village Elder Knowledge Base**
+  - `village elder see/fetch <url|file>` — Ingest sources, auto-tag, cross-link
+  - `village elder ask "question"` — Query wiki and synthesize answers
+  - `village elder curate/upkeep` — Health check, find orphans, regenerate VOICE.md
+  - `village elder stats` — Show wiki statistics
+  - `village elder monitor` — Watch wiki/ingest/ for new files
+- **File-based Memory System**
+  - Replace memvid with pure markdown memory store
+  - MemoryStore: put/get/find/recent/related/delete over markdown files
+  - FileMemoryContext: ChatContext backed by MemoryStore
+  - MemoryConfig in `[memory]` config section
 - **Automatic Task Decomposition**
   - LLM-based complexity detection evaluates if tasks should be broken down
   - Uses semantic understanding (not keyword matching) for flexibility
@@ -32,6 +43,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **LLM Tools Module**
   - MCP tool mappings for Sequential Thinking, Atom of Thoughts, Think tool
   - ToolDefinitions with JSON schemas for prompts
+- **Adaptive Onboarding System**
+  - `village new` runs adaptive interview instead of stamping templates
+  - `village up` detects incomplete projects and offers onboarding
+  - `village onboard` command for re-onboarding existing projects
+  - BRUTAL method: critic persona, third-party framing, self-critique loop
+  - PPC profiles: village-onboard (interview), village-elder (query grounding)
+  - Project type detector: Python, JavaScript/TypeScript, Rust, Go
+  - Language-specific scaffold templates
 
 ### Fixed
 - Beads CLI compatibility: removed unsupported `--status` flag
@@ -85,6 +104,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `village/config.py`: Added TaskBreakdownConfig, fixed ExtensionConfig
 - `village/llm/tools.py`: Added ATOM_OF_THOUGHTS mappings and tool definition
 - `village/chat/sequential_thinking.py`: Added prompt builders and strategy router
+
+## [1.4.0] - 2026-04-07
+
+### Changed
+- Surface task title/description in agent contracts (`bd-oev`)
+- Preserve task text in queue scheduling (`bd-hrb`)
+- Improve LLM task description prompts for searchability (`bd-735`)
+- Add search_hints structured field to task specs (`bd-d5w`)
+
+### Removed
+- Remove memvid integration (replaced by file-based memory system) (`bd-amp`, `bd-53y`, `bd-ax5`)
+
 
 ## [1.2.0] - 2026-01-24
 

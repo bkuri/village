@@ -95,9 +95,7 @@ def _apply_filters(events: list[Event], filters: EventFilters) -> list[Event]:
                 since_dt = since_dt.replace(tzinfo=timezone.utc)
 
             filtered = [
-                e
-                for e in filtered
-                if (event_ts := _parse_timestamp(e.ts)) is not None and event_ts >= since_dt
+                e for e in filtered if (event_ts := _parse_timestamp(e.ts)) is not None and event_ts >= since_dt
             ]
         except (ValueError, AttributeError) as e:
             logger.warning(f"Invalid 'since' filter: {e}")
@@ -106,9 +104,7 @@ def _apply_filters(events: list[Event], filters: EventFilters) -> list[Event]:
         try:
             cutoff_time = datetime.now(timezone.utc) - filters.last
             filtered = [
-                e
-                for e in filtered
-                if (event_ts := _parse_timestamp(e.ts)) is not None and event_ts >= cutoff_time
+                e for e in filtered if (event_ts := _parse_timestamp(e.ts)) is not None and event_ts >= cutoff_time
             ]
         except (ValueError, AttributeError) as e:
             logger.warning(f"Invalid 'last' filter: {e}")

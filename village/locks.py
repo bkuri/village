@@ -21,6 +21,9 @@ class Lock:
     window: str
     agent: str
     claimed_at: datetime
+    spec_name: str = ""
+    iteration: int = 0
+    model: str = ""
     _config: Optional[Config] = field(init=False, default=None)
 
     def __post_init__(self) -> None:
@@ -112,6 +115,12 @@ def write_lock(lock: Lock) -> None:
         f"agent={lock.agent}\n"
         f"claimed_at={lock.claimed_at.isoformat()}\n"
     )
+    if lock.spec_name:
+        content += f"spec={lock.spec_name}\n"
+    if lock.iteration > 0:
+        content += f"iteration={lock.iteration}\n"
+    if lock.model:
+        content += f"model={lock.model}\n"
 
     # Ensure parent directory exists
     lock.path.parent.mkdir(parents=True, exist_ok=True)

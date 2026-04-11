@@ -52,9 +52,7 @@ class TestResumeIntegrationExecute:
                             )
                             mock_create.return_value = "%12"
 
-                            result = execute_resume(
-                                task_id, agent, detached=False, dry_run=False, config=mock_config
-                            )
+                            result = execute_resume(task_id, agent, detached=False, dry_run=False, config=mock_config)
 
                             assert result.success is True
                             assert result.task_id == task_id
@@ -79,9 +77,7 @@ class TestResumeIntegrationExecute:
                 task_id,
             )
 
-            result = execute_resume(
-                task_id, agent, detached=False, dry_run=True, config=mock_config
-            )
+            result = execute_resume(task_id, agent, detached=False, dry_run=True, config=mock_config)
 
             assert result.success is True
             assert result.pane_id == ""  # No pane in dry run
@@ -97,9 +93,7 @@ class TestResumeIntegrationExecute:
         with patch("village.resume._ensure_worktree_exists") as mock_ensure:
             mock_ensure.side_effect = RuntimeError("Git repo dirty")
 
-            result = execute_resume(
-                task_id, agent, detached=False, dry_run=False, config=mock_config
-            )
+            result = execute_resume(task_id, agent, detached=False, dry_run=False, config=mock_config)
 
             assert result.success is False
             assert result.error is not None
@@ -189,9 +183,7 @@ class TestResumeIntegrationCollisionRetry:
                 ]
                 mock_info.return_value = None
 
-                result = execute_resume(
-                    base_task_id, "build", detached=False, dry_run=False, config=mock_config
-                )
+                result = execute_resume(base_task_id, "build", detached=False, dry_run=False, config=mock_config)
 
                 assert result.success is False
                 assert result.error is not None
@@ -212,8 +204,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.cli.execute_resume", return_value=result_obj):
-            with patch("village.cli.plan_resume"):
+        with patch("village.cli.work.execute_resume", return_value=result_obj):
+            with patch("village.cli.work.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",
@@ -245,8 +237,8 @@ class TestResumeIntegrationHTML:
             pane_id="%12",
         )
 
-        with patch("village.cli.execute_resume", return_value=result_obj):
-            with patch("village.cli.plan_resume"):
+        with patch("village.cli.work.execute_resume", return_value=result_obj):
+            with patch("village.cli.work.plan_resume"):
                 with patch("village.contracts.generate_contract") as mock_contract:
                     mock_contract.return_value = ContractEnvelope(
                         task_id="bd-a3f8",
@@ -316,9 +308,7 @@ class TestResumeIntegrationDetached:
                             )
                             mock_create.return_value = "%12"
 
-                            result = execute_resume(
-                                task_id, "worker", detached=True, dry_run=False, config=mock_config
-                            )
+                            result = execute_resume(task_id, "worker", detached=True, dry_run=False, config=mock_config)
 
                             assert result.success is True
                             # Assert detached was passed
@@ -368,9 +358,7 @@ class TestResumeIntegrationTMUX:
                 )
 
                 # Window creation will fail if session doesn't exist
-                result = execute_resume(
-                    task_id, "worker", detached=False, dry_run=False, config=mock_config
-                )
+                result = execute_resume(task_id, "worker", detached=False, dry_run=False, config=mock_config)
 
                 # Should fail (session check happens in window creation)
                 assert result.success is False

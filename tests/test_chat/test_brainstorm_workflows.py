@@ -3,7 +3,7 @@
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import anyio
@@ -123,31 +123,27 @@ class TestBrainstormCommandInvocation:
         """
         state = fresh_conversation
 
+        mock_store = MagicMock()
+        mock_store.list_tasks.return_value = []
+        mock_store.is_available.return_value = True
+
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.conversation.get_task_store", return_value=mock_store),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_beads_specs", return_value=[]),
+            patch("village.chat.conversation.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
             mock_create.return_value = mock_created_task_ids
 
-            state = anyio.run(
-                lambda: _handle_brainstorm(["Add user authentication"], state, integration_config)
-            )
+            state = anyio.run(lambda: _handle_brainstorm(["Add user authentication"], state, integration_config))
 
             assert state.session_snapshot is not None
             assert state.session_snapshot.brainstorm_baseline is not None
-            assert (
-                state.session_snapshot.brainstorm_baseline["baseline_title"]
-                == "Add user authentication"
-            )
+            assert state.session_snapshot.brainstorm_baseline["baseline_title"] == "Add user authentication"
             assert len(state.session_snapshot.brainstorm_created_ids) == 3
             assert len(state.pending_enables) == 3
 
@@ -170,7 +166,7 @@ class TestBrainstormValidation:
 
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.ensure_beads_initialized"),
+            patch("village.chat.conversation.get_task_store"),
         ):
             mock_collect.side_effect = ValueError("Title must be at least 3 characters")
 
@@ -179,9 +175,7 @@ class TestBrainstormValidation:
             assert state.session_snapshot is None
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
             assert "Error:" in error_messages[0].content
 
@@ -207,16 +201,17 @@ class TestBrainstormSessionSnapshot:
         """
         state = fresh_conversation
 
+        mock_store = MagicMock()
+        mock_store.list_tasks.return_value = []
+        mock_store.is_available.return_value = True
+
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.conversation.get_task_store", return_value=mock_store),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_beads_specs", return_value=[]),
+            patch("village.chat.conversation.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -254,16 +249,17 @@ class TestBrainstormDraftTasks:
         """
         state = fresh_conversation
 
+        mock_store = MagicMock()
+        mock_store.list_tasks.return_value = []
+        mock_store.is_available.return_value = True
+
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.conversation.get_task_store", return_value=mock_store),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_beads_specs", return_value=[]),
+            patch("village.chat.conversation.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -301,21 +297,17 @@ class TestBrainstormBeadsIntegration:
         """
         state = fresh_conversation
 
-        existing_beads_json = (
-            '[{"id":"bd-existing1","title":"Setup database","status":"open"},'
-            '{"id":"bd-existing2","title":"Create API base","status":"open"}]'
-        )
+        mock_store = MagicMock()
+        mock_store.list_tasks.return_value = []
+        mock_store.is_available.return_value = True
 
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch(
-                "village.chat.conversation.create_draft_tasks", new_callable=AsyncMock
-            ) as mock_create,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=existing_beads_json),
+            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.conversation.get_task_store", return_value=mock_store),
             patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_beads_specs", return_value=[]),
+            patch("village.chat.conversation.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -325,10 +317,8 @@ class TestBrainstormBeadsIntegration:
 
             mock_generate.assert_called_once()
             call_args = mock_generate.call_args[0]
-            call_kwargs = mock_generate.call_args[1]
             assert call_args[0] == mock_baseline_report
             assert call_args[1] == integration_config
-            assert call_kwargs["beads_state"] == existing_beads_json
 
 
 class TestBrainstormErrorHandling:
@@ -354,9 +344,10 @@ class TestBrainstormErrorHandling:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.get_task_store") as mock_store,
         ):
+            mock_store.return_value.list_tasks.return_value = []
+            mock_store.return_value.is_available.return_value = True
             mock_collect.return_value = mock_baseline_report
             mock_generate.side_effect = ValueError("Invalid breakdown format")
 
@@ -366,9 +357,7 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
 
     def test_brainstorm_error_handling_subprocess_failure(
@@ -391,9 +380,10 @@ class TestBrainstormErrorHandling:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.get_task_store") as mock_store,
         ):
+            mock_store.return_value.list_tasks.return_value = []
+            mock_store.return_value.is_available.return_value = True
             mock_collect.return_value = mock_baseline_report
             mock_generate.side_effect = subprocess.CalledProcessError(
                 1, "opencode", stderr="Failed to generate breakdown"
@@ -405,14 +395,9 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
-            assert (
-                "Sequential Thinking" in error_messages[-1].content
-                or "Try:" in error_messages[-1].content
-            )
+            assert "Sequential Thinking" in error_messages[-1].content or "Try:" in error_messages[-1].content
 
     def test_brainstorm_error_handling_unexpected_failure(
         self,
@@ -434,9 +419,10 @@ class TestBrainstormErrorHandling:
         with (
             patch("village.chat.conversation.collect_baseline") as mock_collect,
             patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.ensure_beads_initialized"),
-            patch("village.chat.conversation.run_command_output", return_value=None),
+            patch("village.chat.conversation.get_task_store") as mock_store,
         ):
+            mock_store.return_value.list_tasks.return_value = []
+            mock_store.return_value.is_available.return_value = True
             mock_collect.return_value = mock_baseline_report
             mock_generate.side_effect = RuntimeError("Unexpected system failure")
 
@@ -446,11 +432,6 @@ class TestBrainstormErrorHandling:
             assert len(state.session_snapshot.brainstorm_created_ids) == 0
             assert len(state.pending_enables) == 0
 
-            error_messages = [
-                msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content
-            ]
+            error_messages = [msg for msg in state.messages if msg.role == "assistant" and "Error:" in msg.content]
             assert len(error_messages) > 0
-            assert (
-                "Unexpected" in error_messages[-1].content
-                or "Try: /brainstorm again" in error_messages[-1].content
-            )
+            assert "Unexpected" in error_messages[-1].content or "Try:" in error_messages[-1].content

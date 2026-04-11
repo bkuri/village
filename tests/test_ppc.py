@@ -26,9 +26,7 @@ def test_generate_ppc_contract_success(tmp_path: Path):
     with patch("village.ppc.run_command_output_cwd", return_value="# System prompt for build"):
         with patch(
             "village.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
             prompt, warning = generate_ppc_contract("build", agent_config, config)
 
@@ -68,9 +66,7 @@ def test_generate_ppc_contract_execution_error(tmp_path: Path):
     with patch("village.ppc.run_command_output_cwd", side_effect=SubprocessError("Command failed")):
         with patch(
             "village.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
             prompt, warning = generate_ppc_contract("build", agent_config, config)
 
@@ -94,9 +90,7 @@ def test_generate_ppc_contract_default_values(tmp_path: Path):
     with patch("village.ppc.run_command_output_cwd", return_value="Default prompt"):
         with patch(
             "village.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
             prompt, warning = generate_ppc_contract("test", agent_config, config)
 
@@ -116,9 +110,7 @@ def test_generate_ppc_contract_no_traits(tmp_path: Path):
     with patch("village.ppc.run_command_output_cwd", return_value="# Prompt for build"):
         with patch(
             "village.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
             prompt, warning = generate_ppc_contract("build", agent_config, config)
 

@@ -5,7 +5,7 @@ Tests verify that all 7 extensions work TOGETHER correctly in the chat loop:
 - ThinkingRefiner: query refinement
 - ChatContext: session state management
 - ToolInvoker: tool invocation customization
-- BeadsIntegrator: bead creation/updates
+ - TaskHooks: task creation/updates
 - ServerDiscovery: MCP server discovery
 - LLMProviderAdapter: LLM provider customization
 """
@@ -19,10 +19,6 @@ import pytest
 
 from village.chat.llm_chat import LLMChat
 from village.config import Config, ExtensionConfig
-from village.extensibility.beads_integrators import (
-    BeadSpec,
-    DefaultBeadsIntegrator,
-)
 from village.extensibility.context import ChatContext, SessionContext
 from village.extensibility.llm_adapters import (
     LLMProviderAdapter,
@@ -35,6 +31,10 @@ from village.extensibility.server_discovery import (
     DefaultServerDiscovery,
     MCPServer,
     ServerDiscovery,
+)
+from village.extensibility.task_hooks import (
+    DefaultTaskHooks,
+    TaskHookSpec,
 )
 from village.extensibility.thinking_refiners import (
     QueryRefinement,
@@ -141,8 +141,8 @@ class TrackingToolInvoker(ToolInvoker):
         self.on_error_calls.append((invocation, error))
 
 
-class TrackingBeadsIntegrator(DefaultBeadsIntegrator):
-    """Mock beads integrator that tracks execution."""
+class TrackingTaskHooks(DefaultTaskHooks):
+    """Mock task hooks that tracks execution."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -151,25 +151,25 @@ class TrackingBeadsIntegrator(DefaultBeadsIntegrator):
         self.on_created_calls: list[tuple[Any, dict[str, Any]]] = []
         self.on_updated_calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def should_create_bead(self, context: dict[str, Any]) -> bool:
+    async def should_create_task_hook(self, context: dict[str, Any]) -> bool:
         self.should_create_calls.append(context)
-        return context.get("create_bead", False)
+        return context.get("create_hook", False)
 
-    async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
+    async def create_hook_spec(self, context: dict[str, Any]) -> TaskHookSpec:
         self.create_spec_calls.append(context)
-        return BeadSpec(
-            title=context.get("title", "Test Bead"),
+        return TaskHookSpec(
+            title=context.get("title", "Test Task"),
             description=context.get("description", ""),
             issue_type="task",
             priority=1,
             metadata={"tracked": True},
         )
 
-    async def on_bead_created(self, bead: Any, context: dict[str, Any]) -> None:
-        self.on_created_calls.append((bead, context))
+    async def on_task_created(self, created_task: Any, context: dict[str, Any]) -> None:
+        self.on_created_calls.append((created_task, context))
 
-    async def on_bead_updated(self, bead_id: str, updates: dict[str, Any]) -> None:
-        self.on_updated_calls.append((bead_id, updates))
+    async def on_task_updated(self, task_id: str, updates: dict[str, Any]) -> None:
+        self.on_updated_calls.append((task_id, updates))
 
 
 class TrackingServerDiscovery(ServerDiscovery):
@@ -245,9 +245,7 @@ class TestLLMChatIntegration:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio
@@ -302,9 +300,7 @@ class TestLLMChatIntegration:
         assert "POST:" in response
 
     @pytest.mark.asyncio
-    async def test_all_extension_registration_methods_work_with_llmchat(
-        self, mock_llm_client
-    ) -> None:
+    async def test_all_extension_registration_methods_work_with_llmchat(self, mock_llm_client) -> None:
         """All extension registration methods work with LLMChat."""
         registry = ExtensionRegistry()
 
@@ -312,7 +308,7 @@ class TestLLMChatIntegration:
         registry.register_thinking_refiner(TrackingThinkingRefiner())
         registry.register_chat_context(TrackingChatContext())
         registry.register_tool_invoker(TrackingToolInvoker())
-        registry.register_beads_integrator(TrackingBeadsIntegrator())
+        registry.register_task_hooks(TrackingTaskHooks())
         registry.register_server_discovery(TrackingServerDiscovery())
         registry.register_llm_adapter(TrackingLLMAdapter())
 
@@ -460,9 +456,7 @@ class TestEndToEndScenarios:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "desc": "Test desc", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "desc": "Test desc", "scope": "feature"}')
         return client
 
     @pytest.fixture
@@ -473,7 +467,7 @@ class TestEndToEndScenarios:
         registry.register_thinking_refiner(TrackingThinkingRefiner())
         registry.register_chat_context(TrackingChatContext())
         registry.register_tool_invoker(TrackingToolInvoker())
-        registry.register_beads_integrator(TrackingBeadsIntegrator())
+        registry.register_task_hooks(TrackingTaskHooks())
         registry.register_server_discovery(TrackingServerDiscovery())
         registry.register_llm_adapter(TrackingLLMAdapter())
         return registry
@@ -519,9 +513,7 @@ class TestEndToEndScenarios:
         assert len(tracking_processor.post_calls) == 1
 
     @pytest.mark.asyncio
-    async def test_extensions_can_disable_features(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_extensions_can_disable_features(self, mock_llm_client, full_domain_registry) -> None:
         """Extensions can disable features (e.g., should_invoke returns False)."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -542,7 +534,7 @@ class TestEndToEndScenarios:
         registry.register_thinking_refiner(TrackingThinkingRefiner())
         registry.register_chat_context(TrackingChatContext())
         registry.register_tool_invoker(TrackingToolInvoker())
-        registry.register_beads_integrator(TrackingBeadsIntegrator())
+        registry.register_task_hooks(TrackingTaskHooks())
         registry.register_server_discovery(TrackingServerDiscovery())
         registry.register_llm_adapter(TrackingLLMAdapter())
 
@@ -565,9 +557,7 @@ class TestEndToEndScenarios:
         assert len(refiner.refine_calls) == 1  # Only "refine" message triggers
 
     @pytest.mark.asyncio
-    async def test_session_context_persists_across_messages(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_session_context_persists_across_messages(self, mock_llm_client, full_domain_registry) -> None:
         """SessionContext persists across messages."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -588,9 +578,7 @@ class TestEndToEndScenarios:
         assert len(context.save_calls) == 2
 
     @pytest.mark.asyncio
-    async def test_query_refinement_cleared_after_task_creation(
-        self, mock_llm_client, full_domain_registry
-    ) -> None:
+    async def test_query_refinement_cleared_after_task_creation(self, mock_llm_client, full_domain_registry) -> None:
         """QueryRefinement is cleared after task creation."""
         chat = LLMChat(mock_llm_client, extensions=full_domain_registry)
 
@@ -639,7 +627,7 @@ class TestConfiguration:
             "EXTENSIONS.TOOL_INVOKER_MODULE": "my.module.Invoker",
             "EXTENSIONS.THINKING_REFINER_MODULE": "my.module.Refiner",
             "EXTENSIONS.CHAT_CONTEXT_MODULE": "my.module.Context",
-            "EXTENSIONS.BEADS_INTEGRATOR_MODULE": "my.module.Integrator",
+            "EXTENSIONS.TASK_HOOKS_MODULE": "my.module.Integrator",
             "EXTENSIONS.SERVER_DISCOVERY_MODULE": "my.module.Discovery",
             "EXTENSIONS.LLM_ADAPTER_MODULE": "my.module.Adapter",
         }
@@ -651,7 +639,7 @@ class TestConfiguration:
         assert ext_config.tool_invoker_module == "my.module.Invoker"
         assert ext_config.thinking_refiner_module == "my.module.Refiner"
         assert ext_config.chat_context_module == "my.module.Context"
-        assert ext_config.beads_integrator_module == "my.module.Integrator"
+        assert ext_config.task_hooks_module == "my.module.Integrator"
         assert ext_config.server_discovery_module == "my.module.Discovery"
         assert ext_config.llm_adapter_module == "my.module.Adapter"
 
@@ -692,7 +680,7 @@ class TestConfiguration:
         assert ext_config.tool_invoker_module is None
         assert ext_config.thinking_refiner_module is None
         assert ext_config.chat_context_module is None
-        assert ext_config.beads_integrator_module is None
+        assert ext_config.task_hooks_module is None
         assert ext_config.server_discovery_module is None
         assert ext_config.llm_adapter_module is None
 
@@ -731,9 +719,7 @@ class TestSessionManagement:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio
@@ -918,9 +904,7 @@ class TestExtensionFlowVerification:
     def mock_llm_client(self):
         """Mock LLM client."""
         client = MagicMock()
-        client.call = MagicMock(
-            return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}'
-        )
+        client.call = MagicMock(return_value='{"title": "Test Task", "description": "Test", "scope": "feature"}')
         return client
 
     @pytest.mark.asyncio
@@ -931,7 +915,7 @@ class TestExtensionFlowVerification:
         refiner = TrackingThinkingRefiner()
         context = TrackingChatContext()
         invoker = TrackingToolInvoker()
-        integrator = TrackingBeadsIntegrator()
+        integrator = TrackingTaskHooks()
         discovery = TrackingServerDiscovery()
         adapter = TrackingLLMAdapter()
 
@@ -940,7 +924,7 @@ class TestExtensionFlowVerification:
         registry.register_thinking_refiner(refiner)
         registry.register_chat_context(context)
         registry.register_tool_invoker(invoker)
-        registry.register_beads_integrator(integrator)
+        registry.register_task_hooks(integrator)
         registry.register_server_discovery(discovery)
         registry.register_llm_adapter(adapter)
 

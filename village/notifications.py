@@ -46,9 +46,7 @@ class InvalidEventTypeError(NotificationError):
 
     def __init__(self, event_type: str):
         self.event_type = event_type
-        super().__init__(
-            f"Invalid event type: {event_type}. Must be one of: {', '.join(SUPPORTED_EVENT_TYPES)}"
-        )
+        super().__init__(f"Invalid event type: {event_type}. Must be one of: {', '.join(SUPPORTED_EVENT_TYPES)}")
 
 
 @dataclass
@@ -69,9 +67,7 @@ class NotificationBackend:
             raise InvalidWebhookURLError(self.webhook_url, "URL must be a non-empty string")
 
         if not self.webhook_url.startswith(("http://", "https://")):
-            raise InvalidWebhookURLError(
-                self.webhook_url, "URL must start with http:// or https://"
-            )
+            raise InvalidWebhookURLError(self.webhook_url, "URL must start with http:// or https://")
 
     def _validate_event_types(self) -> None:
         """Validate event types are supported."""
@@ -176,8 +172,7 @@ def _send_webhook_with_retry(
                     )
                 else:
                     logger.warning(
-                        f"Webhook attempt {attempt + 1} failed with status "
-                        f"{response.status_code}, retrying..."
+                        f"Webhook attempt {attempt + 1} failed with status {response.status_code}, retrying..."
                     )
 
         except requests.exceptions.Timeout:
@@ -305,9 +300,7 @@ def send_notification(
         "context": event.context,
     }
 
-    logger.info(
-        f"Sending {event.event_type} notification to {backend_type}: {event.task_id or 'no task'}"
-    )
+    logger.info(f"Sending {event.event_type} notification to {backend_type}: {event.task_id or 'no task'}")
 
     success, status_code, message = _send_webhook_with_retry(
         url=backend.webhook_url,

@@ -81,9 +81,7 @@ def get_ci_config(config_path: Path) -> dict[str, CIPlatformConfig]:
 
     # GitLab CI config
     gitlab_token = os.environ.get("GITLAB_TOKEN") or os.environ.get("VILLAGE_GITLAB_TOKEN")
-    gitlab_url = os.environ.get("GITLAB_URL") or os.environ.get(
-        "VILLAGE_GITLAB_URL", "https://gitlab.com"
-    )
+    gitlab_url = os.environ.get("GITLAB_URL") or os.environ.get("VILLAGE_GITLAB_URL", "https://gitlab.com")
     configs["gitlab_ci"] = CIPlatformConfig(
         token=gitlab_token,
         url=gitlab_url,
@@ -193,8 +191,7 @@ def monitor_build(
 
             if elapsed > platform_config.timeout_seconds:
                 raise BuildTimeoutError(
-                    f"Build {build_id} timed out after {elapsed}s "
-                    f"(timeout: {platform_config.timeout_seconds}s)"
+                    f"Build {build_id} timed out after {elapsed}s (timeout: {platform_config.timeout_seconds}s)"
                 )
 
             if platform == "github_actions":

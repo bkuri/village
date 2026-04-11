@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import re
-import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -25,7 +24,6 @@ from village.chat.drafts import (
     load_draft,
     save_draft,
 )
-from village.chat.initialization import ensure_beads_initialized
 from village.chat.prompts import ChatMode, generate_initial_prompt, generate_mode_prompt
 from village.chat.schema import validate_schema
 from village.chat.sequential_thinking import (
@@ -38,10 +36,9 @@ from village.chat.state import (
     take_session_snapshot,
 )
 from village.chat.subcommands import execute_command, parse_command
-from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
+from village.chat.task_extractor import create_draft_tasks, extract_task_specs
 from village.llm import get_llm_client
-from village.probes.beads import beads_available
-from village.probes.tools import SubprocessError, run_command_output
+from village.tasks import TaskStoreError, get_task_store
 
 if TYPE_CHECKING:
     from village.config import Config
@@ -53,30 +50,24 @@ else:
 logger = logging.getLogger(__name__)
 
 
-def get_beads_workflow_context(config: _Config) -> str:
+def get_task_workflow_context(config: _Config) -> str:
     """
-    Get Beads workflow context via bd prime command.
+    Get workflow context from the task store.
 
     This provides AI-optimized workflow context (~50 tokens) that
-    helps agents remember Beads workflow details across context compaction.
+    helps agents remember workflow details across context compaction.
 
     Args:
         config: Village config
 
     Returns:
-        Workflow context string (empty if Beads not available)
+        Workflow context string (empty if store not available)
     """
-    beads_status = beads_available()
-    if not (beads_status.command_available and beads_status.repo_initialized):
-        logger.debug("Beads not available, skipping workflow context")
-        return ""
-
     try:
-        workflow_context = run_command_output(["bd", "prime"])
-        logger.debug("Injected Beads workflow context (~50 tokens)")
-        return workflow_context
-    except SubprocessError as e:
-        logger.warning(f"Failed to get Beads workflow context: {e}")
+        store = get_task_store(config=config)
+        return store.get_prime_context()
+    except TaskStoreError as e:
+        logger.warning(f"Failed to get workflow context: {e}")
         return ""
 
 
@@ -127,9 +118,9 @@ def start_conversation(config: _Config, mode: str = "knowledge-share") -> Conver
     context_dir = get_context_dir(config)
     context_files = get_current_context(context_dir)
 
-    beads_workflow = get_beads_workflow_context(config)
-    if beads_workflow:
-        prompt += f"\n\n## Beads Workflow Context\n\n{beads_workflow}\n"
+    task_workflow = get_task_workflow_context(config)
+    if task_workflow:
+        prompt += f"\n\n## Task Workflow Context\n\n{task_workflow}\n"
 
     context_summary = ""
     if context_files:
@@ -510,7 +501,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
     """
     Review and submit batch of enabled drafts.
 
-    Creates actual Beads tasks for enabled drafts.
+    Creates actual tasks for enabled drafts.
 
     Args:
         state: Current conversation state
@@ -532,7 +523,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
 
     # Import here to avoid circular imports
     from village.chat.state import load_session_state
-    from village.chat.task_extractor import BeadsTaskSpec
+    from village.chat.task_extractor import TaskSubmissionSpec
 
     state_dict = load_session_state(config)
 
@@ -545,7 +536,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
             baseline = state_dict.get("session_snapshot", {}).get("brainstorm_baseline", {})
             config_git_root_name = config.git_root.name
 
-            specs = extract_beads_specs(
+            specs = extract_task_specs(
                 baseline,
                 breakdown,
                 config_git_root_name,
@@ -556,7 +547,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
             for draft_id in state.pending_enables:
                 try:
                     draft = load_draft(draft_id, config)
-                    spec = BeadsTaskSpec(
+                    spec = TaskSubmissionSpec(
                         title=draft.title,
                         description=draft.description,
                         estimate=draft.estimate or "unknown",
@@ -601,7 +592,7 @@ def _handle_submit(state: ConversationState, config: _Config) -> ConversationSta
         state.session_snapshot.created_task_ids = created_ids
         state.batch_submitted = True
 
-        summary_text = f"Created {len(created_tasks)} task(s) in Beads"
+        summary_text = f"Created {len(created_tasks)} task(s)"
         state.messages.append(
             ConversationMessage(
                 role="assistant",
@@ -653,11 +644,12 @@ def _handle_reset(state: ConversationState, config: _Config) -> ConversationStat
 
     task_ids = state.session_snapshot.created_task_ids
     deleted_tasks = []
+    store = get_task_store(config=config)
     for task_id in task_ids:
         try:
-            _ = run_command_output(["bd", "delete", "--force", task_id])
+            store.delete_task(task_id)
             deleted_tasks.append(task_id)
-        except SubprocessError:
+        except TaskStoreError:
             pass
 
     for filename, content in state.session_snapshot.initial_context_files.items():
@@ -811,7 +803,7 @@ async def _handle_brainstorm(
     Flow:
     1. Collect baseline (title + reasoning)
     2. Generate task breakdown using Sequential Thinking
-    3. Create draft tasks in Beads
+    3. Create draft tasks
     4. Display results
 
     Args:
@@ -824,8 +816,6 @@ async def _handle_brainstorm(
     """
 
     try:
-        ensure_beads_initialized(config)
-
         initial_title = " ".join(args) if args else None
         baseline = collect_baseline(initial_title)
 
@@ -847,14 +837,16 @@ async def _handle_brainstorm(
         )
 
         try:
-            beads_json = run_command_output(["bd", "list", "--json"])
-        except SubprocessError:
-            beads_json = None
+            store = get_task_store(config=config)
+            all_tasks = store.list_tasks(limit=100)
+            tasks_json = json.dumps([t.to_dict() for t in all_tasks])
+        except TaskStoreError:
+            tasks_json = None
 
         breakdown = generate_task_breakdown(
             baseline,
             config,
-            beads_state=beads_json,
+            tasks_state=tasks_json,
         )
 
         if not validate_dependencies(breakdown):
@@ -866,7 +858,7 @@ async def _handle_brainstorm(
             )
             return state
 
-        specs = extract_beads_specs(
+        specs = extract_task_specs(
             baseline,
             breakdown,
             config.git_root.name,
@@ -908,9 +900,11 @@ async def _handle_brainstorm(
         )
         return state
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         if config.debug.enabled:
-            logger.debug(f"Sequential Thinking error: {e.stderr}")
+            logger.error(f"Brainstorm handler error: {e}")
+        else:
+            logger.error(f"Brainstorm handler error: {str(e)}")
 
         state.messages.append(
             ConversationMessage(
@@ -922,20 +916,6 @@ async def _handle_brainstorm(
                     "2. Be more specific about what needs breaking down\n"
                     "3. Retry: /brainstorm [title]"
                 ),
-            )
-        )
-        return state
-
-    except Exception as e:
-        if config.debug.enabled:
-            logger.error(f"Brainstorm handler error: {e}")
-        else:
-            logger.error(f"Brainstorm handler error: {str(e)}")
-
-        state.messages.append(
-            ConversationMessage(
-                role="assistant",
-                content="Error: Unexpected failure.\n\nTry: /brainstorm again",
             )
         )
         return state

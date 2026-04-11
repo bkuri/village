@@ -1,7 +1,7 @@
 """Task specification dataclass for Village Chat."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ class TaskSpec:
     estimate: str
     confidence: Literal["high", "medium", "low"] = "medium"
     bump: Literal["major", "minor", "patch", "none"] | None = None
+    search_hints: dict[str, list[str]] = field(default_factory=dict)
 
     def has_dependencies(self) -> bool:
         """

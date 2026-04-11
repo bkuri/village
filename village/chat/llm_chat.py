@@ -8,16 +8,16 @@ import uuid
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional, cast
 
-from village.chat.beads_client import BeadsClient, BeadsError
 from village.chat.sequential_thinking import (
     TaskBreakdown,
 )
 from village.chat.task_spec import TaskSpec
 from village.extensibility import ExtensionRegistry
-from village.extensibility.beads_integrators import BeadCreated
 from village.extensibility.context import SessionContext
+from village.extensibility.task_hooks import TaskCreated
 from village.extensibility.thinking_refiners import QueryRefinement
 from village.extensibility.tool_invokers import ToolInvocation, ToolResult
+from village.tasks import TaskCreate, TaskStore, TaskStoreError, get_task_store
 
 ScopeType = Literal["fix", "feature", "config", "docs", "test", "refactor"]
 ConfidenceType = Literal["high", "medium", "low"]
@@ -77,6 +77,7 @@ class ChatSession:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
         return self.current_task
 
@@ -111,26 +112,26 @@ class ChatSession:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
         return True
 
 
 @dataclass
 class LLMChat:
-    """LLM chat session with task rendering and Beads API integration.
+    """LLM chat session with task rendering and extension hooks.
 
     Supports domain-specific customization through ExtensionRegistry hooks:
     - ChatProcessor: Pre/post message processing
     - ToolInvoker: Customize MCP tool invocation
     - ThinkingRefiner: Domain-specific query refinement
     - ChatContext: Session state/context management
-    - BeadsIntegrator: Customize bead creation/updates
+    - TaskHooks: Customize task creation/updates
     """
 
     session: ChatSession
     llm_client: _LLMClient
     extensions: ExtensionRegistry
-    beads_client: BeadsClient | None = None
     system_prompt: str | None = None
     config: _Config | None = None
     session_id: str = field(default="")
@@ -153,16 +154,17 @@ class LLMChat:
         """
         self.session = ChatSession()
         self.llm_client = llm_client
-        self.beads_client = None
         self.system_prompt = system_prompt
         self.config = config
         self.extensions = extensions or ExtensionRegistry()
         self.session_id = str(uuid.uuid4())
         self.session_context = None
 
-    async def set_beads_client(self, beads_client: BeadsClient) -> None:
-        """Set Beads client for task creation."""
-        self.beads_client = beads_client
+    def _get_store(self) -> "TaskStore":
+        """Get task store instance from config."""
+        if self.config is None:
+            raise TaskStoreError("Config not available")
+        return get_task_store(config=self.config)
 
     async def set_extensions(self, extensions: ExtensionRegistry) -> None:
         """Set extension registry."""
@@ -377,6 +379,7 @@ class LLMChat:
             success_criteria=task_spec_dict["success_criteria"],
             estimate=task_spec_dict["estimate"],
             confidence=task_spec_dict["confidence"],
+            search_hints=task_spec_dict.get("search_hints", {}),
         )
 
         # Store in session
@@ -477,7 +480,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             breakdown = generate_task_breakdown(
                 baseline=baseline,
                 config=self.config,
-                beads_state=None,  # Could pass current Beads state for context
+                tasks_state=None,  # Could pass current task state for context
             )
 
             # Validate dependencies
@@ -551,7 +554,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         # Action hints
         lines.append("")
         lines.append("Actions:")
-        lines.append("  /confirm   Create all subtasks in Beads")
+        lines.append("  /confirm   Create all subtasks in task store")
         lines.append("  /edit      Refine entire breakdown")
         lines.append("  /discard    Cancel this breakdown")
 
@@ -632,6 +635,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             success_criteria=refined_dict["success_criteria"],
             estimate=refined_dict["estimate"],
             confidence=refined_dict["confidence"],
+            search_hints=refined_dict.get("search_hints", {}),
         )
 
         # Add refinement to session
@@ -664,9 +668,6 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         - Single task (existing behavior)
         - Breakdown (new: creates all subtasks)
         """
-        if not self.beads_client:
-            return "❌ Beads client not configured. Cannot create tasks."
-
         # Case 1: Confirm breakdown (create all subtasks)
         if self.session.current_breakdown:
             return await self._confirm_breakdown()
@@ -678,7 +679,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
 
         logger.info(f"Confirming task: {spec.title}")
 
-        integrator = self.extensions.get_beads_integrator()
+        integrator = self.extensions.get_task_hooks()
         context = {
             "task_spec": spec,
             "session_id": self.session_id,
@@ -686,25 +687,40 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         }
 
         try:
-            if await integrator.should_create_bead(context):
-                bead_spec = await integrator.create_bead_spec(context)
-                task_id = await self.beads_client.create_task(spec)
-                bead = BeadCreated(
-                    bead_id=task_id,
-                    parent_id=bead_spec.parent_id,
-                    created_at="",
-                    metadata=bead_spec.metadata,
+            store = self._get_store()
+            bump_label = f"bump:{spec.bump}" if spec.bump and spec.bump != "none" else None
+            labels: list[str] = []
+            if bump_label:
+                labels.append(bump_label)
+
+            task_create = TaskCreate(
+                title=spec.title,
+                description=spec.description,
+                issue_type=spec.scope if spec.scope in ("bug", "feature", "chore", "epic") else "task",
+                priority=2,
+                labels=labels,
+                depends_on=spec.blocked_by,
+                blocks=spec.blocks,
+            )
+
+            task = store.create_task(task_create)
+            task_id = task.id
+            if await integrator.should_create_task_hook(context):
+                hook_spec = await integrator.create_hook_spec(context)
+                created_task = TaskCreated(
+                    task_id=task.id,
+                    parent_id=hook_spec.parent_id,
+                    created_at=task.created_at,
+                    metadata=hook_spec.metadata,
                 )
-                await integrator.on_bead_created(bead, context)
-            else:
-                task_id = await self.beads_client.create_task(spec)
+                await integrator.on_task_created(created_task, context)
 
             return (
                 f"✓ Task created: {task_id}\n\n"
                 f"Dependencies: {spec.dependency_summary()}\n\n"
                 f"Ready to queue with: village queue --agent {spec.scope}"
             )
-        except BeadsError as e:
+        except TaskStoreError as e:
             logger.error(f"Failed to create task: {e}")
             return f"❌ Failed to create task: {e}"
 
@@ -738,11 +754,8 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
         return f"🗑️ Task '{task_title}' discarded. Use /create to start a new task."
 
     async def _confirm_breakdown(self) -> str:
-        """Create all subtasks from TaskBreakdown in Beads."""
+        """Create all subtasks from TaskBreakdown."""
         from village.chat.sequential_thinking import validate_dependencies
-
-        if not self.beads_client:
-            return "❌ Beads client not configured. Cannot create tasks."
 
         breakdown = self.session.current_breakdown
         if not breakdown:
@@ -750,20 +763,21 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
 
         items = breakdown.items
 
-        # Validate dependencies
         if not validate_dependencies(breakdown):
             return "❌ Task dependencies are invalid. Use /refine or /edit to fix."
 
-        # Create tasks and map indices to task IDs
         task_id_map: dict[int, str] = {}
         created_tasks: dict[str, str] = {}
-        integrator = self.extensions.get_beads_integrator()
+        integrator = self.extensions.get_task_hooks()
+
+        try:
+            store = self._get_store()
+        except TaskStoreError:
+            return "❌ Task store not available. Cannot create tasks."
 
         for i, item in enumerate(items):
-            # Map dependency indices to actual task IDs
             blocks = [task_id_map[dep] for dep in item.dependencies if dep in task_id_map]
 
-            # Create TaskSpec from TaskBreakdownItem
             spec = TaskSpec(
                 title=item.title,
                 description=item.description,
@@ -773,6 +787,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
                 success_criteria=item.success_criteria or ["Task completed"],
                 estimate=item.estimated_effort,
                 confidence="medium",
+                search_hints=item.search_hints,
             )
 
             context = {
@@ -786,23 +801,34 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
             }
 
             try:
-                if await integrator.should_create_bead(context):
-                    bead_spec = await integrator.create_bead_spec(context)
-                    task_id = await self.beads_client.create_task(spec)
-                    bead = BeadCreated(
-                        bead_id=task_id,
-                        parent_id=bead_spec.parent_id,
-                        created_at="",
-                        metadata=bead_spec.metadata,
+                task_create = TaskCreate(
+                    title=item.title,
+                    description=item.description,
+                    issue_type="feature",
+                    priority=2,
+                    depends_on=[task_id_map[dep] for dep in item.dependencies if dep in task_id_map],
+                    blocks=blocks,
+                )
+
+                if await integrator.should_create_task_hook(context):
+                    hook_spec = await integrator.create_hook_spec(context)
+                    task = store.create_task(task_create)
+                    created_task = TaskCreated(
+                        task_id=task.id,
+                        parent_id=hook_spec.parent_id,
+                        created_at=task.created_at,
+                        metadata=hook_spec.metadata,
                     )
-                    await integrator.on_bead_created(bead, context)
+                    await integrator.on_task_created(created_task, context)
+                    task_id = task.id
                 else:
-                    task_id = await self.beads_client.create_task(spec)
+                    task = store.create_task(task_create)
+                    task_id = task.id
 
                 task_id_map[i] = task_id
                 created_tasks[item.title] = task_id
                 logger.info(f"Created subtask {task_id}: {item.title}")
-            except BeadsError as e:
+            except TaskStoreError as e:
                 logger.error(f"Failed to create task '{item.title}': {e}")
                 return self._render_decomposition_error(
                     f"Failed to create task '{item.title}': {e}",
@@ -810,10 +836,8 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
                     offer_retry=True,
                 )
 
-        # Clear breakdown from session
         self.session.current_breakdown = None
 
-        # Return results
         lines = [f"✓ Created {len(created_tasks)} subtasks:", ""]
         for title, task_id in created_tasks.items():
             lines.append(f"  {task_id}: {title}")
@@ -896,27 +920,25 @@ Return JSON in same breakdown format:
             )
 
     async def handle_tasks(self, args: str) -> str:
-        """Handle /tasks command - list Beads tasks."""
-        if not self.beads_client:
-            return "Beads client not configured."
-
+        """Handle /tasks command - list tasks."""
         try:
-            tasks = await self.beads_client.search_tasks(query="", limit=10, status="open")
+            store = self._get_store()
+            tasks = store.list_tasks(status="open", limit=10)
             if not tasks:
                 return "No open tasks found."
 
             lines = ["\n📋 OPEN TASKS (last 10):\n"]
             for task in tasks:
-                lines.append(f"  • {task.get('id', 'N/A')} - {task.get('title', 'N/A')}")
+                lines.append(f"  • {task.id} - {task.title}")
 
             return "\n".join(lines)
-        except BeadsError as e:
+        except TaskStoreError as e:
             logger.error(f"Failed to list tasks: {e}")
             return f"❌ Failed to list tasks: {e}"
 
     async def handle_task(self, args: str) -> str:
         """Handle /task <id> command - show task details."""
-        if not self.beads_client or not args:
+        if not args:
             return "Usage: /task <task-id>"
 
         task_id = args.strip()
@@ -924,38 +946,36 @@ Return JSON in same breakdown format:
             return "Usage: /task <task-id>"
 
         try:
-            deps = await self.beads_client.get_dependencies(task_id)
-            if not deps:
+            store = self._get_store()
+            deps = store.get_dependencies(task_id)
+            lines = [f"\n📋 TASK: {task_id}\n", "DEPENDENCIES:\n"]
+            for dep_task in deps.blocks:
+                lines.append(f"  depends on: {dep_task.id} - {dep_task.title}")
+            for dep_task in deps.blocked_by:
+                lines.append(f"  blocked by: {dep_task.id} - {dep_task.title}")
+
+            if not deps.blocks and not deps.blocked_by:
                 return f"Task {task_id} has no dependencies."
 
-            lines = [f"\n📋 TASK: {task_id}\n", "DEPENDENCIES:\n"]
-            for dep_type, task_list in deps.items():
-                if isinstance(task_list, list):
-                    lines.append(f"  {dep_type}: {', '.join(cast(list[str], task_list)) if task_list else '(none)'}")
-                else:
-                    lines.append(f"  {dep_type}: {task_list}")
-
             return "\n".join(lines)
-        except BeadsError as e:
+        except TaskStoreError as e:
             logger.error(f"Failed to get task dependencies: {e}")
             return f"❌ Failed to get dependencies: {e}"
 
     async def handle_ready(self, args: str) -> str:
         """Handle /ready command - show ready tasks."""
-        if not self.beads_client:
-            return "Beads client not configured."
-
         try:
-            ready_tasks = await self.beads_client.search_tasks(query="", limit=10, status="ready")
+            store = self._get_store()
+            ready_tasks = store.get_ready_tasks()
             if not ready_tasks:
                 return "No ready tasks found."
 
             lines = ["\n✅ READY TASKS (last 10):\n"]
-            for task in ready_tasks:
-                lines.append(f"  • {task.get('id', 'N/A')} - {task.get('title', 'N/A')}")
+            for task in ready_tasks[:10]:
+                lines.append(f"  • {task.id} - {task.title}")
 
             return "\n".join(lines)
-        except BeadsError as e:
+        except TaskStoreError as e:
             logger.error(f"Failed to list ready tasks: {e}")
             return f"❌ Failed to list ready tasks: {e}"
 
@@ -994,6 +1014,7 @@ Return JSON in same breakdown format:
                 success_criteria=cast(list[str], task_spec_dict.get("success_criteria") or []),
                 estimate=cast(str, task_spec_dict.get("estimate")),
                 confidence=cast(ConfidenceType, cast(str, task_spec_dict.get("confidence", "medium"))),
+                search_hints=cast(dict[str, list[str]], task_spec_dict.get("search_hints") or {}),
             )
             lines.append(f"  #{ref['iteration']}: {task_spec.title}")
             lines.append(f"     User: {ref['user_input']}")
@@ -1011,11 +1032,11 @@ Return JSON in same breakdown format:
   /refine <clarification>   — Refine current task
   /revise <clarification>   — Alias for /refine (identical)
   /undo                     — Revert to previous version
-  /confirm                  — Queue current task in Beads
+  /confirm                  — Queue current task
   /discard                  — Cancel current task
 
-## Beads Query Commands
-  /tasks                    — List open Beads tasks
+## Task Query Commands
+  /tasks                    — List open tasks
   /task <id>               — Show task details and dependencies
   /ready                    — Show ready (unblocked) tasks
 
@@ -1025,19 +1046,19 @@ Return JSON in same breakdown format:
   /help [topic]            — This help message
 
 ## Workflow
-  1. Describe task in natural language
-  2. Review rendered specification
-  3. Use /refine or /revise to iterate
-  4. Use /confirm when ready to queue
-  5. Use /undo to revert refinements
+   1. Describe task in natural language
+   2. Review rendered specification
+   3. Use /refine or /revise to iterate
+   4. Use /confirm when ready to queue
+   5. Use /undo to revert refinements
 
 ## Examples
-  /create I need to fix the login bug
-  /refine It blocks the dashboard widget
-  /revise Actually, it blocks the profile page
-  /undo
-  /confirm
-  /discard
+   /create I need to fix the login bug
+   /refine It blocks the dashboard widget
+   /revise Actually, it blocks the profile page
+   /undo
+   /confirm
+   /discard
 
 ## Dependencies
 Village automatically detects dependencies from your input:
@@ -1045,7 +1066,7 @@ Village automatically detects dependencies from your input:
   • "blocked by Y" → Task is blocked by Y
   • "depends on Z" → Task depends on Z
 
-Use exact Beads IDs (e.g., bd-abc123) for best results.
+Use exact task IDs (e.g., tsk-abc123) for best results.
 """
 
     def render_task_spec(self, spec: TaskSpec, refinement_count: int = 0) -> str:
@@ -1147,22 +1168,29 @@ Use exact Beads IDs (e.g., bd-abc123) for best results.
             f"Blocked by: {', '.join(spec.blocked_by) if spec.blocked_by else '(none)'}",
             f"Success Criteria: {', '.join(spec.success_criteria) if spec.success_criteria else '(none)'}",
         ]
+        if spec.search_hints:
+            hints_parts = []
+            for key, values in spec.search_hints.items():
+                if values:
+                    hints_parts.append(f"{key}: {', '.join(values)}")
+            if hints_parts:
+                lines.append(f"Search Hints: {'; '.join(hints_parts)}")
         return "\n".join(lines)
 
     def _get_prompt(self) -> str:
         """Get system prompt for LLM."""
         return """You are a Task Specification Agent for Village.
 
-Your job: Parse conversational input into structured PPC contracts with explicit Beads task IDs for dependencies.
+Your job: Parse conversational input into structured PPC contracts with explicit task IDs for dependencies.
 
 ## Dependency Detection Rules
 
 When user mentions dependencies, you MUST:
 
-### Option 1: Use Exact Beads ID
-If user says "bd-abc123" or mentions "bd-abc123", use that exact ID:
+### Option 1: Use Exact Task ID
+If user says "tsk-abc123" or mentions "tsk-abc123", use that exact ID:
 {
-  "blocks": ["bd-abc123"],
+  "blocks": ["tsk-abc123"],
   "blocked_by": []
 }
 
@@ -1173,7 +1201,7 @@ If user says "blocks the dashboard widget", use pattern:
   "blocked_by": []
 }
 
-**Important**: These patterns will be resolved to actual Beads IDs by Village after you return the spec.
+**Important**: These patterns will be resolved to actual task IDs by Village after you return the spec.
 
 ### Option 3: Ambiguous Reference (Ask for Clarification)
 If user says "blocks it" without specifying which task:
@@ -1188,8 +1216,8 @@ If user says "blocks it" without specifying which task:
 
 ## Dependency Patterns to Detect
 
-| Pattern | Meaning | Beads Format |
-|----------|----------|----------------|
+| Pattern | Meaning | Format |
+|----------|----------|--------|
 | "blocks X" | Current task blocks X | `blocks: [X]` |
 | "blocked by Y" | Blocked by Y | `blocked_by: [Y]` |
 | "depends on Z" | Depends on Z | `blocked_by: [Z]` |
@@ -1200,13 +1228,20 @@ If user says "blocks it" without specifying which task:
 ### Valid Task Spec
 {
   "title": "Task title",
-  "description": "Detailed description",
+  "description": "Keyword-rich description including: specific module names, file paths "
+  "affected, error types, function/class names, and behavioral changes. "
+  "Be precise enough that this description could be used as a search query to find related past work.",
   "scope": "fix|feature|config|docs|test|refactor",
   "blocks": ["task-id-1", "task-id-2"],
   "blocked_by": ["task-id-3", "task-id-4"],
   "success_criteria": ["Criterion 1", "Criterion 2", "Criterion 3"],
   "estimate": "X-Y hours|days|weeks",
-  "confidence": "high|medium|low"
+  "confidence": "high|medium|low",
+  "search_hints": {
+    "modules": ["affected/file.py", "another/module.py"],
+    "concepts": ["key term", "another concept"],
+    "patterns": ["error pattern", "behavioral pattern"]
+  }
 }
 
 ### Ambiguous Input (Needs Clarification)
@@ -1226,5 +1261,17 @@ If user says "blocks it" without specifying which task:
 1. What dependencies you extracted
 2. Why you interpreted it that way
 3. If you're unsure, ask for clarification
+
+## Description Quality Requirements
+
+Write task descriptions that are both human-readable AND search-friendly:
+- Always mention specific modules, files, or components affected
+- Include error types, function names, or class names where relevant
+- Describe the specific behavioral change, not just the general intent
+- Use terms that a developer would search for when looking for similar work
+
+Good: "Add retry logic with exponential backoff to queue.py task processing. "
+"Handle ConnectionError and TimeoutError from subprocess.run() calls."
+Bad: "Handle the retry case properly."
 
 Be concise and focused on task specification only."""

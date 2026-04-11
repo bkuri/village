@@ -31,9 +31,7 @@ contract=contracts/build.md
     os.chdir(tmp_path)
     config = get_config()
 
-    envelope = generate_contract(
-        "bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config
-    )
+    envelope = generate_contract("bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config)
 
     assert envelope.task_id == "bd-a3f8"
     assert envelope.agent == "build"
@@ -60,9 +58,7 @@ contract=contracts/missing.md
     os.chdir(tmp_path)
     config = get_config()
 
-    envelope = generate_contract(
-        "bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config
-    )
+    envelope = generate_contract("bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config)
 
     assert envelope.task_id == "bd-a3f8"
     assert envelope.agent == "build"
@@ -99,13 +95,9 @@ ppc_format=markdown
     with patch("village.ppc.generate_ppc_contract", return_value=("# PPC output\n", None)):
         with patch(
             "village.probes.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
-            envelope = generate_contract(
-                "bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config
-            )
+            envelope = generate_contract("bd-a3f8", "build", tmp_path / ".worktrees/bd-a3f8", "build-1-bd-a3f8", config)
 
             assert envelope.task_id == "bd-a3f8"
             assert envelope.agent == "build"
@@ -125,13 +117,9 @@ def test_generate_contract_ppc_not_available():
     with patch("village.ppc.generate_ppc_contract", return_value=(None, "ppc_not_available")):
         with patch(
             "village.probes.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": False, "version": None, "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": False, "version": None, "prompts_dir": None}),
         ):
-            envelope = generate_contract(
-                "bd-a3f8", "build", Path("/worktrees/bd-a3f8"), "build-1-bd-a3f8", config
-            )
+            envelope = generate_contract("bd-a3f8", "build", Path("/worktrees/bd-a3f8"), "build-1-bd-a3f8", config)
 
             assert envelope.task_id == "bd-a3f8"
             assert envelope.agent == "build"
@@ -159,18 +147,12 @@ ppc_mode=build
     config = get_config()
 
     # Mock PPC to fail
-    with patch(
-        "village.ppc.generate_ppc_contract", return_value=(None, "ppc_execution_failed: error")
-    ):
+    with patch("village.ppc.generate_ppc_contract", return_value=(None, "ppc_execution_failed: error")):
         with patch(
             "village.probes.ppc.detect_ppc",
-            return_value=type(
-                "Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}
-            ),
+            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
         ):
-            envelope = generate_contract(
-                "bd-a3f8", "build", Path("/worktrees/bd-a3f8"), "build-1-bd-a3f8", config
-            )
+            envelope = generate_contract("bd-a3f8", "build", Path("/worktrees/bd-a3f8"), "build-1-bd-a3f8", config)
 
             assert envelope.task_id == "bd-a3f8"
             assert envelope.agent == "build"

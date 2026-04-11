@@ -1,6 +1,6 @@
 """Bootstrap function for research extensions."""
 
-from examples.research.chat.beads_integrators import ResearchBeadsIntegrator
+from examples.research.chat.beads_integrators import ResearchTaskHooks
 from examples.research.chat.context import ResearchChatContext
 from examples.research.chat.processors import ResearchChatProcessor
 from examples.research.chat.thinking_refiners import ResearchThinkingRefiner
@@ -23,6 +23,6 @@ def bootstrap_research_extensions() -> ExtensionRegistry:
     registry.register_thinking_refiner(ResearchThinkingRefiner())
     registry.register_tool_invoker(ResearchToolInvoker())
     registry.register_chat_context(ResearchChatContext())
-    registry.register_beads_integrator(ResearchBeadsIntegrator())
+    registry.register_task_hooks(ResearchTaskHooks())
 
     return registry

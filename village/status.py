@@ -148,9 +148,7 @@ def collect_orphans(session_name: str, workers: list[Worker]) -> list[Orphan]:
     return orphans
 
 
-def collect_summary(
-    session_name: str, workers: list[Worker], orphans: list[Orphan]
-) -> StatusSummary:
+def collect_summary(session_name: str, workers: list[Worker], orphans: list[Orphan]) -> StatusSummary:
     """
     Collect high-level summary.
 
@@ -174,9 +172,7 @@ def collect_summary(
     if config.worktrees_dir.exists():
         worktree_dirs = [d for d in config.worktrees_dir.iterdir() if d.is_dir()]
         worktrees_count = len(worktree_dirs)
-        worktrees_tracked = sum(
-            1 for tid in tracked_task_ids if tid in {d.name for d in worktree_dirs}
-        )
+        worktrees_tracked = sum(1 for tid in tracked_task_ids if tid in {d.name for d in worktree_dirs})
         worktrees_untracked = worktrees_count - worktrees_tracked
     else:
         worktrees_count = 0

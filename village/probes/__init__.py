@@ -1,7 +1,7 @@
 """Runtime probes."""
 
-from village.probes.beads import BeadsStatus, beads_available, beads_ready_capability
 from village.probes.repo import find_git_root
+from village.probes.tasks import TaskStoreStatus, task_store_available
 from village.probes.tmux import (
     clear_pane_cache,
     list_sessions,

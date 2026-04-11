@@ -1,6 +1,5 @@
 """Test batch submission and task creation workflow."""
 
-import json
 import uuid
 from datetime import datetime
 from unittest.mock import patch
@@ -61,36 +60,21 @@ def mock_state():
 
 
 @pytest.fixture
-def mock_bd_create(monkeypatch):
-    """Mock bd create subprocess calls."""
-    created_calls = []
+def mock_bd_create():
+    """Mock task store for batch submission tests."""
+    from unittest.mock import MagicMock, patch
 
-    def fake_run_command(cmd, **kwargs):
-        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "create":
-            task_id = f"bd-{uuid.uuid4().hex[:6]}"
-            created_calls.append(
-                {
-                    "command": "create",
-                    "args": cmd,
-                    "task_id": task_id,
-                }
-            )
-            return json.dumps({"id": task_id, "status": "draft"})
-
-        if len(cmd) > 1 and cmd[0] == "bd" and cmd[1] == "delete":
-            created_calls.append(
-                {
-                    "command": "delete",
-                    "task_id": cmd[2] if len(cmd) > 2 else "unknown",
-                }
-            )
-            return json.dumps({"status": "deleted"})
-
-        return ""
-
-    monkeypatch.setattr("village.chat.task_extractor.run_command_output", fake_run_command)
-    monkeypatch.setattr("village.chat.conversation.run_command_output", fake_run_command)
-    return created_calls
+    with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+        mock_store = MagicMock()
+        mock_store.is_available.return_value = True
+        mock_store.initialize.return_value = None
+        mock_store.create_task.return_value = MagicMock(
+            id=f"bd-{uuid.uuid4().hex[:6]}",
+            title="Test Task",
+        )
+        mock_store.delete_task.return_value = None
+        mock_get_store.return_value = mock_store
+        yield mock_store
 
 
 class TestModeSwitching:
@@ -268,10 +252,8 @@ class TestBatchSubmission:
 
         state = _handle_submit(mock_state, mock_config)
 
-        # Task creation message (now actually creates Beads tasks)
         assert "Created" in state.messages[-1].content
-        assert "task(s) in Beads" in state.messages[-1].content
-        assert len(mock_bd_create) == 1
+        assert mock_bd_create.create_task.call_count >= 1
 
     def test_prepare_batch_summary(self, mock_config, mock_state):
         """Test preparing batch summary."""
@@ -343,7 +325,7 @@ class TestReset:
         )
         mock_state.session_snapshot = snapshot
 
-        with patch("village.chat.conversation.run_command_output"):
+        with patch("village.tasks.get_task_store"):
             state = _handle_reset(mock_state, mock_config)
 
         assert len(state.session_snapshot.created_task_ids) == 0

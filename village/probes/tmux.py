@@ -480,3 +480,32 @@ def update_status_border_colour(colour: str) -> bool:
 
     except OSError:
         return False
+
+
+def capture_pane(session_name: str, pane_id: str, limit: int | None = None) -> str:
+    """
+    Capture output from a tmux pane.
+
+    Args:
+        session_name: Tmux session name
+        pane_id: Pane ID (e.g., "%12")
+        limit: Optional limit on number of lines to capture
+
+    Returns:
+        Pane output as string
+
+    Raises:
+        SubprocessError: If capture fails
+    """
+    cmd = ["tmux", "capture-pane", "-t", f"{session_name}:{pane_id}", "-p"]
+
+    if limit:
+        cmd.extend(["-S", f"-{limit}"])
+
+    try:
+        output = run_command_output(cmd)
+        logger.debug(f"Captured {len(output)} bytes from pane {pane_id}")
+        return output
+    except SubprocessError as e:
+        logger.error(f"Failed to capture pane {pane_id}: {e}")
+        raise

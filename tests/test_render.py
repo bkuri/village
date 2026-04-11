@@ -491,17 +491,17 @@ def test_render_initialization_plan_new():
     plan = InitializationPlan(
         needs_session=True,
         needs_directories=True,
-        needs_beads_init=True,
+        needs_tasks_init=True,
         session_exists=False,
         directories_exist=False,
-        beads_initialized=False,
+        tasks_initialized=False,
     )
 
     output = render_initialization_plan(plan, "village", plan_mode=True)
     assert "DRY RUN:  Would initialize village runtime" in output
     assert "Session: village (new)" in output
     assert "Directories: .village/ (create)" in output
-    assert "Beads: would initialize (not found)" in output
+    assert "Tasks: .village/tasks.jsonl (create)" in output
 
 
 def test_render_initialization_plan_existing():
@@ -509,16 +509,16 @@ def test_render_initialization_plan_existing():
     plan = InitializationPlan(
         needs_session=False,
         needs_directories=False,
-        needs_beads_init=False,
+        needs_tasks_init=False,
         session_exists=True,
         directories_exist=True,
-        beads_initialized=True,
+        tasks_initialized=True,
     )
 
     output = render_initialization_plan(plan, "village", plan_mode=False)
     assert "Session: village (exists)" in output
     assert "Directories: .village/ (exists)" in output
-    assert "Beads: .beads/ (exists)" in output
+    assert "Tasks: .village/tasks.jsonl (exists)" in output
     assert "DRY RUN:" not in output
 
 
@@ -593,7 +593,7 @@ def test_render_ready_text_work_unknown():
     )
 
     output = render_ready_text(assessment)
-    assert "Work Available:      ? Cannot determine (Beads not available)" in output
+    assert "Work Available:      ? Cannot determine (task store not available)" in output
 
 
 def test_render_ready_text_with_orphans():

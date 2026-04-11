@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from village.probes.tools import SubprocessError, run_command_output
+from village.tasks import TaskStoreError, get_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -152,9 +152,7 @@ def _collect_optional_fields(title: str, max_followups: int) -> dict[str, Any]:
             followups_asked += 1
 
     if followups_asked < max_followups:
-        tags_input = click.prompt(
-            "Batch tags (comma-separated, leave empty): ", show_default=False, default=""
-        )
+        tags_input = click.prompt("Batch tags (comma-separated, leave empty): ", show_default=False, default="")
         if tags_input:
             optional_fields["tags"] = [t.strip() for t in tags_input.split(",") if t.strip()]
             followups_asked += 1
@@ -164,7 +162,7 @@ def _collect_optional_fields(title: str, max_followups: int) -> dict[str, Any]:
 
 def validate_task_id(task_id: str) -> bool:
     """
-    Validate that a task ID exists in Beads.
+    Validate that a task ID exists in the task store.
 
     Args:
         task_id: Task ID to validate
@@ -173,9 +171,10 @@ def validate_task_id(task_id: str) -> bool:
         True if task exists, False otherwise
     """
     try:
-        output = run_command_output(["bd", "show", task_id])
-        return output is not None
-    except SubprocessError:
+        store = get_task_store()
+        task = store.get_task(task_id)
+        return task is not None
+    except (TaskStoreError, Exception):
         return False
 
 

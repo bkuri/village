@@ -4,11 +4,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from village.extensibility.beads_integrators import (
-    BeadsIntegrator,
-    BeadSpec,
-    DefaultBeadsIntegrator,
-)
 from village.extensibility.context import ChatContext, DefaultChatContext, SessionContext
 from village.extensibility.llm_adapters import (
     DefaultLLMProviderAdapter,
@@ -21,6 +16,11 @@ from village.extensibility.server_discovery import (
     DefaultServerDiscovery,
     MCPServer,
     ServerDiscovery,
+)
+from village.extensibility.task_hooks import (
+    DefaultTaskHooks,
+    TaskHooks,
+    TaskHookSpec,
 )
 from village.extensibility.thinking_refiners import (
     DefaultThinkingRefiner,
@@ -90,28 +90,28 @@ class MockChatContext(ChatContext):
         return context
 
 
-class MockBeadsIntegrator(BeadsIntegrator):
-    """Mock beads integrator for testing."""
+class MockTaskHooks(TaskHooks):
+    """Mock task hooks for testing."""
 
-    async def should_create_bead(self, context: dict[str, object]) -> bool:
-        return bool(context.get("create_bead", False))
+    async def should_create_task_hook(self, context: dict[str, object]) -> bool:
+        return bool(context.get("create_hook", False))
 
-    async def create_bead_spec(self, context: dict[str, object]) -> BeadSpec:
-        title = context.get("title", "Mock Bead")
+    async def create_hook_spec(self, context: dict[str, object]) -> TaskHookSpec:
+        title = context.get("title", "Mock Task")
         description = context.get("description", "Mock description")
         assert isinstance(title, str)
         assert isinstance(description, str)
-        return BeadSpec(
+        return TaskHookSpec(
             title=title,
             description=description,
             issue_type="task",
             priority=1,
         )
 
-    async def on_bead_created(self, bead: object, context: dict[str, object]) -> None:
+    async def on_task_created(self, created_task: object, context: dict[str, object]) -> None:
         context["created"] = True
 
-    async def on_bead_updated(self, bead_id: str, updates: dict[str, object]) -> None:
+    async def on_task_updated(self, task_id: str, updates: dict[str, object]) -> None:
         pass
 
 
@@ -172,7 +172,7 @@ class TestExtensionRegistryInitialization:
         assert isinstance(registry.get_tool_invoker(), DefaultToolInvoker)
         assert isinstance(registry.get_thinking_refiner(), DefaultThinkingRefiner)
         assert isinstance(registry.get_chat_context(), DefaultChatContext)
-        assert isinstance(registry.get_beads_integrator(), DefaultBeadsIntegrator)
+        assert isinstance(registry.get_task_hooks(), DefaultTaskHooks)
         assert isinstance(registry.get_server_discovery(), DefaultServerDiscovery)
         assert isinstance(registry.get_llm_adapter(), DefaultLLMProviderAdapter)
 
@@ -188,7 +188,7 @@ class TestExtensionRegistryInitialization:
             "tool_invoker": "DefaultToolInvoker",
             "thinking_refiner": "DefaultThinkingRefiner",
             "chat_context": "DefaultChatContext",
-            "beads_integrator": "DefaultBeadsIntegrator",
+            "task_hooks": "DefaultTaskHooks",
             "server_discovery": "DefaultServerDiscovery",
             "llm_adapter": "DefaultLLMProviderAdapter",
         }
@@ -256,17 +256,17 @@ class TestExtensionRegistryRegistration:
         assert registry.get_chat_context() is mock_context
         assert isinstance(registry.get_chat_context(), MockChatContext)
 
-    def test_register_beads_integrator_replaces_default_with_custom(
+    def test_register_task_hooks_replaces_default_with_custom(
         self,
     ) -> None:
-        """register_beads_integrator() replaces default with custom."""
+        """register_task_hooks() replaces default with custom."""
         registry = ExtensionRegistry()
-        mock_integrator = MockBeadsIntegrator()
+        mock_integrator = MockTaskHooks()
 
-        registry.register_beads_integrator(mock_integrator)
+        registry.register_task_hooks(mock_integrator)
 
-        assert registry.get_beads_integrator() is mock_integrator
-        assert isinstance(registry.get_beads_integrator(), MockBeadsIntegrator)
+        assert registry.get_task_hooks() is mock_integrator
+        assert isinstance(registry.get_task_hooks(), MockTaskHooks)
 
     def test_register_server_discovery_replaces_default_with_custom(
         self,
@@ -352,17 +352,17 @@ class TestExtensionRegistryGetters:
         registry.register_chat_context(mock_context)
         assert registry.get_chat_context() is mock_context
 
-    def test_get_beads_integrator_returns_registered_or_default(
+    def test_get_task_hooks_returns_registered_or_default(
         self,
     ) -> None:
-        """get_beads_integrator() returns registered or default."""
+        """get_task_hooks() returns registered or default."""
         registry = ExtensionRegistry()
 
-        assert isinstance(registry.get_beads_integrator(), DefaultBeadsIntegrator)
+        assert isinstance(registry.get_task_hooks(), DefaultTaskHooks)
 
-        mock_integrator = MockBeadsIntegrator()
-        registry.register_beads_integrator(mock_integrator)
-        assert registry.get_beads_integrator() is mock_integrator
+        mock_integrator = MockTaskHooks()
+        registry.register_task_hooks(mock_integrator)
+        assert registry.get_task_hooks() is mock_integrator
 
     def test_get_server_discovery_returns_registered_or_default(
         self,
@@ -414,7 +414,7 @@ class TestExtensionRegistryReset:
         registry.register_tool_invoker(MockToolInvoker())
         registry.register_thinking_refiner(MockThinkingRefiner())
         registry.register_chat_context(MockChatContext())
-        registry.register_beads_integrator(MockBeadsIntegrator())
+        registry.register_task_hooks(MockTaskHooks())
         registry.register_server_discovery(MockServerDiscovery())
         registry.register_llm_adapter(MockLLMAdapter())
 
@@ -424,7 +424,7 @@ class TestExtensionRegistryReset:
         assert isinstance(registry.get_tool_invoker(), DefaultToolInvoker)
         assert isinstance(registry.get_thinking_refiner(), DefaultThinkingRefiner)
         assert isinstance(registry.get_chat_context(), DefaultChatContext)
-        assert isinstance(registry.get_beads_integrator(), DefaultBeadsIntegrator)
+        assert isinstance(registry.get_task_hooks(), DefaultTaskHooks)
         assert isinstance(registry.get_server_discovery(), DefaultServerDiscovery)
         assert isinstance(registry.get_llm_adapter(), DefaultLLMProviderAdapter)
 
@@ -480,7 +480,7 @@ class TestExtensionRegistryIntegrationWithMocks:
         registry.register_tool_invoker(MockToolInvoker())
         registry.register_thinking_refiner(MockThinkingRefiner())
         registry.register_chat_context(MockChatContext())
-        registry.register_beads_integrator(MockBeadsIntegrator())
+        registry.register_task_hooks(MockTaskHooks())
         registry.register_server_discovery(MockServerDiscovery())
         registry.register_llm_adapter(MockLLMAdapter())
 
@@ -491,7 +491,7 @@ class TestExtensionRegistryIntegrationWithMocks:
         assert isinstance(registry.get_tool_invoker(), MockToolInvoker)
         assert isinstance(registry.get_thinking_refiner(), MockThinkingRefiner)
         assert isinstance(registry.get_chat_context(), MockChatContext)
-        assert isinstance(registry.get_beads_integrator(), MockBeadsIntegrator)
+        assert isinstance(registry.get_task_hooks(), MockTaskHooks)
         assert isinstance(registry.get_server_discovery(), MockServerDiscovery)
         assert isinstance(registry.get_llm_adapter(), MockLLMAdapter)
 
@@ -567,17 +567,17 @@ class TestExtensionRegistryLogging:
         assert "Registered chat context" in call_args
 
     @patch("village.extensibility.registry.logger")
-    def test_register_beads_integrator_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_beads_integrator() logs debug message."""
+    def test_register_task_hooks_logs_debug_message(self, mock_logger: MagicMock) -> None:
+        """register_task_hooks() logs debug message."""
         registry = ExtensionRegistry()
-        mock_integrator = MockBeadsIntegrator()
+        mock_integrator = MockTaskHooks()
 
-        registry.register_beads_integrator(mock_integrator)
+        registry.register_task_hooks(mock_integrator)
 
         mock_logger.debug.assert_called_once()
         call_args = mock_logger.debug.call_args[0][0]
-        assert "MockBeadsIntegrator" in call_args
-        assert "Registered beads integrator" in call_args
+        assert "MockTaskHooks" in call_args
+        assert "Registered task hooks" in call_args
 
     @patch("village.extensibility.registry.logger")
     def test_register_server_discovery_logs_debug_message(self, mock_logger: MagicMock) -> None:
@@ -668,13 +668,11 @@ class TestExtensionRegistryMockBehavior:
         assert result.user_data["mock_data"] == "session_session-123"
 
     @pytest.mark.asyncio
-    async def test_mock_beads_integrator_create_bead_spec(self) -> None:
-        """MockBeadsIntegrator create_bead_spec works as expected."""
-        integrator = MockBeadsIntegrator()
-        result = await integrator.create_bead_spec(
-            {"title": "Test Bead", "description": "Test desc"}
-        )
-        assert result.title == "Test Bead"
+    async def test_mock_task_hooks_create_hook_spec(self) -> None:
+        """MockTaskHooks create_hook_spec works as expected."""
+        integrator = MockTaskHooks()
+        result = await integrator.create_hook_spec({"title": "Test Task", "description": "Test desc"})
+        assert result.title == "Test Task"
         assert result.description == "Test desc"
 
     @pytest.mark.asyncio

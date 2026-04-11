@@ -1,5 +1,6 @@
 """Tests for resume core logic."""
 
+import json
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from village.resume import (
     _generate_resume_window,
     _get_agent_from_task_id,
     _inject_contract,
+    check_agent_done,
     execute_resume,
     is_active_lock,
     plan_resume,
@@ -540,6 +542,47 @@ class TestInjectContract:
 
             assert mock_send.call_count == 2
 
+    def test_injects_pi_contract(self) -> None:
+        """Test contract injection with pi agent type."""
+        session_name = "village"
+        pane_id = "%12"
+        contract = ContractEnvelope(
+            task_id="bd-a3f8",
+            agent="build",
+            content="# Task: bd-a3f8\nWork on this task.",
+            created_at=datetime.now().isoformat(),
+        )
+
+        with patch("village.resume.send_keys") as mock_send:
+            _inject_contract(session_name, pane_id, contract, dry_run=False, agent_type="pi")
+
+            assert mock_send.call_count == 2
+            call_args = mock_send.call_args_list[0]
+            assert "pi --no-session --mode json" in call_args[0][2]
+
+    def test_injects_pi_contract_with_tee(self, tmp_path: Path) -> None:
+        """Test pi contract injection includes tee for trace capture."""
+        session_name = "village"
+        pane_id = "%12"
+        traces_dir = tmp_path / "traces"
+        traces_dir.mkdir()
+        contract = ContractEnvelope(
+            task_id="bd-a3f8",
+            agent="build",
+            content="# Task: bd-a3f8\nWork on this task.",
+            created_at=datetime.now().isoformat(),
+        )
+
+        with patch("village.resume.send_keys") as mock_send:
+            _inject_contract(session_name, pane_id, contract, dry_run=False, agent_type="pi", traces_dir=traces_dir)
+
+            assert mock_send.call_count == 2
+            call_args = mock_send.call_args_list[0]
+            command = call_args[0][2]
+            assert "pi --no-session --mode json" in command
+            assert "tee" in command
+            assert "bd-a3f8-agent.jsonl" in command
+
     def test_skips_on_dry_run(self) -> None:
         """Test skips injection on dry run."""
         session_name = "village"
@@ -694,3 +737,25 @@ class TestResumeEventLogging:
         assert error_events[0].task_id == "bd-a3f8"
         assert error_events[0].error is not None
         assert "Worktree creation failed" in error_events[0].error
+
+
+class TestCheckAgentDone:
+    """Tests for check_agent_done."""
+
+    def test_returns_none_for_opencode(self, mock_config: Config) -> None:
+        result = check_agent_done("bd-a3f8", "opencode", mock_config)
+        assert result is None
+
+    def test_returns_none_for_pi_no_events(self, mock_config: Config) -> None:
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+        mock_config.traces_dir.mkdir(parents=True, exist_ok=True)
+        result = check_agent_done("bd-a3f8", "pi", mock_config)
+        assert result is None
+
+    def test_returns_true_when_completed(self, mock_config: Config) -> None:
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
+        mock_config.traces_dir.mkdir(parents=True, exist_ok=True)
+        trace = mock_config.traces_dir / "bd-a3f8-agent.jsonl"
+        trace.write_text(json.dumps({"type": "done"}))
+        result = check_agent_done("bd-a3f8", "pi", mock_config)
+        assert result is True

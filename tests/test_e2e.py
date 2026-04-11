@@ -471,9 +471,7 @@ class TestConcurrencyE2E:
         assert worker_ids.count("bd-a3f8") == 1
         assert worker_ids.count("bd-b7d2") == 1
 
-    def test_lock_arbitration_active_stale(
-        self, mock_config: Config, mock_get_config: None
-    ) -> None:
+    def test_lock_arbitration_active_stale(self, mock_config: Config, mock_get_config: None) -> None:
         """Test lock arbitration distinguishes active vs stale."""
         active_lock = Lock(
             task_id="bd-active",

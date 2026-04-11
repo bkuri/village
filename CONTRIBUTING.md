@@ -20,3 +20,22 @@ Village is intentionally small and opinionated.
 - databases
 - cloud dependencies
 - YAML workflow DSLs
+
+---
+
+## Changelog
+
+Village uses [Keep a Changelog](https://keepachangelog.com/) format.
+
+Changes are automatically documented during release based on:
+- Task type (bug → Fixed, feature → Added)
+- Bump label (major → Breaking)
+
+### For Contributors
+
+When submitting changes:
+1. Ensure task has clear, user-facing title
+2. Apply appropriate bump label via Beads
+3. Changelog entries are generated automatically
+
+No manual CHANGELOG.md edits needed.

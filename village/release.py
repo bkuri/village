@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from village.config import get_config
+from village.tasks import TaskStoreError, get_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,41 @@ SCOPE_TO_BUMP: dict[str, BumpType] = {
     "refactor": "none",
 }
 
+ChangelogCategory = Literal["Added", "Changed", "Fixed", "Breaking"]
+TASK_TYPE_TO_CATEGORY: dict[str, ChangelogCategory] = {
+    "bug": "Fixed",
+    "feature": "Added",
+    "task": "Changed",
+    "chore": "Changed",
+    "epic": "Changed",
+}
+
+
+def get_changelog_category(task_type: str, bump: BumpType) -> ChangelogCategory:
+    """Map task type and bump to changelog category.
+
+    Breaking changes (bump:major) always go to Breaking section.
+    Otherwise, use task type mapping.
+    """
+    if bump == "major":
+        return "Breaking"
+    return TASK_TYPE_TO_CATEGORY.get(task_type, "Changed")
+
+
+def get_task_type_from_store(task_id: str) -> str:
+    """Fetch task type from the task store.
+
+    Returns empty string if store unavailable or task not found.
+    """
+    try:
+        store = get_task_store()
+        task = store.get_task(task_id)
+        if task is None:
+            return ""
+        return task.issue_type
+    except TaskStoreError:
+        return ""
+
 
 @dataclass
 class PendingBump:
@@ -33,6 +69,7 @@ class PendingBump:
     bump: BumpType
     completed_at: datetime
     title: str = ""
+    task_type: str = ""
 
 
 @dataclass
@@ -132,12 +169,16 @@ def get_pending_bumps() -> list[PendingBump]:
         except (KeyError, ValueError):
             completed_at = datetime.now(timezone.utc)
 
+        task_id = item.get("task_id", "")
+        task_type = get_task_type_from_store(task_id) if task_id else ""
+
         bumps.append(
             PendingBump(
-                task_id=item.get("task_id", ""),
+                task_id=task_id,
                 bump=cast(BumpType, item.get("bump", "patch")),
                 completed_at=completed_at,
                 title=item.get("title", ""),
+                task_type=task_type,
             )
         )
 
@@ -234,47 +275,39 @@ def get_release_history(limit: int = 10) -> list[ReleaseRecord]:
 
 
 def get_open_bump_tasks() -> list[dict[str, str]]:
-    """Query Beads for open tasks with bump labels."""
-    import subprocess
-
+    """Query the task store for open tasks with bump labels."""
     bump_labels = ["bump:major", "bump:minor", "bump:patch"]
 
-    tasks = []
-    for label in bump_labels:
-        try:
-            result = subprocess.run(
-                ["bd", "search", "--status", "open", "--label", label, "--json"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+    try:
+        store = get_task_store()
+        all_tasks = store.list_tasks(limit=10000)
+    except TaskStoreError:
+        logger.warning("Task store not available, skipping open task query")
+        return []
 
-            if result.returncode == 0:
-                try:
-                    data = json.loads(result.stdout)
-                    if isinstance(data, list):
-                        for task in data:
-                            task_bump = label.replace("bump:", "")
-                            tasks.append(
-                                {
-                                    "task_id": task.get("id", ""),
-                                    "title": task.get("title", ""),
-                                    "bump": task_bump,
-                                    "status": task.get("status", "open"),
-                                }
-                            )
-                except json.JSONDecodeError:
-                    continue
-        except FileNotFoundError:
-            logger.warning("Beads CLI not found, skipping open task query")
-            break
+    matching: list[dict[str, str]] = []
+    for store_task in all_tasks:
+        if store_task.status not in ("open", "draft", "in_progress"):
+            continue
+        for label in store_task.labels:
+            if label in bump_labels:
+                task_bump = label.replace("bump:", "")
+                matching.append(
+                    {
+                        "task_id": store_task.id,
+                        "title": store_task.title,
+                        "bump": task_bump,
+                        "status": store_task.status,
+                    }
+                )
+                break
 
-    seen = set()
-    unique_tasks = []
-    for task in tasks:
-        if task["task_id"] not in seen:
-            seen.add(task["task_id"])
-            unique_tasks.append(task)
+    seen: set[str] = set()
+    unique_tasks: list[dict[str, str]] = []
+    for item in matching:
+        if item["task_id"] not in seen:
+            seen.add(item["task_id"])
+            unique_tasks.append(item)
 
     return unique_tasks
 
@@ -408,62 +441,34 @@ def compute_next_version(bump: BumpType) -> str:
 def get_unlabeled_closed_tasks(since_version: str | None = None) -> list[dict[str, str]]:
     """Return closed tasks that have no bump:* label.
 
-    Queries Beads for all closed tasks and for each bump category, then
-    returns the difference (tasks with no bump label at all).
+    Queries the task store for all closed tasks and returns those
+    without any bump:major/minor/patch/none label.
 
-    Gracefully returns an empty list if ``bd`` is unavailable or returns
-    non-JSON output.
+    Gracefully returns an empty list if the store is unavailable.
 
     Args:
         since_version: Unused currently; reserved for future filtering.
     """
-    _ = since_version  # reserved for future use
+    _ = since_version
 
-    def _bd_search(*extra_args: str) -> list[dict[str, str]] | None:
-        """Run bd search with given extra args; return list or None on error."""
-        try:
-            res = subprocess.run(
-                ["bd", "search", "--status", "closed", *extra_args, "--json"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-        except FileNotFoundError:
-            return None
-
-        if res.returncode != 0:
-            return []
-
-        try:
-            data = json.loads(res.stdout)
-        except json.JSONDecodeError:
-            return []
-
-        if not isinstance(data, list):
-            return []
-
-        return [
-            {
-                "id": str(item.get("id", "")),
-                "title": str(item.get("title", "")),
-            }
-            for item in data
-            if isinstance(item, dict)
-        ]
-
-    all_closed = _bd_search()
-    if all_closed is None:
-        # bd not available
+    try:
+        store = get_task_store()
+        all_closed = store.list_tasks(status="closed", limit=10000)
+    except TaskStoreError:
         return []
 
-    labeled_ids: set[str] = set()
-    for label in ("bump:major", "bump:minor", "bump:patch", "bump:none"):
-        labeled = _bd_search("--label", label)
-        if labeled is not None:
-            for task in labeled:
-                labeled_ids.add(task["id"])
+    result = []
+    for task in all_closed:
+        has_bump = any(lbl.startswith("bump:") for lbl in task.labels)
+        if not has_bump:
+            result.append(
+                {
+                    "id": task.id,
+                    "title": task.title,
+                }
+            )
 
-    return [t for t in all_closed if t["id"] and t["id"] not in labeled_ids]
+    return result
 
 
 def is_no_op_release(bumps: list[BumpType]) -> bool:
@@ -472,19 +477,24 @@ def is_no_op_release(bumps: list[BumpType]) -> bool:
 
 
 def update_changelog(version: str, pending: list[PendingBump]) -> None:
-    """Insert a new changelog section for *version* above existing versioned sections.
+    """Insert a new changelog section for *version* with categorized entries.
 
     Locates CHANGELOG.md relative to the git repository root.  The new
     section is inserted after the last ``## [Unreleased]`` block (i.e. just
     before the first ``## [X.Y.Z]`` line).  Tasks with bump type "none" are
     excluded from the entry.
 
+    Entries are categorized into:
+    - Added: New features
+    - Changed: Enhancements, refactors
+    - Fixed: Bug fixes
+    - Breaking: Breaking changes (bump:major)
+
     Falls back to appending at the end of the file if the expected structure
     is not found, or creates the file if it doesn't exist.
 
     The write is performed atomically (temp-file + rename).
     """
-    # Find git root
     git_root_result = subprocess.run(
         ["git", "rev-parse", "--show-toplevel"],
         capture_output=True,
@@ -500,15 +510,37 @@ def update_changelog(version: str, pending: list[PendingBump]) -> None:
 
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # Filter out bump:none and categorize
+    non_trivial = [p for p in pending if p.bump != "none"]
+
+    if not non_trivial:
+        logger.info(f"No non-trivial changes for version {version}, skipping changelog update")
+        return
+
+    # Group by category
+    categories: dict[ChangelogCategory, list[PendingBump]] = {
+        "Breaking": [],
+        "Added": [],
+        "Changed": [],
+        "Fixed": [],
+    }
+
+    for p in non_trivial:
+        category = get_changelog_category(p.task_type, p.bump)
+        categories[category].append(p)
+
     # Build the new section
     section_lines = [f"## [{version}] - {today}", ""]
-    non_trivial = [p for p in pending if p.bump != "none"]
-    if non_trivial:
-        section_lines.append("### Changed")
-        for p in non_trivial:
-            title = p.title or p.task_id
-            section_lines.append(f"- {title} (`{p.task_id}`)")
-        section_lines.append("")
+
+    category_order: list[ChangelogCategory] = ["Breaking", "Added", "Changed", "Fixed"]
+    for category in category_order:
+        items = categories[category]
+        if items:
+            section_lines.append(f"### {category}")
+            for p in items:
+                title = p.title or p.task_id
+                section_lines.append(f"- {title} (`{p.task_id}`)")
+            section_lines.append("")
 
     new_section = "\n".join(section_lines) + "\n"
 

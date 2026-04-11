@@ -97,9 +97,7 @@ class TestNotificationBackend:
     def test_invalid_url_no_protocol(self):
         """Test backend rejects URL without protocol."""
         with pytest.raises(InvalidWebhookURLError, match="URL must start with http:// or https://"):
-            NotificationBackend(
-                webhook_url="hooks.slack.com/services/T000/B000/XXX", events=["task_failed"]
-            )
+            NotificationBackend(webhook_url="hooks.slack.com/services/T000/B000/XXX", events=["task_failed"])
 
     def test_invalid_events_not_list(self):
         """Test backend rejects non-list events."""

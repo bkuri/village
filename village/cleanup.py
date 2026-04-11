@@ -65,9 +65,7 @@ def find_stale_locks(session_name: str, *, force_refresh: bool = False) -> list[
             locks.append(lock)
 
     # Evaluate which are stale
-    stale = [
-        lock for lock in locks if not is_active(lock, session_name, force_refresh=force_refresh)
-    ]
+    stale = [lock for lock in locks if not is_active(lock, session_name, force_refresh=force_refresh)]
 
     logger.debug(f"Found {len(stale)} stale locks out of {len(locks)} total")
     return stale

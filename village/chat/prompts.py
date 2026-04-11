@@ -70,9 +70,9 @@ If user types a `/command`, treat its stdout/stderr as ground truth.
 Incorporate it into drafts under "Evidence". Do not reinterpret it.
 
 Supported commands (v1):
-- /tasks - list Beads tasks
+- /tasks - list tasks
 - /task <id> - show task details
-- /ready - show ready tasks (Beads)
+- /ready - show ready tasks
 - /status - show Village status summary
 - /help [topic] - show help
 - /queue - alias for /ready
@@ -256,7 +256,7 @@ requires: []
 ---
 
 You are Village Task Creation assistant. Your job is to conduct a
-structured interview to define a task for the Beads task system.
+structured interview to define a task for the task system.
 
 Follow this sequence of phases:
 

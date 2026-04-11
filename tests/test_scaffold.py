@@ -3,9 +3,10 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from click.testing import CliRunner
+
+from village.cli.lifecycle import _run_create_project_workflow, _slugify, lifecycle_group
 from village.scaffold import (
-    ScaffoldPlan,
-    ScaffoldResult,
     execute_scaffold,
     is_inside_git_repo,
     plan_scaffold,
@@ -44,7 +45,7 @@ def test_plan_scaffold():
     assert "README.md" in plan.steps[3]
     assert "AGENTS.md" in plan.steps[4]
     assert ".village/config" in plan.steps[5]
-    assert "bd init" in plan.steps[6]
+    assert "Initialize: tasks.jsonl" in plan.steps[6]
 
 
 def test_execute_scaffold_directory_exists(tmp_path: Path):
@@ -58,8 +59,43 @@ def test_execute_scaffold_directory_exists(tmp_path: Path):
     assert result.error is not None and "already exists" in result.error
 
 
-def test_execute_scaffold_success(tmp_path: Path):
-    """Test successful project scaffolding."""
+def test_execute_scaffold_success_with_onboard(tmp_path: Path):
+    """Test successful project scaffolding with onboard pipeline."""
+    with (
+        patch("subprocess.run") as mock_subprocess,
+        patch("village.probes.tmux.create_session") as mock_create_session,
+        patch("village.probes.tmux.session_exists") as mock_session_exists,
+        patch("village.probes.tmux.create_window") as mock_create_window,
+        patch("village.probes.tmux.list_windows") as mock_list_windows,
+        patch("village.scaffold._run_onboard_pipeline") as mock_onboard,
+    ):
+        mock_subprocess.return_value = Mock(returncode=0)
+        mock_session_exists.return_value = False
+        mock_create_session.return_value = True
+        mock_list_windows.return_value = []
+        mock_create_window.return_value = True
+        mock_onboard.return_value = ["AGENTS.md", "README.md"]
+
+        result = execute_scaffold("newproject", tmp_path, dashboard=True, onboard=True)
+
+        assert result.success is True
+        assert result.project_dir == tmp_path / "newproject"
+        assert ".gitignore" in result.created
+        assert ".village/" in result.created
+        assert ".village/config" in result.created
+        mock_onboard.assert_called_once()
+
+        project_dir = tmp_path / "newproject"
+        assert project_dir.exists()
+        assert (project_dir / ".gitignore").exists()
+        assert (project_dir / ".village").is_dir()
+        assert (project_dir / ".village" / "config").exists()
+        assert (project_dir / ".village" / "locks").is_dir()
+        assert (project_dir / ".worktrees").is_dir()
+
+
+def test_execute_scaffold_success_skip_onboard(tmp_path: Path):
+    """Test successful project scaffolding with onboard skipped."""
     with (
         patch("subprocess.run") as mock_subprocess,
         patch("village.probes.tmux.create_session") as mock_create_session,
@@ -73,25 +109,25 @@ def test_execute_scaffold_success(tmp_path: Path):
         mock_list_windows.return_value = []
         mock_create_window.return_value = True
 
-        result = execute_scaffold("newproject", tmp_path, dashboard=True)
+        result = execute_scaffold("skipproject", tmp_path, dashboard=True, onboard=False)
 
         assert result.success is True
-        assert result.project_dir == tmp_path / "newproject"
+        assert result.project_dir == tmp_path / "skipproject"
         assert ".gitignore" in result.created
         assert "README.md" in result.created
         assert "AGENTS.md" in result.created
         assert ".village/" in result.created
         assert ".village/config" in result.created
 
-        project_dir = tmp_path / "newproject"
-        assert project_dir.exists()
-        assert (project_dir / ".gitignore").exists()
+        project_dir = tmp_path / "skipproject"
         assert (project_dir / "README.md").exists()
         assert (project_dir / "AGENTS.md").exists()
-        assert (project_dir / ".village").is_dir()
-        assert (project_dir / ".village" / "config").exists()
-        assert (project_dir / ".village" / "locks").is_dir()
-        assert (project_dir / ".worktrees").is_dir()
+
+        readme_content = (project_dir / "README.md").read_text()
+        assert "skipproject" in readme_content
+
+        agents_content = (project_dir / "AGENTS.md").read_text()
+        assert "skipproject" in agents_content
 
 
 def test_execute_scaffold_git_init_failure(tmp_path: Path):
@@ -118,7 +154,7 @@ def test_execute_scaffold_no_dashboard(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("nodashproject", tmp_path, dashboard=False)
+        result = execute_scaffold("nodashproject", tmp_path, dashboard=False, onboard=False)
 
         assert result.success is True
         assert not any("dashboard" in item for item in result.created)
@@ -137,10 +173,10 @@ def test_execute_scaffold_bd_init_success(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("bdproject", tmp_path)
+        result = execute_scaffold("bdproject", tmp_path, onboard=False)
 
         assert result.success is True
-        assert "bd init" in result.created
+        assert "tasks init" in result.created
 
 
 def test_execute_scaffold_bd_init_failure_skipped(tmp_path: Path):
@@ -154,7 +190,7 @@ def test_execute_scaffold_bd_init_failure_skipped(tmp_path: Path):
         return Mock(returncode=0)
 
     with (
-        patch("subprocess.run", side_effect=mock_run) as mock_subprocess,
+        patch("subprocess.run", side_effect=mock_run),
         patch("village.probes.tmux.create_session") as mock_create_session,
         patch("village.probes.tmux.session_exists") as mock_session_exists,
         patch("village.probes.tmux.list_windows") as mock_list_windows,
@@ -163,7 +199,7 @@ def test_execute_scaffold_bd_init_failure_skipped(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("nobdproject", tmp_path)
+        result = execute_scaffold("nobdproject", tmp_path, onboard=False)
 
         assert result.success is True
         assert "bd init" not in result.created
@@ -182,7 +218,7 @@ def test_execute_scaffold_session_already_exists(tmp_path: Path):
         mock_list_windows.return_value = []
         mock_create_window.return_value = True
 
-        result = execute_scaffold("existingsession", tmp_path)
+        result = execute_scaffold("existingsession", tmp_path, onboard=False)
 
         assert result.success is True
         assert not any("tmux session" in item for item in result.created)
@@ -201,18 +237,17 @@ def test_execute_scaffold_creates_gitignore_content(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("gitignoreproject", tmp_path)
+        result = execute_scaffold("gitignoreproject", tmp_path, onboard=False)
 
         assert result.success is True
         gitignore_path = tmp_path / "gitignoreproject" / ".gitignore"
         content = gitignore_path.read_text()
         assert ".village/" in content
         assert ".worktrees/" in content
-        assert ".beads/" in content
 
 
 def test_execute_scaffold_creates_config_template(tmp_path: Path):
-    """Test that .village/config contains helpful template."""
+    """Test that .village/config contains helpful defaults."""
     with (
         patch("subprocess.run") as mock_subprocess,
         patch("village.probes.tmux.create_session") as mock_create_session,
@@ -224,7 +259,7 @@ def test_execute_scaffold_creates_config_template(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("configproject", tmp_path)
+        result = execute_scaffold("configproject", tmp_path, onboard=False)
 
         assert result.success is True
         config_path = tmp_path / "configproject" / ".village" / "config"
@@ -234,8 +269,8 @@ def test_execute_scaffold_creates_config_template(tmp_path: Path):
         assert "[agent.worker]" in content
 
 
-def test_execute_scaffold_creates_agents_md(tmp_path: Path):
-    """Test that AGENTS.md contains project name."""
+def test_execute_scaffold_creates_agents_md_skip_onboard(tmp_path: Path):
+    """Test that AGENTS.md contains project name when onboard is skipped."""
     with (
         patch("subprocess.run") as mock_subprocess,
         patch("village.probes.tmux.create_session") as mock_create_session,
@@ -247,17 +282,16 @@ def test_execute_scaffold_creates_agents_md(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("agentsproject", tmp_path)
+        result = execute_scaffold("agentsproject", tmp_path, onboard=False)
 
         assert result.success is True
         agents_path = tmp_path / "agentsproject" / "AGENTS.md"
         content = agents_path.read_text()
         assert "agentsproject" in content
-        assert "Build, Lint, and Test Commands" in content
 
 
-def test_execute_scaffold_creates_readme(tmp_path: Path):
-    """Test that README.md contains project name."""
+def test_execute_scaffold_creates_readme_skip_onboard(tmp_path: Path):
+    """Test that README.md contains project name when onboard is skipped."""
     with (
         patch("subprocess.run") as mock_subprocess,
         patch("village.probes.tmux.create_session") as mock_create_session,
@@ -269,10 +303,154 @@ def test_execute_scaffold_creates_readme(tmp_path: Path):
         mock_create_session.return_value = True
         mock_list_windows.return_value = []
 
-        result = execute_scaffold("readmeproject", tmp_path)
+        result = execute_scaffold("readmeproject", tmp_path, onboard=False)
 
         assert result.success is True
         readme_path = tmp_path / "readmeproject" / "README.md"
         content = readme_path.read_text()
         assert "readmeproject" in content
-        assert "village up" in content
+        assert "village onboard" in content
+
+
+def test_execute_scaffold_onboard_pipeline_failure_fallback(tmp_path: Path):
+    """Test that scaffold falls back to minimal files when onboard pipeline fails."""
+    with (
+        patch("subprocess.run") as mock_subprocess,
+        patch("village.probes.tmux.create_session") as mock_create_session,
+        patch("village.probes.tmux.session_exists") as mock_session_exists,
+        patch("village.probes.tmux.list_windows") as mock_list_windows,
+        patch("village.scaffold._run_onboard_pipeline", side_effect=RuntimeError("onboard failed")),
+    ):
+        mock_subprocess.return_value = Mock(returncode=0)
+        mock_session_exists.return_value = False
+        mock_create_session.return_value = True
+        mock_list_windows.return_value = []
+
+        result = execute_scaffold("fallbackproject", tmp_path, onboard=True)
+
+        assert result.success is True
+        assert "README.md" in result.created
+        assert "AGENTS.md" in result.created
+
+
+def test_slugify_from_description():
+    """Test slug derivation from a description."""
+    assert _slugify("A task queue for Python") == "task-queue-python"
+    assert _slugify("CLI tool that manages git worktrees") == "cli-tool-manages"
+    assert _slugify("   fast api   server  ") == "fast-api-server"
+    assert _slugify("it's a test") == "test"
+
+
+def test_slugify_stops_words():
+    """Test that common stop words are stripped."""
+    assert _slugify("the best app") == "best-app"
+    assert _slugify("a splitwise clone with cli") == "splitwise-clone-cli"
+    assert _slugify("an api server") == "api-server"
+
+
+def test_slugify_hyphenated_name():
+    """Test that hyphenated names are preserved."""
+    assert _slugify("direct-project") == "direct-project"
+    assert _slugify("my-cool-app") == "my-cool-app"
+
+
+def test_slugify_fallback():
+    """Test slug fallback when description has no slug-friendly words."""
+    assert _slugify("") == "new-project"
+    assert _slugify("123 456") == "new-project"
+    assert _slugify("!@# $%^") == "new-project"
+
+
+def test_create_project_workflow_returns_slug():
+    """Test workflow returns a slug and description derived from the description."""
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="a task queue for python"),
+        patch("village.cli.lifecycle.click.echo"),
+    ):
+        name, description = _run_create_project_workflow()
+    assert name == "task-queue-python"
+    assert description == "a task queue for python"
+
+
+def test_create_project_workflow_aborted():
+    """Test workflow returns empty tuple when prompt is aborted."""
+    with patch("village.cli.lifecycle.click.prompt", side_effect=KeyboardInterrupt):
+        with patch("village.cli.lifecycle.click.echo"):
+            name, description = _run_create_project_workflow()
+    assert name == ""
+    assert description == ""
+
+
+def test_create_project_workflow_fallback_slug():
+    """Test workflow falls back to 'new-project' for unslugifiable input."""
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="!@# $%^"),
+        patch("village.cli.lifecycle.click.echo"),
+    ):
+        name, description = _run_create_project_workflow()
+    assert name == "new-project"
+    assert description == "!@# $%^"
+
+
+def test_new_command_without_name_prompts(tmp_path: Path):
+    """Test village new (no name) triggers prompt and scaffolds."""
+    runner = CliRunner()
+    with (
+        patch("village.cli.lifecycle.click.prompt", return_value="a task queue"),
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "task-queue",
+            created=[".gitignore", ".village/"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        assert "task-queue" in result.output
+        mock_exec.assert_called_once_with(
+            "task-queue",
+            tmp_path.resolve(),
+            dashboard=True,
+            onboard=True,
+            description="a task queue",
+        )
+
+
+def test_new_command_with_name_skips_prompt(tmp_path: Path):
+    """Test village new <name> does not prompt."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+        patch("village.cli.lifecycle._run_create_project_workflow") as mock_workflow,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "direct-project",
+            created=[".gitignore"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "direct-project", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_workflow.assert_not_called()
+        mock_exec.assert_called_once_with(
+            "direct-project",
+            tmp_path.resolve(),
+            dashboard=True,
+            onboard=True,
+            description="",
+        )
+
+
+def test_new_command_without_name_aborted(tmp_path: Path):
+    """Test village new with aborted prompt shows error."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=False),
+        patch("village.cli.lifecycle._run_create_project_workflow", return_value=("", "")),
+    ):
+        result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "Project name is required" in result.output

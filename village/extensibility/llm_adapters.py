@@ -96,10 +96,7 @@ class DefaultLLMProviderAdapter(LLMProviderAdapter):
     async def should_retry(self, error: Exception) -> bool:
         """Retry on certain error types."""
         error_str = str(error).lower()
-        return any(
-            keyword in error_str
-            for keyword in ["timeout", "connection", "rate_limit", "temporarily"]
-        )
+        return any(keyword in error_str for keyword in ["timeout", "connection", "rate_limit", "temporarily"])
 
     async def get_retry_delay(self, attempt: int) -> float:
         """Exponential backoff with jitter."""

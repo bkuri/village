@@ -9,7 +9,13 @@ from village.probes.tools import SubprocessError
 
 logger = logging.getLogger(__name__)
 
-_VILLAGE_CONFIG_TEMPLATE = """\
+_GITIGNORE_ENTRIES = """\
+# Village orchestration state (local only)
+.village/
+.worktrees/
+"""
+
+_MINIMAL_CONFIG = """\
 # Village configuration
 # See: https://opencode.ai/docs for full reference
 #
@@ -31,60 +37,37 @@ _VILLAGE_CONFIG_TEMPLATE = """\
 # [agent.worker]
 # opencode_args = --verbose
 # contract = path/to/contract.md
-# ppc_mode = explore
-# ppc_traits = conservative,terse
-# ppc_format = markdown
+#
+# For pi agent backend:
+# type = pi
+# pi_args = --thinking high
 """
 
-_AGENTS_MD_TEMPLATE = """\
+_MINIMAL_AGENTS_MD = """\
 # {name} - Agent Development Guide
 
 ## Overview
 
-Brief description of what this project does and its key goals.
+Project description pending. Run `village onboard` to complete setup.
 
 ## Build, Lint, and Test Commands
 
 ```bash
-# Install dependencies
-# <fill in>
-
-# Run tests
-# <fill in>
-
-# Lint
-# <fill in>
+# <fill in - run village onboard to auto-detect>
 ```
 
 ## Code Style Guidelines
 
-- Describe key conventions here (formatting tools, naming, etc.)
+- <fill in - run village onboard to auto-detect>
 
 ## Project Structure
 
 ```
-<fill in key directories and their purpose>
+<fill in - run village onboard to auto-detect>
 ```
-
-## Key Integration Points
-
-Describe external services, APIs, or tools this project depends on.
-
-## Constraints
-
-List any important constraints or rules agents must follow.
 """
 
-_GITIGNORE_ENTRIES = """\
-# Village orchestration state (local only)
-.village/
-.worktrees/
-
-# Beads task DAG (local only)
-.beads/
-"""
-
-_README_TEMPLATE = """\
+_MINIMAL_README = """\
 # {name}
 
 Project description goes here.
@@ -95,11 +78,8 @@ Project description goes here.
 # Initialize village runtime
 village up
 
-# Create a task
-village chat
-
-# Queue ready tasks
-village queue
+# Complete project setup
+village onboard
 ```
 """
 
@@ -160,10 +140,99 @@ def plan_scaffold(name: str, parent_dir: Path) -> ScaffoldPlan:
         "Create: README.md",
         "Create: AGENTS.md",
         "Create: .village/config (with defaults)",
-        "Run: bd init (if available)",
+        "Initialize: tasks.jsonl",
         "Create tmux session + dashboard window",
     ]
     return ScaffoldPlan(project_dir=project_dir, steps=steps)
+
+
+def _run_onboard_pipeline(project_dir: Path, name: str, description: str = "") -> list[str]:
+    """Run the adaptive onboard pipeline for a new project.
+
+    Args:
+        project_dir: Root directory of the new project.
+        name: Project name.
+        description: Initial project description from the create workflow.
+
+    Returns:
+        List of created file descriptions.
+    """
+    from village.config import OnboardConfig
+    from village.onboard.detector import detect_project
+    from village.onboard.generator import Generator
+    from village.onboard.generator import InterviewResult as GenInterviewResult
+    from village.onboard.interview import InterviewEngine
+    from village.onboard.scaffolds import get_scaffold
+
+    created: list[str] = []
+
+    info = detect_project(project_dir)
+    info.project_name = name
+    scaffold = get_scaffold(info)
+
+    preseeded: dict[str, str] = {}
+    if description:
+        preseeded["What does this project do?"] = description
+
+    engine = InterviewEngine(
+        config=OnboardConfig(),
+        project_info=info,
+        scaffold=scaffold,
+        preseeded_answers=preseeded,
+    )
+    interview_result = engine.run_interactive()
+
+    # Convert interview module's InterviewResult to generator module's InterviewResult
+    gen_interview = GenInterviewResult(
+        answers=interview_result.answers,
+        project_summary=interview_result.project_summary,
+        raw_transcript=interview_result.raw_transcript,
+    )
+
+    gen = Generator(info, scaffold, gen_interview, project_dir)
+    result = gen.generate()
+    created.extend(gen.write_files(result))
+
+    return created
+
+
+def _write_minimal_files(project_dir: Path, name: str) -> list[str]:
+    """Write minimal placeholder files when onboarding is skipped.
+
+    Args:
+        project_dir: Root directory of the new project.
+        name: Project name.
+
+    Returns:
+        List of created file descriptions.
+    """
+    created: list[str] = []
+
+    readme_path = project_dir / "README.md"
+    readme_path.write_text(_MINIMAL_README.format(name=name), encoding="utf-8")
+    created.append("README.md")
+    logger.debug(f"Created {readme_path}")
+
+    agents_md_path = project_dir / "AGENTS.md"
+    agents_md_path.write_text(_MINIMAL_AGENTS_MD.format(name=name), encoding="utf-8")
+    created.append("AGENTS.md")
+    logger.debug(f"Created {agents_md_path}")
+
+    return created
+
+
+def _get_config_content(scaffold_config: str) -> str:
+    """Return config content, using scaffold template or minimal default.
+
+    Args:
+        scaffold_config: Config template from the scaffold (may be empty).
+
+    Returns:
+        Config file content string.
+    """
+    if scaffold_config:
+        return scaffold_config
+    return _MINIMAL_CONFIG
 
 
 def execute_scaffold(
@@ -171,6 +240,8 @@ def execute_scaffold(
     parent_dir: Path,
     *,
     dashboard: bool = True,
+    onboard: bool = True,
+    description: str = "",
 ) -> ScaffoldResult:
     """
     Execute scaffolding for a new project.
@@ -182,6 +253,8 @@ def execute_scaffold(
         name: Project name (used as directory name).
         parent_dir: Parent directory in which to create the project.
         dashboard: Whether to create the tmux dashboard window.
+        onboard: Whether to run the adaptive onboard pipeline.
+        description: Initial project description (pre-seeds interview).
 
     Returns:
         ScaffoldResult with success flag and list of created items.
@@ -228,19 +301,18 @@ def execute_scaffold(
     created.append(".gitignore")
     logger.debug(f"Created {gitignore_path}")
 
-    # 4. README.md
-    readme_path = project_dir / "README.md"
-    readme_path.write_text(_README_TEMPLATE.format(name=name), encoding="utf-8")
-    created.append("README.md")
-    logger.debug(f"Created {readme_path}")
+    # 4. Generate project files (onboard pipeline or minimal placeholders)
+    if onboard:
+        try:
+            onboard_created = _run_onboard_pipeline(project_dir, name, description)
+            created.extend(onboard_created)
+        except Exception as e:
+            logger.warning(f"Onboard pipeline failed, falling back to minimal files: {e}")
+            created.extend(_write_minimal_files(project_dir, name))
+    else:
+        created.extend(_write_minimal_files(project_dir, name))
 
-    # 5. AGENTS.md
-    agents_md_path = project_dir / "AGENTS.md"
-    agents_md_path.write_text(_AGENTS_MD_TEMPLATE.format(name=name), encoding="utf-8")
-    created.append("AGENTS.md")
-    logger.debug(f"Created {agents_md_path}")
-
-    # 6. .village/config
+    # 5. .village/ directories and config
     village_dir = project_dir / ".village"
     locks_dir = village_dir / "locks"
     worktrees_dir = project_dir / ".worktrees"
@@ -251,31 +323,37 @@ def execute_scaffold(
     created.append(".village/")
 
     config_path = village_dir / "config"
-    config_path.write_text(_VILLAGE_CONFIG_TEMPLATE, encoding="utf-8")
+    config_content = _get_config_content("")
+    config_path.write_text(config_content, encoding="utf-8")
     created.append(".village/config")
     logger.debug(f"Created {config_path}")
 
-    # 7. bd init (optional — skip silently if unavailable)
+    # 6. task store init
     try:
-        result = subprocess.run(
-            ["bd", "init"],
-            capture_output=True,
-            text=True,
-            check=False,
-            cwd=project_dir,
-        )
-        if result.returncode == 0:
-            created.append("bd init")
-            logger.debug("Beads initialised")
-        else:
-            logger.debug("bd init failed — skipping Beads init")
-    except FileNotFoundError:
-        logger.debug("bd not available — skipping Beads init")
+        from village.config import Config as _Config
+        from village.tasks import get_task_store
+
+        _cfg = _Config(git_root=Path(project_dir), village_dir=village_dir, worktrees_dir=worktrees_dir)
+        store = get_task_store(tasks_file=village_dir / "tasks.jsonl", config=_cfg)
+        store.initialize()
+        created.append("tasks init")
+        logger.debug("Task store initialized")
+    except Exception as e:
+        logger.debug(f"Task store init skipped: {e}")
+
+    # 7. git hooks
+    try:
+        from village.hooks import install_hooks
+
+        install_hooks(project_dir, dry_run=False)
+        created.append("git hooks")
+    except Exception as e:
+        logger.debug(f"Git hook install skipped: {e}")
 
     # 8. tmux session + dashboard
     from village.probes.tmux import create_session, create_window, session_exists
 
-    tmux_session = "village"
+    tmux_session = name
 
     if not session_exists(tmux_session):
         if create_session(tmux_session):
@@ -284,17 +362,17 @@ def execute_scaffold(
         else:
             logger.warning(f"Failed to create tmux session: {tmux_session}")
     else:
-        logger.debug(f"tmux session '{tmux_session}' already exists — skipping")
+        logger.debug(f"tmux session '{tmux_session}' already exists -- skipping")
 
-    if dashboard:
+    if dashboard and session_exists(tmux_session):
         from village.probes.tmux import list_windows
 
-        dashboard_name = "village:dashboard"
+        dashboard_name = f"{tmux_session}:dashboard"
         dashboard_cmd = "watch -n 2 village status --short"
         windows = list_windows(tmux_session)
         if dashboard_name not in windows:
             if create_window(tmux_session, dashboard_name, dashboard_cmd):
-                created.append("tmux window: village:dashboard")
+                created.append(f"tmux window: {dashboard_name}")
                 logger.debug("Created dashboard window")
             else:
                 logger.warning("Failed to create dashboard window")

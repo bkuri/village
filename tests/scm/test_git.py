@@ -24,15 +24,11 @@ def git_repo(tmp_path: Path) -> Path:
         check=True,
         capture_output=True,
     )
-    subprocess.run(
-        ["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True
-    )
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True, capture_output=True)
 
     (repo_dir / "README.md").write_text("# Test")
     subprocess.run(["git", "add", "."], cwd=repo_dir, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "Initial"], cwd=repo_dir, check=True, capture_output=True
-    )
+    subprocess.run(["git", "commit", "-m", "Initial"], cwd=repo_dir, check=True, capture_output=True)
 
     return repo_dir
 
@@ -146,9 +142,7 @@ class TestGitSCMEnsureWorkspace:
 
     def test_ensure_workspace_creates_from_branch(self, git_repo: Path, git_scm: GitSCM) -> None:
         """Test ensure_workspace creates worktree from existing branch."""
-        subprocess.run(
-            ["git", "branch", "test-base"], cwd=git_repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "branch", "test-base"], cwd=git_repo, check=True, capture_output=True)
 
         worktree_path = git_repo.parent / "worktrees" / "test-branch"
         subprocess.run(
@@ -183,9 +177,7 @@ class TestGitSCMEnsureWorkspace:
         )
         assert "default-branch" in result.stdout
 
-    def test_ensure_workspace_existing_worktree_error(
-        self, git_repo: Path, git_scm: GitSCM
-    ) -> None:
+    def test_ensure_workspace_existing_worktree_error(self, git_repo: Path, git_scm: GitSCM) -> None:
         """Test ensure_workspace raises for existing worktree."""
         worktree_path = git_repo.parent / "worktrees" / "existing"
 
@@ -223,9 +215,7 @@ class TestGitSCMRemoveWorkspace:
         assert removed is True
         assert not worktree_path.exists()
 
-    def test_remove_workspace_nonexistent_returns_false(
-        self, git_scm: GitSCM, tmp_path: Path
-    ) -> None:
+    def test_remove_workspace_nonexistent_returns_false(self, git_scm: GitSCM, tmp_path: Path) -> None:
         """Test remove_workspace returns False for nonexistent worktree."""
         nonexistent = tmp_path / "nonexistent"
 
@@ -233,9 +223,7 @@ class TestGitSCMRemoveWorkspace:
 
         assert removed is False
 
-    def test_remove_workspace_removes_from_git_registry(
-        self, git_repo: Path, git_scm: GitSCM
-    ) -> None:
+    def test_remove_workspace_removes_from_git_registry(self, git_repo: Path, git_scm: GitSCM) -> None:
         """Test remove_workspace removes worktree from Git registry."""
         worktree_path = git_repo.parent / "worktrees" / "test"
         git_scm.ensure_workspace(git_repo, worktree_path, "test")
@@ -385,9 +373,7 @@ class TestGitSCMResetWorkspace:
 
         test_file = worktree_path / "test.txt"
         test_file.write_text("original content")
-        subprocess.run(
-            ["git", "add", "test.txt"], cwd=worktree_path, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "test.txt"], cwd=worktree_path, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "Add test file"],
             cwd=worktree_path,
@@ -418,9 +404,7 @@ class TestGitSCMResetWorkspace:
 
         assert not untracked_dir.exists()
 
-    def test_reset_workspace_raises_for_nonexistent_path(
-        self, git_scm: GitSCM, tmp_path: Path
-    ) -> None:
+    def test_reset_workspace_raises_for_nonexistent_path(self, git_scm: GitSCM, tmp_path: Path) -> None:
         """Test reset_workspace raises RuntimeError for nonexistent worktree."""
         nonexistent = tmp_path / "nonexistent"
 

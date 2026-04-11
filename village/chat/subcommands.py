@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from village.chat.drafts import delete_draft, list_drafts, load_draft
-from village.probes.tools import SubprocessError, run_command_output
 from village.status import collect_full_status
+from village.tasks import TaskStoreError, get_task_store
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +38,9 @@ class ParsedCommand:
 
 
 SUBCOMMANDS = {
-    "/tasks": {"handler": "bd_list", "description": "List all Beads tasks", "args": []},
+    "/tasks": {"handler": "bd_list", "description": "List all tasks", "args": []},
     "/task": {"handler": "bd_show", "description": "Show task details", "args": ["id"]},
-    "/ready": {"handler": "bd_ready", "description": "Show ready tasks (Beads)", "args": []},
+    "/ready": {"handler": "bd_ready", "description": "Show ready tasks", "args": []},
     "/status": {
         "handler": "village_status",
         "description": "Show Village status summary",
@@ -73,7 +73,7 @@ SUBCOMMANDS = {
     },
     "/confirm": {
         "handler": "task_confirm",
-        "description": "Confirm and create Beads tasks from enabled drafts",
+        "description": "Confirm and create tasks from enabled drafts",
         "args": [],
     },
     "/reset": {
@@ -180,32 +180,71 @@ def execute_command(command: str, args: list[str], config: _Config) -> Subcomman
 
 
 def _bd_list(args: list[str], config: _Config) -> tuple[str, str, int]:
-    """Execute `bd list`."""
+    """List all tasks."""
     try:
-        output = run_command_output(["bd", "list"])
-        return output, "", 0
-    except SubprocessError as e:
+        store = get_task_store(config=config)
+        tasks = store.list_tasks(limit=50)
+        if not tasks:
+            return "No tasks found", "", 0
+
+        lines = []
+        for task in tasks:
+            priority_str = f"P{task.priority}"
+            status_str = task.status
+            lines.append(f"{task.id} [{priority_str}] [{status_str}] {task.title}")
+
+        return "\n".join(lines), "", 0
+    except TaskStoreError as e:
         return "", str(e), 1
 
 
 def _bd_show(args: list[str], config: _Config) -> tuple[str, str, int]:
-    """Execute `bd show <id>`."""
+    """Show task details."""
     if not args:
         return "", "Error: /task requires <id> argument", 1
 
     try:
-        output = run_command_output(["bd", "show", args[0]])
-        return output, "", 0
-    except SubprocessError as e:
+        store = get_task_store(config=config)
+        task = store.get_task(args[0])
+        if task is None:
+            return "", f"Task not found: {args[0]}", 1
+
+        lines = [
+            f"ID: {task.id}",
+            f"Title: {task.title}",
+            f"Status: {task.status}",
+            f"Priority: P{task.priority}",
+            f"Type: {task.issue_type}",
+        ]
+        if task.description:
+            lines.append(f"Description: {task.description}")
+        if task.labels:
+            lines.append(f"Labels: {', '.join(task.labels)}")
+        if task.depends_on:
+            lines.append(f"Depends on: {', '.join(task.depends_on)}")
+        if task.blocks:
+            lines.append(f"Blocks: {', '.join(task.blocks)}")
+
+        return "\n".join(lines), "", 0
+    except TaskStoreError as e:
         return "", str(e), 1
 
 
 def _bd_ready(args: list[str], config: _Config) -> tuple[str, str, int]:
-    """Execute `bd ready`."""
+    """Show ready tasks."""
     try:
-        output = run_command_output(["bd", "ready"])
-        return output, "", 0
-    except SubprocessError as e:
+        store = get_task_store(config=config)
+        tasks = store.get_ready_tasks()
+        if not tasks:
+            return "No ready tasks found", "", 0
+
+        lines = []
+        for task in tasks:
+            priority_str = f"P{task.priority}"
+            lines.append(f"{task.id} [{priority_str}] {task.title}")
+
+        return "\n".join(lines), "", 0
+    except TaskStoreError as e:
         return "", str(e), 1
 
 
@@ -225,9 +264,9 @@ def _help_text(args: list[str], config: _Config) -> tuple[str, str, int]:
 
 ## Commands
 - `/help [topic]` — show help (topics: commands, tasks, context, files, policy, workflow)
-- `/tasks` — list Beads tasks
+- `/tasks` — list tasks
 - `/task <id>` — show task details
-- `/ready` — show ready tasks (Beads)
+- `/ready` — show ready tasks
 - `/status` — show Village status summary
 - `/queue` — alias for /ready
 - `/lock` — show active locks
@@ -243,7 +282,7 @@ def _help_text(args: list[str], config: _Config) -> tuple[str, str, int]:
 
 ## Workflow
 1. Use chat to clarify intent and write context files.
-2. Use Beads to define work.
+2. Use `/create` to define work.
 3. Use `village ready` to validate execution readiness.
 4. Use `village queue` / `village resume` to execute.
 
@@ -269,9 +308,9 @@ Draft tasks stored in:
             help_text = """## Commands
 
 - `/help [topic]` — show help
-- `/tasks` — list Beads tasks
+- `/tasks` — list tasks
 - `/task <id>` — show task details
-- `/ready` — show ready tasks (Beads)
+- `/ready` — show ready tasks
 - `/status` — show Village status summary
 - `/queue` — alias for /ready
 - `/lock` — show active locks
@@ -288,7 +327,7 @@ Draft tasks stored in:
         elif topic == "tasks":
             help_text = """## Tasks
 
-Use `/tasks` to list all Beads tasks.
+Use `/tasks` to list all tasks.
 Use `/task <id>` to show details for a specific task.
 
 ## Task Creation
@@ -325,7 +364,7 @@ See `/help workflow` for proper usage.
             help_text = """## Workflow
 
 1. Use chat to clarify intent and write context files.
-2. Use Beads to define work.
+2. Use `/create` to define work.
 3. Use `village ready` to validate execution readiness.
 4. Use `village queue` / `village resume` to execute.
 
@@ -452,9 +491,9 @@ def _task_submit(args: list[str], config: _Config) -> tuple[str, str, int]:
 
 
 def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
-    """Confirm batch submission to create Beads tasks."""
+    """Confirm batch submission to create tasks."""
     from village.chat.state import load_session_state, save_session_state
-    from village.chat.task_extractor import create_draft_tasks, extract_beads_specs
+    from village.chat.task_extractor import create_draft_tasks, extract_task_specs
 
     state_dict = load_session_state(config)
     pending = state_dict.get("pending_enables", [])
@@ -467,7 +506,7 @@ def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
         breakdown = state_dict.get("session_snapshot", {}).get("task_breakdown", {})
         config_git_root_name = config.git_root.name
 
-        specs = extract_beads_specs(
+        specs = extract_task_specs(
             baseline,
             breakdown,
             config_git_root_name,
@@ -482,7 +521,7 @@ def _task_confirm(args: list[str], config: _Config) -> tuple[str, str, int]:
         state_dict["created_task_ids"] = created_ids
         save_session_state(state_dict, config)
 
-        return f"Created {len(created_tasks)} task(s) in Beads", "", 0
+        return f"Created {len(created_tasks)} task(s)", "", 0
     except Exception as e:
         return "", f"Error creating tasks: {e}", 1
 

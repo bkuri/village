@@ -1,4 +1,4 @@
-"""Queue scheduler for executing ready tasks from Beads."""
+"""Queue scheduler for executing ready tasks."""
 
 import logging
 import re
@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from village.config import Config, get_config
+from village.config import ApprovalConfig, Config, get_config
 from village.conflict_detection import (
     WorkerInfo,
     detect_file_conflicts,
@@ -14,10 +14,10 @@ from village.conflict_detection import (
 )
 from village.event_log import is_task_recent, log_task_start, read_events
 from village.locks import Lock, parse_lock
-from village.probes.beads import beads_available
-from village.probes.tools import SubprocessError, run_command_output
 from village.resume import ResumeResult, execute_resume
 from village.state_machine import TaskState, TaskStateMachine
+from village.tasks import TaskStoreError, get_task_store
+from village.trace import TraceEventType, TraceWriter
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,8 @@ class QueueTask:
     task_id: str
     agent: str
     agent_metadata: dict[str, str] = field(default_factory=dict)
+    title: str = ""
+    description: str = ""
     skip_reason: Optional[str] = None
     lock_exists: bool = False
     lock_pane_id: Optional[str] = None
@@ -36,6 +38,8 @@ class QueueTask:
     lock_agent: Optional[str] = None
     lock_claimed_at: Optional[str] = None
     worktree_path: Optional[Path] = None
+    needs_approval: bool = False
+    approval_status: str | None = None
 
 
 @dataclass
@@ -50,91 +54,94 @@ class QueuePlan:
     concurrency_limit: int
 
 
-def extract_agent_from_metadata(output_line: str, config: Config) -> str:
+def extract_agent_from_labels(labels: list[str], config: Config) -> str:
     """
-    Extract agent type from task metadata.
+    Extract agent type from task labels.
 
     Priority:
     1. Task labels (agent:build, agent=build, agent/build)
     2. Config default agent
 
     Args:
-        output_line: Single line from `bd ready` output
+        labels: List of task label strings
         config: Config object for default agent
 
     Returns:
         Detected agent type
     """
-    # Check for agent label in various formats
     agent_patterns = [
-        r"agent:(\w+)",  # agent:build
-        r"agent=(\w+)",  # agent=build
-        r"agent/(\w+)",  # agent/build
+        r"agent:(\w+)",
+        r"agent=(\w+)",
+        r"agent/(\w+)",
     ]
 
-    for pattern in agent_patterns:
-        match = re.search(pattern, output_line, re.IGNORECASE)
-        if match:
-            return match.group(1).lower()
+    for label in labels:
+        for pattern in agent_patterns:
+            match = re.search(pattern, label, re.IGNORECASE)
+            if match:
+                return match.group(1).lower()
 
-    # Default to config default_agent
     logger.debug(f"agent={config.default_agent} (reason: no agent label)")
     return config.default_agent
 
 
 def extract_ready_tasks(config: Config) -> list[QueueTask]:
     """
-    Extract ready tasks from Beads.
+    Extract ready tasks from the task store.
 
     Args:
         config: Config object
 
     Returns:
-        List of QueueTask objects (empty if no tasks or beads not available)
+        List of QueueTask objects (empty if no tasks or store not available)
     """
-    beads_status = beads_available()
-    if not (beads_status.command_available and beads_status.repo_initialized):
-        logger.debug("Beads not available, no ready tasks")
+    try:
+        store = get_task_store(config=config)
+    except TaskStoreError:
+        logger.debug("Task store not available, no ready tasks")
         return []
 
     try:
-        output = run_command_output(["bd", "ready"])
-        if not output.strip():
+        task_models = store.get_ready_tasks()
+        if not task_models:
             return []
 
         tasks = []
-        for line in output.splitlines():
-            line = line.strip()
-            if not line:
-                continue
+        for task_model in task_models:
+            agent = extract_agent_from_labels(task_model.labels, config)
+            tasks.append(
+                QueueTask(
+                    task_id=task_model.id,
+                    agent=agent,
+                    agent_metadata={"priority": str(task_model.priority)},
+                    title=task_model.title,
+                    description=task_model.description,
+                )
+            )
 
-            # Skip header lines (e.g., "📋 Ready work...")
-            if not re.match(r"^\d+\.", line):
-                continue
-
-            # Extract task_id from format: "1. [● P2] [task] village-5dr: Title"
-            # Pattern: number prefix, brackets with metadata, then task ID before colon
-            match = re.search(r"\[task\]\s+([a-zA-Z0-9_-]+):", line)
-            if not match:
-                # Fallback: try old pattern for "bd-xxxx" format
-                match = re.search(r"\b(bd-[a-f0-9]+)\b", line)
-            if not match:
-                logger.debug(f"Could not parse task_id from line: {line}")
-                continue
-
-            task_id = match.group(1)
-
-            # Extract agent from metadata
-            agent = extract_agent_from_metadata(line, config)
-
-            tasks.append(QueueTask(task_id=task_id, agent=agent, agent_metadata={}))
-
-        logger.debug(f"Extracted {len(tasks)} ready tasks from Beads")
+        logger.debug(f"Extracted {len(tasks)} ready tasks from task store")
         return tasks
 
-    except SubprocessError as e:
+    except TaskStoreError as e:
         logger.warning(f"Failed to extract ready tasks: {e}")
         return []
+
+
+def _task_needs_approval(task: QueueTask, approval_config: ApprovalConfig) -> bool:
+    """Check if a task requires approval based on config threshold."""
+    if not approval_config.enabled:
+        return False
+
+    priority = task.agent_metadata.get("priority", "")
+    if not priority:
+        return False
+
+    try:
+        priority_val = int(re.sub(r"[^\d]", "", priority))
+    except (ValueError, TypeError):
+        return False
+
+    return priority_val <= approval_config.threshold
 
 
 def arbitrate_locks(
@@ -148,7 +155,7 @@ def arbitrate_locks(
     Arbitrate locks and apply concurrency limits.
 
     Args:
-        tasks: Ready tasks from Beads
+        tasks: Ready tasks from task store
         session_name: Tmux session name
         max_workers: Maximum concurrent workers
         config: Config object
@@ -253,6 +260,23 @@ def arbitrate_locks(
                             f"Task {task.task_id} has potential conflicts: {render_conflict_report(conflict_report)}"
                         )
 
+        # Approval gate check
+        if _task_needs_approval(task, config.approval):
+            if task.approval_status != "approved":
+                task.skip_reason = "pending_approval"
+                task.needs_approval = True
+                blocked_tasks.append(task)
+
+                state_machine = TaskStateMachine(config)
+                current = state_machine.get_state(task.task_id)
+                if current == TaskState.QUEUED:
+                    state_machine.transition(
+                        task_id=task.task_id,
+                        new_state=TaskState.PENDING_APPROVAL,
+                        context={"reason": "approval_required"},
+                    )
+                continue
+
         # Task is available
         available_tasks.append(task)
 
@@ -287,7 +311,7 @@ def generate_queue_plan(
     if config is None:
         config = get_config()
 
-    # Extract ready tasks from Beads
+    # Extract ready tasks from task store
     tasks = extract_ready_tasks(config)
 
     # Arbitrate locks and apply concurrency limits
@@ -320,7 +344,9 @@ def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
     if plan.available_tasks:
         lines.append("Available tasks (will start):")
         for task in plan.available_tasks:
-            lines.append(f"  - {task.task_id} (agent: {task.agent})")
+            title_display = f" - {task.title}" if task.title else ""
+            approval_flag = " [NEEDS APPROVAL]" if task.needs_approval else ""
+            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display}{approval_flag}")
         lines.append("")
     else:
         lines.append("No tasks available to start")
@@ -330,7 +356,8 @@ def render_queue_plan(plan: QueuePlan, verbose: bool = False) -> str:
     if plan.blocked_tasks:
         lines.append("Blocked tasks:")
         for task in plan.blocked_tasks:
-            lines.append(f"  - {task.task_id} (agent: {task.agent}) - {task.skip_reason}")
+            title_display = f" - {task.title}" if task.title else ""
+            lines.append(f"  - {task.task_id} (agent: {task.agent}){title_display} - {task.skip_reason}")
         lines.append("")
 
     return "\n".join(lines)
@@ -352,6 +379,8 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
         return {
             "task_id": task.task_id,
             "agent": task.agent,
+            "title": task.title,
+            "description": task.description,
             "skip_reason": task.skip_reason,
             "agent_metadata": task.agent_metadata,
             "lock_exists": task.lock_exists,
@@ -360,6 +389,8 @@ def render_queue_plan_json(plan: QueuePlan) -> str:
             "lock_agent": task.lock_agent,
             "lock_claimed_at": task.lock_claimed_at,
             "worktree_path": str(task.worktree_path) if task.worktree_path else None,
+            "needs_approval": task.needs_approval,
+            "approval_status": task.approval_status,
         }
 
     plan_dict: dict[str, object] = {
@@ -416,7 +447,14 @@ def execute_queue_plan(
             if result.success:
                 logger.info(f"Task started successfully: {task.task_id}")
 
-                # Transition state to CLAIMED after successful claim
+                tracer = TraceWriter(task.task_id, config.traces_dir)
+                tracer.record(
+                    TraceEventType.TASK_CHECKOUT,
+                    agent=task.agent,
+                    pane_id=result.pane_id,
+                    window=result.window_name,
+                )
+
                 state_machine = TaskStateMachine(config)
                 transition_result = state_machine.transition(
                     task_id=task.task_id,

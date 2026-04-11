@@ -52,11 +52,7 @@ def validate_schema(data: dict[str, Any]) -> list[ValidationError]:
 
     for key, value in data["writes"].items():
         if not isinstance(value, str):
-            errors.append(
-                ValidationError(
-                    f"writes.{key}", f"Value must be string, got {type(value).__name__}"
-                )
-            )
+            errors.append(ValidationError(f"writes.{key}", f"Value must be string, got {type(value).__name__}"))
 
     if "notes" in data and not isinstance(data["notes"], list):
         errors.append(ValidationError("notes", "Field 'notes' must be a list"))

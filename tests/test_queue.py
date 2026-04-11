@@ -13,7 +13,6 @@ from village.queue import (
     QueueTask,
     arbitrate_locks,
     execute_queue_plan,
-    extract_agent_from_metadata,
     extract_ready_tasks,
     generate_queue_plan,
     render_queue_plan,
@@ -33,154 +32,115 @@ def mock_config(tmp_path: Path):
     return config
 
 
-class TestExtractAgentFromMetadata:
-    """Tests for extract_agent_from_metadata function."""
-
-    def test_extract_agent_colon_notation(self, mock_config: Config):
-        """Test extracting agent with colon notation (agent:build)."""
-        line = "bd-a3f8 agent:build priority:high"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "build"
-
-    def test_extract_agent_equals_notation(self, mock_config: Config):
-        """Test extracting agent with equals notation (agent=build)."""
-        line = "bd-a3f8 agent=build priority=high"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "build"
-
-    def test_extract_agent_slash_notation(self, mock_config: Config):
-        """Test extracting agent with slash notation (agent/build)."""
-        line = "bd-a3f8 agent/build priority/high"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "build"
-
-    def test_extract_agent_case_insensitive(self, mock_config: Config):
-        """Test agent extraction is case-insensitive."""
-        line = "bd-a3f8 AGENT:Build Priority:High"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "build"
-
-    def test_extract_agent_default_when_missing(self, mock_config: Config):
-        """Test default agent when no agent label present."""
-        line = "bd-a3f8 priority:high"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "worker"  # default_agent
-
-    def test_extract_agent_first_match_wins(self, mock_config: Config):
-        """Test first agent pattern match wins."""
-        line = "bd-a3f8 agent:build priority:high agent=test"
-        agent = extract_agent_from_metadata(line, mock_config)
-        assert agent == "build"
-
-
 class TestExtractReadyTasks:
     """Tests for extract_ready_tasks function."""
 
     def test_no_beads_available(self, mock_config: Config):
-        """Test when Beads is not available."""
-        from village.probes.beads import BeadsStatus
+        """Test when task store is not available."""
+        with patch("village.queue.get_task_store") as mock_get_store:
+            from village.tasks import TaskStoreError
 
-        with patch("village.queue.beads_available") as mock_beads:
-            status = BeadsStatus(
-                command_available=False,
-                command_path=None,
-                version=None,
-                repo_initialized=False,
-                beads_dir_exists=False,
-            )
-            mock_beads.return_value = status
-            tasks = extract_ready_tasks(mock_config)
-            assert tasks == []
-
-    def test_beads_not_initialized(self, mock_config: Config):
-        """Test when Beads repo is not initialized."""
-        from village.probes.beads import BeadsStatus
-
-        with patch("village.queue.beads_available") as mock_beads:
-            status = BeadsStatus(
-                command_available=True,
-                command_path="/usr/bin/bd",
-                version="1.0.0",
-                repo_initialized=False,
-                beads_dir_exists=False,
-            )
-            mock_beads.return_value = status
+            mock_get_store.side_effect = TaskStoreError("not available")
             tasks = extract_ready_tasks(mock_config)
             assert tasks == []
 
     def test_empty_ready_output(self, mock_config: Config):
-        """Test when bd ready returns empty output."""
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = ""
-                tasks = extract_ready_tasks(mock_config)
-                assert tasks == []
+        """Test when task store returns no ready tasks."""
+        mock_store = MagicMock()
+        mock_store.get_ready_tasks.return_value = []
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert tasks == []
 
     def test_single_ready_task(self, mock_config: Config):
         """Test extracting a single ready task."""
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = "1. [● P2] [task] bd-a3f8: Build feature agent:build"
-                tasks = extract_ready_tasks(mock_config)
-                assert len(tasks) == 1
-                assert tasks[0].task_id == "bd-a3f8"
-                assert tasks[0].agent == "build"
+        mock_store = MagicMock()
+        mock_task = MagicMock()
+        mock_task.id = "bd-a3f8"
+        mock_task.labels = ["agent:build"]
+        mock_store.get_ready_tasks.return_value = [mock_task]
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert len(tasks) == 1
+            assert tasks[0].task_id == "bd-a3f8"
+            assert tasks[0].agent == "build"
 
     def test_multiple_ready_tasks(self, mock_config: Config):
         """Test extracting multiple ready tasks."""
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                output = """1. [● P2] [task] bd-a3f8: Build feature agent:build
-2. [● P2] [task] bd-b7d2: Test feature agent:test
-3. [● P2] [task] bd-c4e1: Worker feature agent:worker"""
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = output
-                tasks = extract_ready_tasks(mock_config)
-                assert len(tasks) == 3
-                assert tasks[0].task_id == "bd-a3f8"
-                assert tasks[0].agent == "build"
-                assert tasks[1].task_id == "bd-b7d2"
-                assert tasks[1].agent == "test"
-                assert tasks[2].task_id == "bd-c4e1"
-                assert tasks[2].agent == "worker"
+        mock_store = MagicMock()
+
+        task1 = MagicMock()
+        task1.id = "bd-a3f8"
+        task1.labels = ["agent:build"]
+
+        task2 = MagicMock()
+        task2.id = "bd-b7d2"
+        task2.labels = ["agent:test"]
+
+        task3 = MagicMock()
+        task3.id = "bd-c4e1"
+        task3.labels = ["agent:worker"]
+
+        mock_store.get_ready_tasks.return_value = [task1, task2, task3]
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert len(tasks) == 3
+            assert tasks[0].task_id == "bd-a3f8"
+            assert tasks[0].agent == "build"
+            assert tasks[1].task_id == "bd-b7d2"
+            assert tasks[1].agent == "test"
+            assert tasks[2].task_id == "bd-c4e1"
+            assert tasks[2].agent == "worker"
 
     def test_tasks_with_default_agent(self, mock_config: Config):
         """Test tasks without agent label use default."""
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = "1. [● P2] [task] bd-a3f8: Some task priority:high"
-                tasks = extract_ready_tasks(mock_config)
-                assert len(tasks) == 1
-                assert tasks[0].task_id == "bd-a3f8"
-                assert tasks[0].agent == "worker"  # default_agent
+        mock_store = MagicMock()
+        mock_task = MagicMock()
+        mock_task.id = "bd-a3f8"
+        mock_task.labels = ["priority:high"]
+        mock_store.get_ready_tasks.return_value = [mock_task]
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert len(tasks) == 1
+            assert tasks[0].task_id == "bd-a3f8"
+            assert tasks[0].agent == "worker"
 
     def test_beads_command_failure(self, mock_config: Config):
-        """Test handling of Beads command failure."""
-        from village.probes.tools import SubprocessError
+        """Test handling of task store failure."""
+        from village.tasks import TaskStoreError
 
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.side_effect = SubprocessError("bd ready failed")
-                tasks = extract_ready_tasks(mock_config)
-                assert tasks == []
+        mock_store = MagicMock()
+        mock_store.get_ready_tasks.side_effect = TaskStoreError("query failed")
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert tasks == []
 
     def test_ignores_empty_lines(self, mock_config: Config):
-        """Test empty lines are ignored."""
-        with patch("village.queue.beads_available") as mock_beads:
-            with patch("village.queue.run_command_output") as mock_run:
-                output = """1. [● P2] [task] bd-a3f8: Build agent:build
+        """Test multiple ready tasks are all extracted."""
+        mock_store = MagicMock()
 
-2. [● P2] [task] bd-b7d2: Test agent:test
+        task1 = MagicMock()
+        task1.id = "bd-a3f8"
+        task1.labels = ["agent:build"]
 
-3. [● P2] [task] bd-c4e1: Worker agent:worker"""
-                mock_beads.return_value.__bool__.return_value = True
-                mock_run.return_value = output
-                tasks = extract_ready_tasks(mock_config)
-                assert len(tasks) == 3
+        task2 = MagicMock()
+        task2.id = "bd-b7d2"
+        task2.labels = ["agent:test"]
+
+        task3 = MagicMock()
+        task3.id = "bd-c4e1"
+        task3.labels = ["agent:worker"]
+
+        mock_store.get_ready_tasks.return_value = [task1, task2, task3]
+
+        with patch("village.queue.get_task_store", return_value=mock_store):
+            tasks = extract_ready_tasks(mock_config)
+            assert len(tasks) == 3
 
 
 class TestQueueTask:

@@ -2,16 +2,16 @@
 
 import logging
 
-from village.extensibility.beads_integrators import (
-    BeadsIntegrator,
-    DefaultBeadsIntegrator,
-)
 from village.extensibility.context import ChatContext, DefaultChatContext
 from village.extensibility.llm_adapters import DefaultLLMProviderAdapter, LLMProviderAdapter
 from village.extensibility.processors import ChatProcessor, DefaultChatProcessor
 from village.extensibility.server_discovery import (
     DefaultServerDiscovery,
     ServerDiscovery,
+)
+from village.extensibility.task_hooks import (
+    DefaultTaskHooks,
+    TaskHooks,
 )
 from village.extensibility.thinking_refiners import (
     DefaultThinkingRefiner,
@@ -44,7 +44,7 @@ class ExtensionRegistry:
         self._tool_invoker: ToolInvoker = DefaultToolInvoker()
         self._thinking_refiner: ThinkingRefiner = DefaultThinkingRefiner()
         self._chat_context: ChatContext = DefaultChatContext()
-        self._beads_integrator: BeadsIntegrator = DefaultBeadsIntegrator()
+        self._task_hooks: TaskHooks = DefaultTaskHooks()
         self._server_discovery: ServerDiscovery = DefaultServerDiscovery()
         self._llm_adapter: LLMProviderAdapter = DefaultLLMProviderAdapter()
 
@@ -84,14 +84,14 @@ class ExtensionRegistry:
         self._chat_context = context
         logger.debug(f"Registered chat context: {context.__class__.__name__}")
 
-    def register_beads_integrator(self, integrator: BeadsIntegrator) -> None:
-        """Register beads integrator.
+    def register_task_hooks(self, hooks: TaskHooks) -> None:
+        """Register task hooks.
 
         Args:
-            integrator: BeadsIntegrator implementation
+            hooks: TaskHooks implementation
         """
-        self._beads_integrator = integrator
-        logger.debug(f"Registered beads integrator: {integrator.__class__.__name__}")
+        self._task_hooks = hooks
+        logger.debug(f"Registered task hooks: {hooks.__class__.__name__}")
 
     def register_server_discovery(self, discovery: ServerDiscovery) -> None:
         """Register server discovery.
@@ -128,9 +128,9 @@ class ExtensionRegistry:
         """Get registered chat context."""
         return self._chat_context
 
-    def get_beads_integrator(self) -> BeadsIntegrator:
-        """Get registered beads integrator."""
-        return self._beads_integrator
+    def get_task_hooks(self) -> TaskHooks:
+        """Get registered task hooks."""
+        return self._task_hooks
 
     def get_server_discovery(self) -> ServerDiscovery:
         """Get registered server discovery."""
@@ -151,7 +151,7 @@ class ExtensionRegistry:
             "tool_invoker": self._tool_invoker.__class__.__name__,
             "thinking_refiner": self._thinking_refiner.__class__.__name__,
             "chat_context": self._chat_context.__class__.__name__,
-            "beads_integrator": self._beads_integrator.__class__.__name__,
+            "task_hooks": self._task_hooks.__class__.__name__,
             "server_discovery": self._server_discovery.__class__.__name__,
             "llm_adapter": self._llm_adapter.__class__.__name__,
         }
@@ -162,7 +162,7 @@ class ExtensionRegistry:
         self._tool_invoker = DefaultToolInvoker()
         self._thinking_refiner = DefaultThinkingRefiner()
         self._chat_context = DefaultChatContext()
-        self._beads_integrator = DefaultBeadsIntegrator()
+        self._task_hooks = DefaultTaskHooks()
         self._server_discovery = DefaultServerDiscovery()
         self._llm_adapter = DefaultLLMProviderAdapter()
         logger.debug("Reset all extensions to defaults")

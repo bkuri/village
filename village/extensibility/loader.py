@@ -5,12 +5,12 @@ import logging
 from typing import Optional
 
 from village.config import Config
-from village.extensibility.beads_integrators import BeadsIntegrator
 from village.extensibility.context import ChatContext
 from village.extensibility.llm_adapters import LLMProviderAdapter
 from village.extensibility.processors import ChatProcessor
 from village.extensibility.registry import ExtensionRegistry
 from village.extensibility.server_discovery import MCPServer, ServerDiscovery
+from village.extensibility.task_hooks import TaskHooks
 from village.extensibility.thinking_refiners import ThinkingRefiner
 from village.extensibility.tool_invokers import ToolInvoker
 
@@ -125,14 +125,14 @@ async def initialize_extensions(config: Config) -> ExtensionRegistry:
         except Exception as e:
             logger.warning(f"Failed to load ChatContext: {e}")
 
-    if ext_config.beads_integrator_module:
+    if ext_config.task_hooks_module:
         try:
-            integrator = load_extension_class(ext_config.beads_integrator_module)
-            if isinstance(integrator, BeadsIntegrator):
-                registry.register_beads_integrator(integrator)
-                logger.info(f"Loaded BeadsIntegrator: {ext_config.beads_integrator_module}")
+            hooks = load_extension_class(ext_config.task_hooks_module)
+            if isinstance(hooks, TaskHooks):
+                registry.register_task_hooks(hooks)
+                logger.info(f"Loaded TaskHooks: {ext_config.task_hooks_module}")
         except Exception as e:
-            logger.warning(f"Failed to load BeadsIntegrator: {e}")
+            logger.warning(f"Failed to load TaskHooks: {e}")
 
     if ext_config.server_discovery_module:
         try:
