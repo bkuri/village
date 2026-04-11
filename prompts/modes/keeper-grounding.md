@@ -1,9 +1,9 @@
 ---
-id: elder-grounding
-title: Elder Grounding Rules
+id: keeper-grounding
+title: Keeper Grounding Rules
 description: 3-rule document grounding for knowledge base queries
 requires: [base]
-tags: [mode:elder-query]
+tags: [mode:keeper-query]
 ---
 
 ## Grounding Rules

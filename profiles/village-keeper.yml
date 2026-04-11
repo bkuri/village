@@ -1,15 +1,15 @@
-# Profile: Village Elder Query Mode
+# Profile: Village Keeper Query Mode
 
 # Mode
-mode: elder-query
+mode: keeper-query
 
 # Modules to include (compose the prompt)
 requires:
   - base
-  - elder-grounding
+  - keeper-grounding
 
 # Contract
-contract: elder-answer
+contract: keeper-answer
 
 # Traits
 traits: [grounded, conservative]

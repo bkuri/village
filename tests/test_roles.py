@@ -53,29 +53,29 @@ class TestRoleRouting:
     def test_planner_routes_to_builder(self):
         assert ROLE_ROUTING["planner"].route == ["builder"]
 
-    def test_planner_advises_council_elder(self):
-        assert ROLE_ROUTING["planner"].advise == ["council", "elder"]
+    def test_planner_advises_council_keeper(self):
+        assert ROLE_ROUTING["planner"].advise == ["council", "keeper"]
 
     def test_builder_routes_to_planner_ledger(self):
         assert ROLE_ROUTING["builder"].route == ["planner", "ledger"]
 
-    def test_builder_advises_elder_council(self):
-        assert ROLE_ROUTING["builder"].advise == ["elder", "council"]
+    def test_builder_advises_keeper_council(self):
+        assert ROLE_ROUTING["builder"].advise == ["keeper", "council"]
 
-    def test_elder_routes_to_council_ledger(self):
-        assert ROLE_ROUTING["elder"].route == ["council", "ledger"]
+    def test_keeper_routes_to_council_ledger(self):
+        assert ROLE_ROUTING["keeper"].route == ["council", "ledger"]
 
-    def test_elder_advises_planner_builder(self):
-        assert ROLE_ROUTING["elder"].advise == ["planner", "builder"]
+    def test_keeper_advises_planner_builder(self):
+        assert ROLE_ROUTING["keeper"].advise == ["planner", "builder"]
 
     def test_ledger_routes_to_none(self):
         assert ROLE_ROUTING["ledger"].route == []
 
-    def test_ledger_advises_elder_doctor_planner(self):
-        assert ROLE_ROUTING["ledger"].advise == ["elder", "doctor", "planner"]
+    def test_ledger_advises_keeper_doctor_planner(self):
+        assert ROLE_ROUTING["ledger"].advise == ["keeper", "doctor", "planner"]
 
-    def test_council_routes_to_elder(self):
-        assert ROLE_ROUTING["council"].route == ["elder"]
+    def test_council_routes_to_keeper(self):
+        assert ROLE_ROUTING["council"].route == ["keeper"]
 
     def test_council_advises_planner_builder(self):
         assert ROLE_ROUTING["council"].advise == ["planner", "builder"]
@@ -83,11 +83,11 @@ class TestRoleRouting:
     def test_doctor_routes_to_ledger(self):
         assert ROLE_ROUTING["doctor"].route == ["ledger"]
 
-    def test_doctor_advises_elder_council(self):
-        assert ROLE_ROUTING["doctor"].advise == ["elder", "council"]
+    def test_doctor_advises_keeper_council(self):
+        assert ROLE_ROUTING["doctor"].advise == ["keeper", "council"]
 
     def test_greeter_routes_to_all_roles(self):
-        all_roles = ["planner", "builder", "elder", "ledger", "council", "doctor"]
+        all_roles = ["planner", "builder", "keeper", "ledger", "council", "doctor"]
         assert ROLE_ROUTING["greeter"].route == all_roles
 
     def test_greeter_advises_none(self):
@@ -98,7 +98,7 @@ class TestGreetingTemplates:
     """Test GREETING_TEMPLATES covers all 7 roles."""
 
     def test_all_roles_have_greetings(self):
-        expected = {"planner", "builder", "elder", "ledger", "council", "doctor", "greeter"}
+        expected = {"planner", "builder", "keeper", "ledger", "council", "doctor", "greeter"}
         assert set(GREETING_TEMPLATES.keys()) == expected
 
     def test_greetings_are_non_empty(self):
@@ -110,7 +110,7 @@ class TestRoleSkills:
     """Test ROLE_SKILLS: each role has at least one skill."""
 
     def test_all_roles_have_skills(self):
-        expected = {"planner", "builder", "elder", "ledger", "council", "doctor", "greeter"}
+        expected = {"planner", "builder", "keeper", "ledger", "council", "doctor", "greeter"}
         assert set(ROLE_SKILLS.keys()) == expected
 
     def test_each_role_has_at_least_one_skill(self):
@@ -138,7 +138,7 @@ class TestRoleChatInit:
         assert chat.skills[0].name == "run"
 
     def test_routing(self):
-        chat = RoleChat("elder")
+        chat = RoleChat("keeper")
         assert chat.routing.route == ["council", "ledger"]
 
     def test_unknown_role_defaults(self):
@@ -182,13 +182,13 @@ class TestDetectCrossRole:
         assert result.target_role == "builder"
         assert result.message == "Let's build it"
 
-    def test_detects_advise_elder(self):
+    def test_detects_advise_keeper(self):
         chat = RoleChat("planner")
-        result = chat.detect_cross_role("[ADVISE:elder] Ask the elder")
+        result = chat.detect_cross_role("[ADVISE:keeper] Ask the keeper")
         assert result is not None
         assert result.action == RoutingAction.ADVISE
-        assert result.target_role == "elder"
-        assert result.message == "Ask the elder"
+        assert result.target_role == "keeper"
+        assert result.message == "Ask the keeper"
 
     def test_returns_none_for_normal_response(self):
         chat = RoleChat("planner")
@@ -202,7 +202,7 @@ class TestDetectCrossRole:
 
     def test_rejects_advise_to_non_advisable_role(self):
         chat = RoleChat("greeter")
-        result = chat.detect_cross_role("[ADVISE:elder] Greeter advises none")
+        result = chat.detect_cross_role("[ADVISE:keeper] Greeter advises none")
         assert result is None
 
     def test_route_without_message(self):
@@ -222,11 +222,11 @@ class TestCanRouteAndAdvise:
 
     def test_cannot_route_to_invalid(self):
         chat = RoleChat("planner")
-        assert chat.can_route_to("elder") is False
+        assert chat.can_route_to("keeper") is False
 
     def test_can_advise_valid(self):
         chat = RoleChat("planner")
-        assert chat.can_advise("elder") is True
+        assert chat.can_advise("keeper") is True
 
     def test_cannot_advise_invalid(self):
         chat = RoleChat("planner")
@@ -242,7 +242,7 @@ class TestSystemPrompt:
         assert "Village Planner" in prompt
 
     def test_includes_skills(self):
-        chat = RoleChat("elder")
+        chat = RoleChat("keeper")
         prompt = chat.get_system_prompt()
         assert "see:" in prompt
         assert "ask:" in prompt
@@ -251,7 +251,7 @@ class TestSystemPrompt:
         chat = RoleChat("builder")
         prompt = chat.get_system_prompt()
         assert "planner, ledger" in prompt
-        assert "elder, council" in prompt
+        assert "keeper, council" in prompt
 
 
 class TestHandoffContext:

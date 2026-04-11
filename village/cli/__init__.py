@@ -35,8 +35,8 @@ from village.cli import (  # noqa: E402
     council,
     dashboard,
     doctor,
-    elder,
     greeter,
+    keeper,
     ledger,
     lifecycle,
     maintenance,
@@ -81,8 +81,8 @@ village.add_command(release.release)
 village.add_command(greeter.greeter, name="greeter")
 village.add_command(greeter.drafts)
 
-# Elder
-village.add_command(elder.elder_group, name="elder")
+# Keeper
+village.add_command(keeper.keeper_group, name="keeper")
 
 # ACP
 village.add_command(acp.acp_command, name="gate")

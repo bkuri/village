@@ -1,18 +1,18 @@
-"""Integration tests for Elder end-to-end flows."""
+"""Integration tests for Keeper end-to-end flows."""
 
 from pathlib import Path
 
-from village.elder.crosslink import find_related, update_cross_references
-from village.elder.curate import Curator
-from village.elder.monitor import Monitor
-from village.elder.store import ElderStore
+from village.keeper.crosslink import find_related, update_cross_references
+from village.keeper.curate import Curator
+from village.keeper.monitor import Monitor
+from village.keeper.store import KeeperStore
 from village.memory import MemoryStore
 
 
 class TestFullIngestFlow:
     def test_ingest_creates_page_and_updates_index(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         ingest_dir = wiki_path / "ingest"
         ingest_dir.mkdir(parents=True)
@@ -30,7 +30,7 @@ class TestFullIngestFlow:
 
     def test_ingest_multiple_sources_with_crosslinks(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         store.store.put(
             title="Auth Setup",
@@ -63,7 +63,7 @@ class TestFullIngestFlow:
 class TestQueryFlow:
     def test_ask_returns_relevant_results(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         store.store.put(
             title="Auth Setup", text="Configure VILLAGE_AUTH_KEY for authentication", tags=["auth"], entry_id="auth"
@@ -76,7 +76,7 @@ class TestQueryFlow:
 
     def test_ask_with_save_creates_page(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         store.store.put(title="Auth", text="Use env vars for auth", tags=["auth"], entry_id="a")
 
@@ -89,7 +89,7 @@ class TestCurateFlow:
     def test_curate_finds_orphans_and_generates_voice(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
         project_root = tmp_path
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         store.store.put(title="Lonely Page", text="No one links here", tags=["solo"], entry_id="orphan")
 
@@ -108,7 +108,7 @@ class TestCurateFlow:
 class TestMonitorFlow:
     def test_monitor_processes_dropped_files(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
-        store = ElderStore(wiki_path)
+        store = KeeperStore(wiki_path)
 
         ingest_dir = wiki_path / "ingest"
         ingest_dir.mkdir(parents=True)

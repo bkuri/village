@@ -1,8 +1,8 @@
-"""Tests for Elder cross-linking engine."""
+"""Tests for Keeper cross-linking engine."""
 
 from pathlib import Path
 
-from village.elder.crosslink import (
+from village.keeper.crosslink import (
     _tag_jaccard,
     _title_keyword_overlap,
     find_related,

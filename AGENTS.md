@@ -152,7 +152,7 @@ village/
 ├── cli/                # CLI commands (role-based)
 │   ├── planner.py      #   village planner — spec design + inspection
 │   ├── builder.py      #   village builder — spec-driven autonomous loop
-│   ├── elder.py        #   village elder — knowledge base + goals
+│   ├── keeper.py      #   village keeper — knowledge base + goals
 │   ├── ledger.py       #   village ledger — audit trails
 │   ├── council.py      #   village council — multi-persona deliberation
 │   ├── greeter.py      #   village greeter — Q&A session
@@ -167,7 +167,7 @@ village/
 │   ├── planner.py      #   LLM-driven design
 │   └── mcp_tools.py    #   Perplexity/sequential-thinking
 ├── council/            # Council deliberation system
-├── elder/              # Elder knowledge base
+├── keeper/              # Keeper knowledge base
 ├── onboard/            # Adaptive onboarding
 ├── goals.py            # Goal hierarchy (GOALS.md)
 ├── trace.py            # TraceWriter/Reader (JSONL)
@@ -184,21 +184,21 @@ tests/
 └── test_*.py
 ```
 
-## Village Elder — Knowledge Base
+## Village Keeper — Knowledge Base
 
 ### Commands
 ```bash
-village elder see <url|file>         # Ingest knowledge source
-village elder fetch <url|file>       # Alias for see
-village elder ask "question"         # Query knowledge base
-village elder curate                 # Health check + regenerate VOICE.md
-village elder upkeep                 # Alias for curate
-village elder stats                  # Show wiki statistics
-village elder monitor                # Watch wiki/ingest/ for new files
-village elder goals                  # Show goal hierarchy
-village elder goals --coverage       # Show objective completion %
-village elder goals --edit           # Interactive refinement
-village elder goals --json           # JSON output
+village keeper see <url|file>         # Ingest knowledge source
+village keeper fetch <url|file>       # Alias for see
+village keeper ask "question"         # Query knowledge base
+village keeper curate                 # Health check + regenerate VOICE.md
+village keeper upkeep                 # Alias for curate
+village keeper stats                  # Show wiki statistics
+village keeper monitor                # Watch wiki/ingest/ for new files
+village keeper goals                  # Show goal hierarchy
+village keeper goals --coverage       # Show objective completion %
+village keeper goals --edit           # Interactive refinement
+village keeper goals --json           # JSON output
 ```
 
 ### Architecture
@@ -220,11 +220,11 @@ Read it first for project context, conventions, and known issues.
 
 ### Manual testing
 ```bash
-village elder see ./docs/guide.md
-village elder see https://docs.example.com/api
-village elder ask "how do I configure auth?"
-village elder curate
-village elder stats
+village keeper see ./docs/guide.md
+village keeper see https://docs.example.com/api
+village keeper ask "how do I configure auth?"
+village keeper curate
+village keeper stats
 ```
 
 ## Adaptive Onboarding
@@ -254,7 +254,7 @@ The onboarding pipeline:
 1. **Detect** (rule-based): Scan for pyproject.toml, package.json, etc.
 2. **Interview** (LLM adaptive): 10-15 BRUTAL-method questions
 3. **Generate**: AGENTS.md + README.md + wiki/ seeds
-4. **Process**: Elder ingests wiki seeds, curate generates VOICE.md
+4. **Process**: Keeper ingests wiki seeds, curate generates VOICE.md
 
 ## Role-Based CLI Architecture
 
@@ -264,7 +264,7 @@ The onboarding pipeline:
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
 | **builder** | "Which specs shall I work on?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **elder** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
+| **keeper** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
 | **ledger** | "Which task are you looking for?" | `show`, `list` |
 | **council** | "What shall we discuss?" | `debate`, `list`, `show`, `rematch` |
 | **doctor** | "What seems to be the problem?" | `check` |

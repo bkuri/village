@@ -40,7 +40,7 @@ If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
 | **builder** | "Which workflow shall I run?" | `run`, `status`, `stop`, `resume`, `logs` |
-| **elder** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
+| **keeper** | "What do you want to know?" | `see`, `ask`, `curate`, `goals`, `stats`, `monitor` |
 | **ledger** | "Which task are you looking for?" | `show`, `list` |
 | **council** | "What shall we discuss?" | `list`, `show`, `rematch` |
 | **doctor** | "What seems to be the problem?" | `check` |
@@ -65,15 +65,15 @@ village builder run --dry-run          # Preview without executing
 village builder status                 # Show spec completion progress
 ```
 
-### Elder Knowledge Base
+### Keeper Knowledge Base
 
 ```bash
-village elder see <url|file>           # Ingest knowledge source
-village elder ask "question"           # Query knowledge base
-village elder curate                   # Health check + regenerate VOICE.md
-village elder stats                    # Show wiki statistics
-village elder goals                    # Show goal hierarchy
-village elder goals --coverage         # Show objective completion %
+village keeper see <url|file>           # Ingest knowledge source
+village keeper ask "question"           # Query knowledge base
+village keeper curate                   # Health check + regenerate VOICE.md
+village keeper stats                    # Show wiki statistics
+village keeper goals                    # Show goal hierarchy
+village keeper goals --coverage         # Show objective completion %
 ```
 
 Sources are auto-tagged, cross-linked, and stored as markdown with YAML frontmatter. The curated knowledge distills into `VOICE.md` for agent context.
@@ -151,7 +151,7 @@ flowchart TB
     subgraph Roles["Role Plane"]
         P[Planner<br/>Spec Design]
         B[Builder<br/>Spec Execution]
-        E[Elder<br/>Knowledge Base]
+        E[Keeper<br/>Knowledge Base]
         C[Council<br/>Deliberation]
         L[Ledger<br/>Audit Trails]
         D[Doctor<br/>Health Checks]
@@ -199,7 +199,7 @@ Inspect anytime:
 
 ```bash
 village doctor check                    # Run health checks
-village elder curate                    # Maintain knowledge base
+village keeper curate                    # Maintain knowledge base
 village ledger show bd-xyz              # View audit trail
 village release --dry-run               # Preview release
 ```
@@ -245,16 +245,16 @@ village release --dry-run               # Preview release
 | `village builder stop` | Stop a running build loop |
 | `village builder resume` | Resume a stopped build loop |
 
-### Elder (Knowledge Base)
+### Keeper (Knowledge Base)
 
 | Command | Description |
 |---------|-------------|
-| `village elder see <source>` | Ingest a URL or file into wiki |
-| `village elder ask "question"` | Query the knowledge base |
-| `village elder curate` | Health check + regenerate VOICE.md |
-| `village elder goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
-| `village elder stats` | Show wiki statistics |
-| `village elder monitor` | Watch wiki/ingest/ for new files |
+| `village keeper see <source>` | Ingest a URL or file into wiki |
+| `village keeper ask "question"` | Query the knowledge base |
+| `village keeper curate` | Health check + regenerate VOICE.md |
+| `village keeper goals` | Show goal hierarchy (`--coverage`, `--edit`, `--json`) |
+| `village keeper stats` | Show wiki statistics |
+| `village keeper monitor` | Watch wiki/ingest/ for new files |
 
 ### Council (Deliberation)
 

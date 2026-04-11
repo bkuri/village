@@ -1,4 +1,4 @@
-"""Village Elder — self-improving knowledge base CLI commands."""
+"""Village Keeper — self-improving knowledge base CLI commands."""
 
 import json
 from pathlib import Path
@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING
 
 import click
 
-from village.elder.curate import Curator
-from village.elder.store import ElderStore
 from village.goals import (
     Goal,
     get_active_goals,
@@ -15,6 +13,8 @@ from village.goals import (
     get_objective_coverage_from_file,
     parse_goals,
 )
+from village.keeper.curate import Curator
+from village.keeper.store import KeeperStore
 from village.roles import run_role_chat
 
 if TYPE_CHECKING:
@@ -33,20 +33,20 @@ def _find_wiki_path() -> Path:
 
 @click.group(invoke_without_command=True)
 @click.pass_context
-def elder_group(ctx: click.Context) -> None:
+def keeper_group(ctx: click.Context) -> None:
     """Manage project knowledge base."""
     if ctx.invoked_subcommand is not None:
         return
-    run_role_chat("elder")
+    run_role_chat("keeper")
 
 
-@elder_group.command()
+@keeper_group.command()
 @click.argument("source")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def see(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base."""
     wiki_path = _find_wiki_path()
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
 
     result = store.see(source)
 
@@ -70,13 +70,13 @@ def see(source: str, json_output: bool) -> None:
             click.echo(f"  Tags: {', '.join(result.tags)}")
 
 
-@elder_group.command()
+@keeper_group.command()
 @click.argument("source")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def fetch(source: str, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base. (Alias for see)"""
     wiki_path = _find_wiki_path()
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
 
     result = store.see(source)
 
@@ -100,14 +100,14 @@ def fetch(source: str, json_output: bool) -> None:
             click.echo(f"  Tags: {', '.join(result.tags)}")
 
 
-@elder_group.command()
+@keeper_group.command()
 @click.argument("question")
 @click.option("--save", is_flag=True, help="Save answer as new wiki page")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def ask(question: str, save: bool, json_output: bool) -> None:
     """Query the knowledge base and synthesize an answer."""
     wiki_path = _find_wiki_path()
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
 
     result = store.ask(question, save=save)
 
@@ -127,13 +127,13 @@ def ask(question: str, save: bool, json_output: bool) -> None:
             click.echo(f"\nSources: {', '.join(result.sources)}")
 
 
-@elder_group.command()
+@keeper_group.command()
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
 def curate(json_output: bool) -> None:
     """Health check and maintain the knowledge base."""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
     curator = Curator(store.store, wiki_path, project_root)
 
     result = curator.curate()
@@ -164,12 +164,12 @@ def curate(json_output: bool) -> None:
         click.echo(f"VOICE.md updated: {result.voice_updated}")
 
 
-@elder_group.command()
+@keeper_group.command()
 def upkeep() -> None:
     """Health check and maintain the knowledge base. (Alias for curate)"""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
     curator = Curator(store.store, wiki_path, project_root)
 
     result = curator.curate()
@@ -181,11 +181,11 @@ def upkeep() -> None:
     click.echo(f"VOICE.md updated: {result.voice_updated}")
 
 
-@elder_group.command()
+@keeper_group.command()
 def stats() -> None:
     """Show knowledge base statistics."""
     wiki_path = _find_wiki_path()
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
 
     entries = store.store.all_entries()
     log_path = wiki_path / "log.md"
@@ -210,21 +210,21 @@ def stats() -> None:
         click.echo(f"Log entries: {len(log_lines)}")
 
 
-@elder_group.command()
+@keeper_group.command()
 @click.option("--interval", default=30, help="Poll interval in seconds")
 def monitor(interval: int) -> None:
     """Watch wiki/ingest/ for new files and process them."""
-    from village.elder.monitor import Monitor
+    from village.keeper.monitor import Monitor
 
     wiki_path = _find_wiki_path()
-    store = ElderStore(wiki_path)
+    store = KeeperStore(wiki_path)
     mon = Monitor(wiki_path, store, poll_interval=interval)
 
     click.echo(f"Monitoring {wiki_path / 'ingest'} every {interval}s (Ctrl+C to stop)")
     mon.start()
 
 
-@elder_group.command("goals")
+@keeper_group.command("goals")
 @click.option("--edit", "edit_mode", is_flag=True, help="Interactive refinement mode")
 @click.option("--coverage", "show_coverage", is_flag=True, help="Show objective coverage")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
@@ -237,7 +237,7 @@ def goals_cmd(edit_mode: bool, show_coverage: bool, json_output: bool) -> None:
     all_goals = parse_goals(goals_path)
 
     if not all_goals:
-        click.echo("No GOALS.md found. Run 'village elder curate' to bootstrap.")
+        click.echo("No GOALS.md found. Run 'village keeper curate' to bootstrap.")
         return
 
     if show_coverage:

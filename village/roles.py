@@ -30,30 +30,30 @@ class RoutingResult:
 ROLE_ROUTING: dict[str, RoutingConfig] = {
     "planner": RoutingConfig(
         route=["builder"],
-        advise=["council", "elder"],
+        advise=["council", "keeper"],
     ),
     "builder": RoutingConfig(
         route=["planner", "ledger"],
-        advise=["elder", "council"],
+        advise=["keeper", "council"],
     ),
-    "elder": RoutingConfig(
+    "keeper": RoutingConfig(
         route=["council", "ledger"],
         advise=["planner", "builder"],
     ),
     "ledger": RoutingConfig(
         route=[],
-        advise=["elder", "doctor", "planner"],
+        advise=["keeper", "doctor", "planner"],
     ),
     "council": RoutingConfig(
-        route=["elder"],
+        route=["keeper"],
         advise=["planner", "builder"],
     ),
     "doctor": RoutingConfig(
         route=["ledger"],
-        advise=["elder", "council"],
+        advise=["keeper", "council"],
     ),
     "greeter": RoutingConfig(
-        route=["planner", "builder", "elder", "ledger", "council", "doctor"],
+        route=["planner", "builder", "keeper", "ledger", "council", "doctor"],
         advise=[],
     ),
 }
@@ -62,7 +62,7 @@ ROLE_ROUTING: dict[str, RoutingConfig] = {
 GREETING_TEMPLATES: dict[str, str] = {
     "planner": "What do you want to accomplish?",
     "builder": "Which workflow shall I run?",
-    "elder": "What do you want to know?",
+    "keeper": "What do you want to know?",
     "ledger": "Which task are you looking for?",
     "council": "What shall we discuss?",
     "doctor": "What seems to be the problem?",
@@ -87,7 +87,7 @@ ROLE_SKILLS: dict[str, list[RoleSkill]] = {
         RoleSkill("run", "Execute a workflow"),
         RoleSkill("status", "Check a run's status"),
     ],
-    "elder": [
+    "keeper": [
         RoleSkill("see", "Ingest knowledge source"),
         RoleSkill("ask", "Query the knowledge base"),
         RoleSkill("curate", "Health check and regenerate"),

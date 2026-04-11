@@ -1,6 +1,6 @@
 ---
-id: elder-answer
-title: Elder Answer Contract
+id: keeper-answer
+title: Keeper Answer Contract
 description: Structured answer with citations for knowledge base queries
 priority: 100
 tags: [output:structured]
