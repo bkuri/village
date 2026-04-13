@@ -1,6 +1,7 @@
 """Tests for Scribe polling-based file monitor."""
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 from village.scribe.monitor import Monitor
 from village.scribe.store import ScribeStore
@@ -129,3 +130,43 @@ class TestStateFileCorruption:
 
         assert len(results) == 1
         assert results[0]["file"] == "recover.md"
+
+
+class TestMonitorAutoResearchFlag:
+    def test_auto_research_defaults_to_false(self, tmp_path: Path) -> None:
+        wiki_path = tmp_path / "wiki"
+        store = ScribeStore(wiki_path)
+
+        mon = Monitor(wiki_path, store, poll_interval=5)
+
+        assert mon.auto_research is False
+
+    def test_auto_research_can_be_enabled(self, tmp_path: Path) -> None:
+        wiki_path = tmp_path / "wiki"
+        store = ScribeStore(wiki_path)
+
+        mon = Monitor(wiki_path, store, poll_interval=5, auto_research=True)
+
+        assert mon.auto_research is True
+
+
+class TestMonitorSetResearcher:
+    def test_set_researcher_stores_researcher(self, tmp_path: Path) -> None:
+        wiki_path = tmp_path / "wiki"
+        store = ScribeStore(wiki_path)
+        mon = Monitor(wiki_path, store, poll_interval=5)
+
+        mock_researcher = MagicMock()
+        mon.set_researcher(mock_researcher)
+
+        assert mon._researcher is mock_researcher
+
+
+class TestMonitorResearcherInitialization:
+    def test_researcher_initializes_as_none(self, tmp_path: Path) -> None:
+        wiki_path = tmp_path / "wiki"
+        store = ScribeStore(wiki_path)
+
+        mon = Monitor(wiki_path, store, poll_interval=5)
+
+        assert mon._researcher is None
