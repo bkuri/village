@@ -602,4 +602,88 @@ When completing a task:
 
 ### During Release
 
-`village release` automatically queries task store for types, groups by changelog category, updates CHANGELOG.md, and creates git tag. No manual editing required.
+`village release` automatically:
+
+1. Queries Beads for task types
+2. Groups closed tasks by changelog category
+3. Updates CHANGELOG.md with new version section
+4. Creates git tag
+
+**No manual changelog editing required.**
+
+### Example Changelog Entry
+
+```markdown
+## [1.2.0] - 2026-03-11
+
+### Breaking
+- Remove deprecated `--old-flag` CLI option (`bd-a3f8`)
+
+### Added
+- Automatic task decomposition with LLM analysis (`bd-b4c9`)
+- Extensibility framework for custom processors (`bd-d2e7`)
+
+### Fixed
+- Beads CLI compatibility with missing `--status` flag (`bd-c1d6`)
+
+### Changed
+- Improved error messages for lock conflicts (`bd-e5f2`)
+```
+
+### Edge Cases
+
+- **Missing task type**: Defaults to "Changed" category
+- **Beads unavailable**: Gracefully falls back to generic categorization
+- **Empty categories**: Skipped in final changelog entry
+- **bump:none tasks**: Excluded from changelog entirely
+
+<skills_system priority="1">
+
+## Available Skills
+
+<!-- SKILLS_TABLE_START -->
+<usage>
+When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
+
+How to use skills:
+- Invoke: `npx openskills read <skill-name>` (run in your shell)
+  - For multiple: `npx openskills read skill-one,skill-two`
+- The skill content will load with detailed instructions on how to complete the task
+- Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
+
+Usage notes:
+- Only use skills listed in <available_skills> below
+- Do not invoke a skill that is already loaded in your context
+- Each skill invocation is stateless
+</usage>
+
+<available_skills>
+
+<skill>
+<name>autofix</name>
+<description>Auto-fix CodeRabbit review comments - get CodeRabbit review comments from GitHub and fix them interactively or in batch</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>code-review</name>
+<description>AI-powered code review using CodeRabbit. Default code-review skill. Trigger for any explicit review request AND autonomously when the agent thinks a review is needed (code/PR/quality/security).</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>openacp-tunnel</name>
+<description>Expose local ports to the internet. Use when user wants to share, preview, or access their local dev server remotely. Triggers on phrases like "expose port", "map port", "share my app", "make it public", "open tunnel", "public URL", "share localhost", "preview on phone", "access from outside", "forward port", "ngrok", "cloudflare tunnel", etc.</description>
+<location>global</location>
+</skill>
+
+<skill>
+<name>ralph-wiggum</name>
+<description>Autonomous AI coding with spec-driven development. Implements Geoffrey Huntley's iterative bash loop methodology where agents work through specs one at a time, outputting a completion signal only when acceptance criteria are 100% met.</description>
+<location>global</location>
+</skill>
+
+</available_skills>
+<!-- SKILLS_TABLE_END -->
+
+</skills_system>

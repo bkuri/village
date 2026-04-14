@@ -287,7 +287,7 @@ def _run_onboard(project_root: Path, force: bool, skip_interview: bool) -> None:
         force: Whether to overwrite existing files.
         skip_interview: Whether to skip the interactive interview.
     """
-    from village.config import OnboardConfig
+    from village.config import get_config as _get_config
     from village.onboard.detector import detect_project
     from village.onboard.generator import Generator
     from village.onboard.generator import InterviewResult as GenInterviewResult
@@ -305,8 +305,9 @@ def _run_onboard(project_root: Path, force: bool, skip_interview: bool) -> None:
             click.echo("AGENTS.md and README.md already exist. Use --force to overwrite.")
             return
 
+    config = _get_config()
     engine = InterviewEngine(
-        config=OnboardConfig(),
+        config=config.onboard,
         project_info=info,
         scaffold=scaffold,
     )

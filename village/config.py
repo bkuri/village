@@ -758,6 +758,104 @@ def _parse_config_file(config_path: Path) -> dict[str, str]:
     return config
 
 
+def _normalize_config(config: dict[str, str]) -> dict[str, str]:
+    """Add uppercase SECTION_KEY forms for section.key entries.
+
+    Bridges the gap between config file format (section.key)
+    and what from_env_and_config methods expect (SECTION_KEY).
+    """
+    normalized = dict(config)
+    for key, value in config.items():
+        if "." in key:
+            flat = key.upper().replace(".", "_")
+            if flat not in normalized:
+                normalized[flat] = value
+    return normalized
+
+
+# Sub-config fields shared between Config and GlobalConfig.
+# Single source of truth — add new sub-configs here only.
+_SUB_CONFIGS: list[tuple[str, type]] = [
+    ("llm", LLMConfig),
+    ("mcp", MCPConfig),
+    ("safety", SafetyConfig),
+    ("conflict", ConflictConfig),
+    ("metrics", MetricsConfig),
+    ("dashboard", DashboardConfig),
+    ("ci", CIConfig),
+    ("notifications", NotificationConfig),
+    ("extensions", ExtensionConfig),
+    ("task_breakdown", TaskBreakdownConfig),
+    ("acp", ACPConfig),
+    ("memory", MemoryConfig),
+    ("onboard", OnboardConfig),
+    ("council", CouncilConfig),
+    ("approval", ApprovalConfig),
+]
+
+
+def _build_sub_configs(file_config: dict[str, str]) -> dict[str, object]:
+    """Build all sub-config objects from a flat config dict."""
+    return {name: cls.from_env_and_config(file_config) for name, cls in _SUB_CONFIGS}
+
+
+def _global_config_path() -> Path:
+    xdg = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
+    return Path(xdg) / "village" / "config"
+
+
+def _load_global_config() -> dict[str, str]:
+    path = _global_config_path()
+    raw = _parse_config_file(path)
+    if raw:
+        logger.debug(f"Loaded global config from {path}: {len(raw)} keys")
+    return raw
+
+
+def _merge_configs(global_config: dict[str, str], project_config: dict[str, str]) -> dict[str, str]:
+    """Merge global and project configs, with project taking priority.
+
+    Applies normalization after merge so SECTION_KEY forms reflect
+    the final merged values, not just global values.
+    """
+    merged = dict(global_config)
+    merged.update(project_config)
+    return _normalize_config(merged)
+
+
+@dataclass
+class GlobalConfig:
+    """Configuration from global config file (~/.config/village/config).
+
+    Unlike Config, this has no project-specific paths or git root.
+    Used by tools that need config outside a project context (e.g., interview engine).
+    """
+
+    agents: dict[str, AgentConfig] = field(default_factory=dict)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    onboard: OnboardConfig = field(default_factory=OnboardConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
+    council: CouncilConfig = field(default_factory=CouncilConfig)
+    dashboard: DashboardConfig = field(default_factory=DashboardConfig)
+    safety: SafetyConfig = field(default_factory=SafetyConfig)
+    conflict: ConflictConfig = field(default_factory=ConflictConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    extensions: ExtensionConfig = field(default_factory=ExtensionConfig)
+    task_breakdown: TaskBreakdownConfig = field(default_factory=TaskBreakdownConfig)
+    acp: ACPConfig = field(default_factory=ACPConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
+    approval: ApprovalConfig = field(default_factory=ApprovalConfig)
+    ci: CIConfig = field(default_factory=CIConfig)
+    notifications: NotificationConfig = field(default_factory=NotificationConfig)
+
+
+def get_global_config() -> GlobalConfig:
+    raw_config = _load_global_config()
+    file_config = _normalize_config(raw_config)
+    sub_configs = _build_sub_configs(file_config)
+    return GlobalConfig(**sub_configs)
+
+
 def get_config() -> Config:
     """
     Get current configuration.
@@ -833,7 +931,9 @@ def _build_config(git_root: Path) -> Config:
 
     # Parse config file if it exists
     config_path = village_dir / "config"
-    file_config = _parse_config_file(config_path)
+    global_config = _load_global_config()
+    project_config = _parse_config_file(config_path)
+    file_config = _merge_configs(global_config, project_config)
 
     # Override max_workers from env var if provided
     max_workers_str = os.environ.get("VILLAGE_MAX_WORKERS")
@@ -865,46 +965,8 @@ def _build_config(git_root: Path) -> Config:
     # Override default_agent from env var or config file
     default_agent = os.environ.get("VILLAGE_DEFAULT_AGENT") or file_config.get("DEFAULT_AGENT") or DEFAULT_AGENT
 
-    # Parse LLM configuration
-    llm_config = LLMConfig.from_env_and_config(file_config)
-
-    # Parse MCP configuration
-    mcp_config = MCPConfig.from_env_and_config(file_config)
-
-    # Parse safety configuration
-    safety_config = SafetyConfig.from_env_and_config(file_config)
-
-    # Parse conflict configuration
-    conflict_config = ConflictConfig.from_env_and_config(file_config)
-
-    # Parse metrics configuration
-    metrics_config = MetricsConfig.from_env_and_config(file_config)
-
-    # Parse dashboard configuration
-    dashboard_config = DashboardConfig.from_env_and_config(file_config)
-
-    # Parse CI configuration
-    ci_config = CIConfig.from_env_and_config(file_config)
-
-    # Parse notifications configuration
-    notifications_config = NotificationConfig.from_env_and_config(file_config)
-
-    # Parse extension configuration
-    extensions_config = ExtensionConfig.from_env_and_config(file_config)
-
-    # Parse task breakdown configuration
-    task_breakdown_config = TaskBreakdownConfig.from_env_and_config(file_config)
-
-    # Parse ACP configuration
-    acp_config = ACPConfig.from_env_and_config(file_config)
-
-    memory_config = MemoryConfig.from_env_and_config(file_config)
-
-    onboard_config = OnboardConfig.from_env_and_config(file_config)
-
-    council_config = CouncilConfig.from_env_and_config(file_config)
-
-    approval_config = ApprovalConfig.from_env_and_config(file_config)
+    # Parse sub-configurations (shared with GlobalConfig via _SUB_CONFIGS)
+    sub_configs = _build_sub_configs(file_config)
 
     # Parse agent configs from file
     agents: dict[str, AgentConfig] = {}
@@ -986,19 +1048,5 @@ def _build_config(git_root: Path) -> Config:
         queue_ttl_minutes=queue_ttl_minutes,
         default_agent=default_agent,
         agents=agents,
-        llm=llm_config,
-        mcp=mcp_config,
-        safety=safety_config,
-        conflict=conflict_config,
-        metrics=metrics_config,
-        dashboard=dashboard_config,
-        ci=ci_config,
-        notifications=notifications_config,
-        extensions=extensions_config,
-        task_breakdown=task_breakdown_config,
-        acp=acp_config,
-        memory=memory_config,
-        onboard=onboard_config,
-        council=council_config,
-        approval=approval_config,
+        **sub_configs,
     )

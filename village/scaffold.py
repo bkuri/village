@@ -1,5 +1,7 @@
 """Project scaffolding for village new."""
 
+from __future__ import annotations
+
 import logging
 import subprocess
 from dataclasses import dataclass, field
@@ -146,18 +148,25 @@ def plan_scaffold(name: str, parent_dir: Path) -> ScaffoldPlan:
     return ScaffoldPlan(project_dir=project_dir, steps=steps)
 
 
-def _run_onboard_pipeline(project_dir: Path, name: str, description: str = "") -> list[str]:
+def _run_onboard_pipeline(
+    project_dir: Path,
+    name: str,
+    description: str = "",
+    onboard_config: "OnboardConfig | None" = None,  # noqa: F821
+) -> list[str]:
     """Run the adaptive onboard pipeline for a new project.
 
     Args:
         project_dir: Root directory of the new project.
         name: Project name.
         description: Initial project description from the create workflow.
+        onboard_config: Onboard config override (uses global config if not provided).
 
     Returns:
         List of created file descriptions.
     """
     from village.config import OnboardConfig
+    from village.config import get_global_config as _get_global_config
     from village.onboard.detector import detect_project
     from village.onboard.generator import Generator
     from village.onboard.generator import InterviewResult as GenInterviewResult
@@ -170,12 +179,18 @@ def _run_onboard_pipeline(project_dir: Path, name: str, description: str = "") -
     info.project_name = name
     scaffold = get_scaffold(info)
 
+    if onboard_config is None:
+        onboard_config = _get_global_config().onboard
+
+    if not isinstance(onboard_config, OnboardConfig):
+        raise TypeError(f"Expected OnboardConfig, got {type(onboard_config).__name__}")
+
     preseeded: dict[str, str] = {}
     if description:
         preseeded["What does this project do?"] = description
 
     engine = InterviewEngine(
-        config=OnboardConfig(),
+        config=onboard_config,
         project_info=info,
         scaffold=scaffold,
         preseeded_answers=preseeded,

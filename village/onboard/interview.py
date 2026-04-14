@@ -1,10 +1,18 @@
+import json
+import logging
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import click
 
 from village.config import OnboardConfig
 from village.onboard.detector import ProjectInfo
 from village.onboard.scaffolds import ScaffoldTemplate
+
+if TYPE_CHECKING:
+    from village.llm.client import LLMClient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,6 +35,70 @@ _DEFAULT_QUESTIONS = [
     "Does this project have a release or versioning strategy?",
     "Anything else agents should know that I haven't asked about?",
 ]
+
+_SYSTEM_PROMPT = """\
+You are a project onboarding assistant. Your job is to help the user \
+describe their project through a natural conversation.
+
+GOAL: In {max_questions} exchanges or fewer, learn enough about this project \
+to generate a useful AGENTS.md, README.md, and initial wiki pages for AI agents.
+
+WHAT TO EXTRACT (silently track these, do NOT ask about them directly):
+- Project overview and purpose
+- Programming language and framework
+- Entry points
+- Build, test, lint commands
+- Key dependencies
+- External integrations
+- Hard rules / constraints for agents
+- Directory structure
+- Current work in progress
+- Versioning strategy
+
+RULES:
+1. Each question must build on the LAST answer. Never ask a disconnected question.
+2. Ask ONE focused question at a time. Never list multiple questions.
+3. Be conversational and brief. 1-2 sentences max per response.
+4. When the user says "no idea", "not sure", "none", etc., infer what you can \
+and move to the most useful next topic. Do NOT repeat or rephrase the same question.
+5. If the project is brand new (no code yet), focus on what it SHOULD do, not \
+what tools it currently uses. Help refine the concept.
+6. When you have enough information, respond with exactly: <complete/>
+7. Output ONLY your conversational response. No labels, no prefixes, no markdown headers.
+
+EXAMPLE FLOW for "a splitwise clone":
+  Good: "A splitwise clone — so splitting expenses between people. \
+What features matter most: group expenses, recurring bills, debt simplification?"
+  Good (after answer): "Got it. Should users be able to import data from \
+existing apps or spreadsheets?"
+  Bad: "What programming language is this project written in?" (too specific too early)
+  Bad: "What are the key dependencies?" (irrelevant for a new project)"""
+
+
+_EXTRACTION_PROMPT = """\
+Based on the following interview transcript, extract structured project information.
+Return a JSON object with these keys. Use empty strings for anything unknown.
+
+Keys:
+- "overview": What the project does (2-3 sentences)
+- "language": Primary programming language
+- "framework": Framework or "none"
+- "entry_point": Main entry point
+- "build_commands": How to build (comma-separated)
+- "test_commands": How to test (comma-separated)
+- "lint_commands": Linting/formatting tools (comma-separated)
+- "dependencies": Key dependencies (comma-separated)
+- "integrations": External services or tools
+- "constraints": Hard rules agents must follow
+- "directory_structure": Key directories and roles
+- "active_work": What's currently being worked on
+- "versioning": Release/versioning strategy
+- "extra": Anything else agents should know
+
+TRANSCRIPT:
+{transcript}
+
+Return ONLY the JSON object, no other text."""
 
 
 class InterviewEngine:
@@ -75,6 +147,195 @@ class InterviewEngine:
         )
 
     def run_interactive(self) -> InterviewResult:
+        llm = self._get_llm_client()
+        if llm is not None:
+            try:
+                return self._run_conversation(llm)
+            except (ValueError, ConnectionError, TimeoutError):
+                logger.warning("LLM interview failed, falling back to fixed questions", exc_info=True)
+
+        return self._run_fixed_interactive()
+
+    def _run_conversation(self, llm: "LLMClient") -> InterviewResult:
+        transcript: list[tuple[str, str]] = []
+        conversation: list[dict[str, str]] = []
+        max_turns = self.config.max_questions
+
+        system = _SYSTEM_PROMPT.format(max_questions=max_turns)
+
+        opening_context = self._build_opening_context()
+        conversation.append({"role": "user", "content": opening_context})
+
+        first_question = llm.call(
+            prompt=opening_context,
+            system_prompt=system,
+            max_tokens=256,
+            timeout=30,
+        ).strip()
+
+        if first_question.startswith("<complete"):
+            return self._build_result({}, [])
+
+        click.echo(f"\n{first_question}\n")
+
+        turn_count = 0
+        while turn_count < max_turns:
+            user_input = self._read_input()
+            if user_input is None:
+                break
+
+            transcript.append((first_question, user_input))
+            conversation.append({"role": "assistant", "content": first_question})
+            conversation.append({"role": "user", "content": user_input})
+            turn_count += 1
+
+            conversation_text = self._format_conversation(conversation)
+            response = llm.call(
+                prompt=conversation_text,
+                system_prompt=system,
+                max_tokens=256,
+                timeout=30,
+            ).strip()
+
+            if response.startswith("<complete"):
+                break
+
+            first_question = response
+            click.echo(f"\n{first_question}\n")
+
+        click.echo("")
+
+        extracted = self._extract_structured(llm, transcript)
+
+        answers: dict[str, str] = {}
+        if extracted:
+            answers = self._map_extracted_to_answers(extracted)
+        if not answers:
+            answers = self._transcript_to_answers(transcript)
+
+        return self._confirm_summary(answers, transcript)
+
+    def _build_opening_context(self) -> str:
+        parts: list[str] = []
+
+        if self.preseeded_answers:
+            desc = self.preseeded_answers.get("What does this project do?", "")
+            if desc:
+                parts.append(f"The user wants to build: {desc}")
+        else:
+            parts.append("The user is starting a new project and needs help describing it.")
+
+        if self.project_info.language != "unknown":
+            parts.append(f"Auto-detected language: {self.project_info.language}")
+        if self.project_info.framework:
+            parts.append(f"Auto-detected framework: {self.project_info.framework}")
+        if self.project_info.test_runner:
+            parts.append(f"Auto-detected test runner: {self.project_info.test_runner}")
+
+        parts.append(
+            "Ask your first question to start the conversation. Build on what you know to refine the project concept."
+        )
+
+        return " ".join(parts)
+
+    def _read_multiline_input(
+        self,
+        *,
+        on_done: str | None = None,
+        on_skip: str | None = None,
+    ) -> str | None:
+        """Read multiline input from the user.
+
+        Returns None if user types the 'on_done' keyword on the first line.
+        Returns empty string if user types the 'on_skip' keyword on the first line.
+        Otherwise returns the joined lines (blank line or EOF terminates).
+        """
+        lines: list[str] = []
+        try:
+            while True:
+                try:
+                    line = input()
+                except EOFError:
+                    break
+
+                if not lines and on_done and line.lower() == on_done:
+                    return None
+                if not lines and on_skip and line.lower() == on_skip:
+                    return ""
+                if line == "" and lines:
+                    break
+                if line == "" and not lines:
+                    break
+                lines.append(line)
+        except KeyboardInterrupt:
+            click.echo("\n")
+            return None
+
+        return "\n".join(lines)
+
+    def _read_input(self) -> str | None:
+        return self._read_multiline_input(on_done="done", on_skip="skip")
+
+    def _format_conversation(self, conversation: list[dict[str, str]]) -> str:
+        """Format conversation history as readable text for the LLM."""
+        lines: list[str] = []
+        for msg in conversation:
+            role = msg["role"].capitalize()
+            lines.append(f"[{role}]: {msg['content']}")
+        return "\n".join(lines)
+
+    def _extract_structured(self, llm: "LLMClient", transcript: list[tuple[str, str]]) -> dict[str, str] | None:
+        lines: list[str] = []
+        for q, a in transcript:
+            if a:
+                lines.append(f"Q: {q}\nA: {a}")
+        if not lines:
+            return None
+
+        transcript_text = "\n\n".join(lines)
+        prompt = _EXTRACTION_PROMPT.format(transcript=transcript_text)
+
+        try:
+            raw = llm.call(prompt=prompt, system_prompt="Return only valid JSON.", max_tokens=1024, timeout=30)
+            cleaned = raw.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("\n", 1)[-1]
+                cleaned = cleaned.rsplit("```", 1)[0]
+            result: dict[str, str] = json.loads(cleaned)
+            return result
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to extract structured data: {e}")
+            return None
+
+    def _map_extracted_to_answers(self, extracted: dict[str, str]) -> dict[str, str]:
+        mapping = {
+            "overview": "What does this project do?",
+            "entry_point": "What's the main entry point?",
+            "test_commands": "How do you run tests?",
+            "lint_commands": "What linting or formatting tools do you use?",
+            "dependencies": "What are the key dependencies?",
+            "integrations": "What external services or tools does this integrate with?",
+            "constraints": "What hard rules or constraints must agents follow?",
+            "directory_structure": "What are the key directories and their roles?",
+            "active_work": "What's currently being worked on?",
+            "versioning": "Does this project have a release or versioning strategy?",
+            "extra": "Anything else agents should know that I haven't asked about?",
+        }
+        answers: dict[str, str] = {}
+        for key, question in mapping.items():
+            val = extracted.get(key, "").strip()
+            if val:
+                answers[question] = val
+        return answers
+
+    def _transcript_to_answers(self, transcript: list[tuple[str, str]]) -> dict[str, str]:
+        answers: dict[str, str] = {}
+        for q, a in transcript:
+            if a:
+                answers[q] = a
+        return answers
+
+    def _run_fixed_interactive(self) -> InterviewResult:
         questions = self.get_default_questions()
         answers: dict[str, str] = dict(self.preseeded_answers)
         transcript: list[tuple[str, str]] = []
@@ -101,38 +362,44 @@ class InterviewEngine:
                 continue
 
             click.echo(f"? {question}")
-            lines: list[str] = []
+            answer_text = self._read_multiline_input(on_done="done", on_skip="skip")
+            if answer_text is None:
+                click.echo("")
+                return self._build_result(answers, transcript)
 
-            try:
-                while True:
-                    try:
-                        line = input()
-                    except EOFError:
-                        break
-
-                    if not lines and line.lower() == "done":
-                        click.echo("")
-                        return self._build_result(answers, transcript)
-
-                    if not lines and line.lower() == "skip":
-                        break
-
-                    if line == "" and lines:
-                        break
-                    if line == "" and not lines:
-                        break
-
-                    lines.append(line)
-            except KeyboardInterrupt:
-                click.echo("\n")
-                break
-
-            answer = "\n".join(lines)
+            answer = answer_text
             answers[question] = answer
             transcript.append((question, answer))
             click.echo("")
 
+        return self._confirm_summary(answers, transcript)
+
+    def _confirm_summary(self, answers: dict[str, str], transcript: list[tuple[str, str]]) -> InterviewResult:
+        click.echo("--- Summary ---")
+        if answers:
+            for key, val in answers.items():
+                label = key.rstrip("?").strip()
+                click.echo(f"  {label}")
+                for line in val.split("\n"):
+                    click.echo(f"    {line}")
+        else:
+            click.echo("  No details captured.")
+
+        click.echo("")
+        confirmed = self._prompt_confirm("Create project with these details?")
+        if not confirmed:
+            click.echo("Aborted.")
+            return self._build_result({}, [])
+
         return self._build_result(answers, transcript)
+
+    def _prompt_confirm(self, question: str) -> bool:
+        try:
+            response = click.confirm(f"  {question}", default=True)
+            return bool(response)
+        except (click.exceptions.Abort, EOFError, KeyboardInterrupt):
+            click.echo("")
+            return False
 
     def _build_result(self, answers: dict[str, str], transcript: list[tuple[str, str]]) -> InterviewResult:
         summary_parts = [f"{k}: {v}" for k, v in answers.items() if v]
@@ -143,3 +410,17 @@ class InterviewEngine:
             project_summary=summary,
             raw_transcript=transcript,
         )
+
+    def _get_llm_client(self) -> "LLMClient | None":
+        try:
+            from village.config import get_global_config
+            from village.llm.factory import get_llm_client as _get_llm_client
+
+            global_cfg = get_global_config()
+            return _get_llm_client(global_cfg)
+        except ValueError:
+            logger.debug("No LLM client available for interview (missing API key or config)")
+            return None
+        except Exception:
+            logger.warning("Unexpected error creating LLM client", exc_info=True)
+            return None

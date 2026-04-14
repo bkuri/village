@@ -4,7 +4,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
-from village.config import Config
+from village.config import Config, GlobalConfig
 from village.llm.client import LLMClient
 from village.llm.mcp import MCPClient, MCPUseClient
 from village.llm.providers.anthropic import AnthropicClient
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
+def get_llm_client(config: Config | GlobalConfig, agent_name: str | None = None) -> LLMClient:
     """
     Factory to get LLM client based on config.
 
@@ -26,7 +26,7 @@ def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
     2. Global LLM config
 
     Args:
-        config: Village configuration
+        config: Village configuration (Config or GlobalConfig)
         agent_name: Optional agent name for per-agent override
 
     Returns:
@@ -60,6 +60,24 @@ def get_llm_client(config: Config, agent_name: str | None = None) -> LLMClient:
         if not api_key:
             raise ValueError(f"OpenRouter API key not found. Set {config.llm.api_key_env} environment variable.")
         return OpenRouterClient(api_key=api_key, model=model)
+
+    elif provider == "venice":
+        # Check provider-specific key first, fall back to configured key
+        api_key = os.getenv("VENICE_API_KEY") or os.getenv(config.llm.api_key_env)
+        if not api_key:
+            raise ValueError(
+                f"Venice API key not found. Set VENICE_API_KEY or {config.llm.api_key_env} environment variable."
+            )
+        return OpenRouterClient(api_key=api_key, model=model, base_url="https://api.venice.ai/api/v1")
+
+    elif provider == "zai":
+        # Check provider-specific key first, fall back to configured key
+        api_key = os.getenv("ZAI_API_KEY") or os.getenv(config.llm.api_key_env)
+        if not api_key:
+            raise ValueError(
+                f"z.ai API key not found. Set ZAI_API_KEY or {config.llm.api_key_env} environment variable."
+            )
+        return OpenRouterClient(api_key=api_key, model=model, base_url="https://api.z.ai/v1")
 
     elif provider == "ollama":
         # Ollama doesn't need API key
