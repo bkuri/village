@@ -235,7 +235,7 @@ village up --skip-interview       # Use scaffold defaults without interview
 ### Configuration
 ```ini
 [onboard]
-interview_model = openrouter/auto
+interview_model = openrouter/anthropic/claude-3-haiku
 max_questions = 15
 critic_persona = red-team        # devil's-advocate | red-team | gordon-ramsay
 self_critique = true

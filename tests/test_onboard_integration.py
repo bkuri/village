@@ -259,7 +259,7 @@ class TestConfigIntegration:
     def test_default_config_values(self) -> None:
         config = OnboardConfig()
         assert config.max_questions == 15
-        assert config.interview_model == "openrouter/auto"
+        assert config.interview_model == "openrouter/anthropic/claude-3-haiku"
         assert config.skip_on_first_up is False
         assert config.ppc_mode == "onboard"
         assert config.self_critique is True

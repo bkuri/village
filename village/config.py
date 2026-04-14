@@ -454,7 +454,7 @@ class CouncilConfig:
 class OnboardConfig:
     """Adaptive onboarding configuration."""
 
-    interview_model: str = "openrouter/auto"
+    interview_model: str = "openrouter/anthropic/claude-3-haiku"
     max_questions: int = 15
     skip_on_first_up: bool = False
     ppc_mode: str = "onboard"
@@ -468,7 +468,7 @@ class OnboardConfig:
         """Load onboard config from environment variables and config file."""
         model_env = os.environ.get("VILLAGE_ONBOARD_INTERVIEW_MODEL")
         model_config = config.get("ONBOARD.INTERVIEW_MODEL") or config.get("onboard.interview_model")
-        interview_model = model_env or model_config or "openrouter/auto"
+        interview_model = model_env or model_config or "openrouter/anthropic/claude-3-haiku"
 
         max_q_env = os.environ.get("VILLAGE_ONBOARD_MAX_QUESTIONS", "")
         max_q_config = config.get("ONBOARD.MAX_QUESTIONS") or config.get("onboard.max_questions")
