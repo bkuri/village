@@ -310,7 +310,7 @@ DEFAULT_AGENT=worker
 SCM=git
 
 [onboard]
-interview_model=openrouter/auto
+interview_model=openrouter/anthropic/claude-3-haiku
 max_questions=15
 critic_persona=red-team
 self_critique=true
