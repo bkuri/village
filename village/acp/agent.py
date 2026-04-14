@@ -20,6 +20,7 @@ from acp.schema import (
     NewSessionResponse,
     PromptResponse,
     ResumeSessionResponse,
+    SessionInfo,
     SetSessionConfigOptionResponse,
     SetSessionModelResponse,
     SetSessionModeResponse,
@@ -100,8 +101,18 @@ class VillageACPAgent:
         **kwargs: Any,
     ) -> ListSessionsResponse:
         """Handle ACP session/list request."""
-        # TODO: Implement session listing
-        return ListSessionsResponse(sessions=[])
+        sessions: list[SessionInfo] = []
+        for session_id, session_cwd in self.bridge._session_cwds.items():
+            if cwd and session_cwd != cwd:
+                continue
+            sessions.append(
+                SessionInfo(
+                    session_id=session_id,
+                    cwd=session_cwd,
+                    title=self.bridge._session_models.get(session_id),
+                )
+            )
+        return ListSessionsResponse(sessions=sessions)
 
     async def set_session_mode(
         self,
