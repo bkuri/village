@@ -551,7 +551,14 @@ def _get_agent_from_task_id(
 
         store = get_task_store()
         if store.is_available():
-            pass
+            task = store.get_task(task_id)
+            if task and task.labels:
+                from village.config import load_config
+                from village.queue import extract_agent_from_labels
+                config = load_config()
+                agent = extract_agent_from_labels(task.labels, config)
+                if agent:
+                    return agent
     except Exception:
         logger.debug("Task store unavailable for agent detection")
 
