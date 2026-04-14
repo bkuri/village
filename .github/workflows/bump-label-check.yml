@@ -14,15 +14,13 @@ jobs:
   check-bump-label:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
       - name: Check bump label
         shell: bash
         env:
-          # Pass the labels JSON from the event payload into the environment.
-          # For push events this will be empty; the step handles that case.
-          PR_LABELS_JSON: ${{ toJson(github.event.pull_request.labels) }}
+          GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
         run: |
           # For push-to-main events the label gate does not apply — just pass.
           if [[ "$EVENT_NAME" == "push" ]]; then
@@ -30,10 +28,14 @@ jobs:
             exit 0
           fi
 
-          # Extract every label name that starts with "bump:" from the PR payload.
-          BUMP_LABEL=$(echo "$PR_LABELS_JSON" \
-            | jq -r '.[] | .name | select(startswith("bump:"))' \
-            | head -n1)
+          # Fetch current labels from the GitHub API instead of relying on
+          # the event payload, which can be stale for synchronize/reopened
+          # events or missing labels added after the PR was opened.
+          LABELS_JSON=$(gh api \
+            "repos/$REPO/pulls/$PR_NUMBER" \
+            --jq '.labels[].name')
+
+          BUMP_LABEL=$(echo "$LABELS_JSON" | grep '^bump:' | head -n1)
 
           if [[ -z "$BUMP_LABEL" ]]; then
             echo ""
