@@ -92,14 +92,9 @@ class Monitor:
             if self.auto_research and self._researcher and results:
                 print("Running auto-research on new entries...")
                 try:
-                    research_result = asyncio.run(
-                        self._researcher.research_gaps(max_orphans=3)
-                    )
+                    research_result = asyncio.run(self._researcher.research_gaps(max_orphans=3))
                     self._research_result = research_result
-                    print(
-                        f"Research complete: {research_result.gaps_researched} "
-                        "gaps filled"
-                    )
+                    print(f"Research complete: {research_result.gaps_researched} gaps filled")
                 except Exception as e:
                     print(f"Auto-research failed: {e}")
 

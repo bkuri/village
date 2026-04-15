@@ -12,8 +12,8 @@ class OpenRouterClient(LLMClient):
     def __init__(
         self,
         api_key: str,
-        model: str = 'anthropic/claude-3.5-sonnet',
-        base_url: str = 'https://openrouter.ai/api/v1',
+        model: str = "anthropic/claude-3.5-sonnet",
+        base_url: str = "https://openrouter.ai/api/v1",
     ):
         self.api_key = api_key
         self.model = model
@@ -30,31 +30,31 @@ class OpenRouterClient(LLMClient):
         messages = []
 
         if system_prompt:
-            messages.append({'role': 'system', 'content': system_prompt})
+            messages.append({"role": "system", "content": system_prompt})
 
-        messages.append({'role': 'user', 'content': prompt})
+        messages.append({"role": "user", "content": prompt})
 
         headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/anomalyco/village',
-            'X-Title': 'Village',
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/anomalyco/village",
+            "X-Title": "Village",
         }
 
         payload = {
-            'model': self.model,
-            'messages': messages,
-            'max_tokens': max_tokens,
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
         }
 
         if tools:
-            payload['tools'] = [
+            payload["tools"] = [
                 {
-                    'type': 'function',
-                    'function': {
-                        'name': t.name,
-                        'description': t.description,
-                        'parameters': t.input_schema,
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.input_schema,
                     },
                 }
                 for t in tools
@@ -63,24 +63,24 @@ class OpenRouterClient(LLMClient):
         try:
             with httpx.Client(timeout=timeout) as client:
                 response = client.post(
-                    f'{self.base_url}/chat/completions',
+                    f"{self.base_url}/chat/completions",
                     json=payload,
                     headers=headers,
                 )
                 response.raise_for_status()
 
                 data = response.json()
-                content = data['choices'][0]['message']['content']
+                content = data["choices"][0]["message"]["content"]
 
                 return str(content)
         except httpx.HTTPStatusError as e:
-            logger.error(f'OpenRouter API error: {e.response.status_code} - {e.response.text}')
+            logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
             raise
         except httpx.RequestError as e:
-            logger.error(f'OpenRouter request error: {e}')
+            logger.error(f"OpenRouter request error: {e}")
             raise
         except (KeyError, IndexError) as e:
-            logger.error(f'OpenRouter response parsing error: {e}')
+            logger.error(f"OpenRouter response parsing error: {e}")
             raise
 
     @property
@@ -96,8 +96,8 @@ class AnthropicClient(LLMClient):
     def __init__(
         self,
         api_key: str,
-        model: str = 'claude-3-5-sonnet-20241022',
-        base_url: str = 'https://api.anthropic.com',
+        model: str = "claude-3-5-sonnet-20241022",
+        base_url: str = "https://api.anthropic.com",
     ):
         self.api_key = api_key
         self.model = model
@@ -112,28 +112,28 @@ class AnthropicClient(LLMClient):
         timeout: int = 300,
     ) -> str:
         headers = {
-            'x-api-key': self.api_key,
-            'Content-Type': 'application/json',
-            'anthropic-version': '2023-06-01',
+            "x-api-key": self.api_key,
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
         }
 
-        messages = [{'role': 'user', 'content': prompt}]
+        messages = [{"role": "user", "content": prompt}]
 
         payload: dict = {
-            'model': self.model,
-            'max_tokens': max_tokens,
-            'messages': messages,
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": messages,
         }
 
         if system_prompt:
-            payload['system'] = system_prompt
+            payload["system"] = system_prompt
 
         if tools:
-            payload['tools'] = [
+            payload["tools"] = [
                 {
-                    'name': t.name,
-                    'description': t.description,
-                    'input_schema': t.input_schema,
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
                 }
                 for t in tools
             ]
@@ -141,23 +141,23 @@ class AnthropicClient(LLMClient):
         try:
             with httpx.Client(timeout=timeout) as client:
                 response = client.post(
-                    f'{self.base_url}/v1/messages',
+                    f"{self.base_url}/v1/messages",
                     json=payload,
                     headers=headers,
                 )
                 response.raise_for_status()
 
                 data = response.json()
-                content = data['content'][0]['text']
+                content = data["content"][0]["text"]
                 return str(content)
         except httpx.HTTPStatusError as e:
-            logger.error(f'Anthropic API error: {e.response.status_code} - {e.response.text}')
+            logger.error(f"Anthropic API error: {e.response.status_code} - {e.response.text}")
             raise
         except httpx.RequestError as e:
-            logger.error(f'Anthropic request error: {e}')
+            logger.error(f"Anthropic request error: {e}")
             raise
         except (KeyError, IndexError) as e:
-            logger.error(f'Anthropic response parsing error: {e}')
+            logger.error(f"Anthropic response parsing error: {e}")
             raise
 
     @property

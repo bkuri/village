@@ -2,7 +2,6 @@
 
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Callable, Optional
 
 from village.scribe.curate import Curator
