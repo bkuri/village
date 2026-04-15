@@ -553,9 +553,10 @@ def _get_agent_from_task_id(
         if store.is_available():
             task = store.get_task(task_id)
             if task and task.labels:
-                from village.config import load_config
+                from village.config import get_config
                 from village.queue import extract_agent_from_labels
-                config = load_config()
+
+                config = get_config()
                 agent = extract_agent_from_labels(task.labels, config)
                 if agent:
                     return agent
