@@ -361,7 +361,7 @@ def format_release_dashboard(
     if not pending and not open_tasks and not history:
         lines.append("No pending releases or bump-labeled tasks.")
 
-    lines.append("\nRun `village release --dry-run` to preview, `village release` to apply.")
+    lines.append("\nRun `village builder arrange --dry-run` to preview, `village builder arrange` to apply.")
 
     return "\n".join(lines)
 

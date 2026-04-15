@@ -59,7 +59,7 @@ def _realistic_answers() -> dict[str, str]:
         "What hard rules or constraints must agents follow?": "No print(), use click.echo(). No Any types.",
         "What are the key directories and their roles?": "village/ for source, tests/ for tests.",
         "What's currently being worked on?": "Onboarding flow integration tests.",
-        "Does this project have a release or versioning strategy?": "Semver via village release.",
+        "Does this project have a release or versioning strategy?": "Semver via village builder arrange.",
         "Anything else agents should know that I haven't asked about?": "Always use pathlib.Path.",
     }
 
