@@ -10,6 +10,26 @@ from village.workflow.planner import Planner
 logger = get_logger(__name__)
 
 
+def _get_plan_slugs() -> list[str]:
+    """Get list of plan slugs for shell completion."""
+    try:
+        from village.config import get_config
+        from village.plans.store import FilePlanStore
+
+        config = get_config()
+        plans_dir = config.git_root / ".village" / "plans"
+        store = FilePlanStore(plans_dir)
+        plans = store.list()
+        return [p.slug for p in plans]
+    except Exception:
+        return []
+
+
+def _complete_slug(ctx: click.Context, param: click.Parameter, incomplete: str) -> list[str]:
+    """Shell completion for plan slugs."""
+    return [s for s in _get_plan_slugs() if s.startswith(incomplete)]
+
+
 def _get_loader() -> WorkflowLoader:
     return WorkflowLoader()
 
@@ -284,7 +304,7 @@ def list_plans(filter_state: str) -> None:
 
 
 @planner_group.command("show")
-@click.argument("slug")
+@click.argument("slug", shell_complete=_complete_slug)
 def show_plan(slug: str) -> None:
     """Show plan details."""
     from village.config import get_config
@@ -309,7 +329,7 @@ def show_plan(slug: str) -> None:
 
 
 @planner_group.command("approve")
-@click.argument("slug")
+@click.argument("slug", shell_complete=_complete_slug)
 @click.option("--name", "name_override", default=None, help="Override worktree name")
 def approve_plan(slug: str, name_override: str | None) -> None:
     """Approve a plan and create worktree to start development."""
@@ -356,7 +376,7 @@ def approve_plan(slug: str, name_override: str | None) -> None:
 
 
 @planner_group.command("delete")
-@click.argument("slug")
+@click.argument("slug", shell_complete=_complete_slug)
 @click.option("--force", is_flag=True, help="Force delete non-draft plans")
 def delete_plan(slug: str, force: bool) -> None:
     """Delete a plan."""
@@ -386,8 +406,31 @@ def delete_plan(slug: str, force: bool) -> None:
 
 
 @planner_group.command("resume")
-@click.argument("slug")
-def resume_plan(slug: str) -> None:
-    """Resume editing a draft plan."""
-    click.echo("Resume functionality coming soon.")
-    click.echo("Use 'village planner design' to create a new plan.")
+@click.argument("slug", shell_complete=_complete_slug)
+@click.option("--model", default=None, help="Model to use for the interview")
+def resume_plan(slug: str, model: str | None) -> None:
+    """Resume editing a draft plan with an interactive interview."""
+    from village.config import get_config
+    from village.llm.factory import get_llm_client
+    from village.plans.interview import run_interview_session
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore, PlanNotFoundError
+
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    try:
+        plan = store.get(slug)
+    except PlanNotFoundError:
+        raise click.ClickException(f"Plan '{slug}' not found")
+
+    if plan.state != PlanState.DRAFT:
+        raise click.ClickException(f"Plan '{slug}' is not a draft (current state: {plan.state.value})")
+
+    plan_dir = plans_dir / "drafts" / slug
+
+    llm_client = get_llm_client(config)
+
+    run_interview_session(plan, plan_dir, llm_client)
+    click.echo("Session saved.")

@@ -69,12 +69,23 @@ def check_and_trigger_wave(config: Any) -> bool:
         return False
 
 
-def check_landing_trigger(config: Any, plan_slug: str | None = None) -> bool:
+def check_landing_trigger(
+    config: Any,
+    plan_slug: str | None = None,
+    landing_dry_run: bool = False,
+) -> bool:
     """Check if all tasks are done and trigger landing.
+
+    Args:
+        config: Village configuration
+        plan_slug: Optional plan slug to update state after landing
+        landing_dry_run: If True, simulate landing without creating PRs
 
     Returns True if landing was triggered.
     """
     from village.builder.arrange import arrange_landing
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore
     from village.tasks import get_task_store
 
     store = get_task_store()
@@ -89,11 +100,42 @@ def check_landing_trigger(config: Any, plan_slug: str | None = None) -> bool:
     if done_ids == all_ids and done_ids:
         click.echo("\nAll tasks completed! Triggering landing...")
         try:
-            arrange_landing(dry_run=False)
-            click.echo("Landing complete!")
+            arrange_landing(dry_run=landing_dry_run)
+
+            # Update plan state to LANDED if we have a plan slug
+            if plan_slug:
+                try:
+                    plans_dir = config.git_root / ".village" / "plans"
+                    plan_store = FilePlanStore(plans_dir)
+                    plan = plan_store.get(plan_slug)
+                    plan.state = PlanState.LANDED
+                    plan_store.update(plan)
+                    logger.info(f"Plan '{plan_slug}' state updated to LANDED")
+                    click.echo(f"Plan '{plan_slug}' marked as LANDED")
+                except Exception as e:
+                    logger.warning(f"Failed to update plan state: {e}")
+
+            if landing_dry_run:
+                click.echo("Landing dry-run complete!")
+            else:
+                click.echo("Landing complete!")
             return True
         except Exception as e:
+            logger.error(f"Landing failed: {e}")
             click.echo(f"Landing failed: {e}", err=True)
+
+            # Update plan state to indicate landing failure (record error in metadata)
+            if plan_slug:
+                try:
+                    plans_dir = config.git_root / ".village" / "plans"
+                    plan_store = FilePlanStore(plans_dir)
+                    plan = plan_store.get(plan_slug)
+                    plan.metadata["landing_error"] = str(e)
+                    plan_store.update(plan)
+                    logger.info(f"Plan '{plan_slug}' landing failure recorded")
+                except Exception:
+                    pass
+
             return False
 
     return False
@@ -201,6 +243,9 @@ def run_loop(
     dry_run: bool = False,
     config: Config | None = None,
     parallel: int = 1,
+    wave_enabled: bool = True,
+    plan_slug: str | None = None,
+    landing_dry_run: bool = False,
 ) -> LoopResult:
     if config is None:
         config = get_config()
@@ -332,6 +377,26 @@ def run_loop(
                     completed_count += 1
                     consecutive_failures = 0
                     logger.info(f"Spec {spec.name} marked COMPLETE")
+
+                    # After task is marked done, trigger wave evaluation
+                    if wave_enabled:
+                        try:
+                            check_and_trigger_wave(config)
+                        except RuntimeError as e:
+                            if "cant-continue" in str(e):
+                                logger.info("Wave evaluation rejected. Stopping build.")
+                                break
+                            raise
+                        except Exception as e:
+                            logger.warning(f"Wave evaluation failed: {e}")
+
+                    # After task is marked done, check if landing is triggered
+                    try:
+                        if check_landing_trigger(config, plan_slug, landing_dry_run):
+                            logger.info("All tasks completed. Landing triggered.")
+                            break
+                    except Exception as e:
+                        logger.error(f"Landing check failed: {e}")
                 else:
                     logger.warning("Promise found but spec not marked complete")
                     consecutive_failures += 1

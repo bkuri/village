@@ -30,6 +30,9 @@ def builder_group(ctx: click.Context) -> None:
 @click.option("--parallel", "-p", "parallel", default=1, type=int, help="Number of parallel worktrees")
 @click.option("--max-iterations", "-n", default=None, type=int, help="Max iterations (default: unlimited)")
 @click.option("--dry-run", is_flag=True, help="Show plan without executing")
+@click.option("--no-wave", is_flag=True, help="Disable wave triggers")
+@click.option("--landing-dry-run", is_flag=True, help="Simulate landing without creating PRs")
+@click.option("--plan", "plan_slug", default=None, help="Plan slug for state tracking")
 @click.pass_context
 def run_loop(
     ctx: click.Context,
@@ -39,6 +42,9 @@ def run_loop(
     parallel: int,
     max_iterations: int | None,
     dry_run: bool,
+    no_wave: bool,
+    landing_dry_run: bool,
+    plan_slug: str | None,
 ) -> None:
     """Run the autonomous spec-driven build loop."""
 
@@ -78,6 +84,9 @@ def run_loop(
             dry_run=dry_run,
             config=config,
             parallel=parallel,
+            wave_enabled=not no_wave,
+            plan_slug=plan_slug,
+            landing_dry_run=landing_dry_run,
         )
 
         click.echo(f"\nBuild loop finished ({result.iterations} iterations)")
