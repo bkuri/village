@@ -19,12 +19,14 @@ def tasks() -> None:
 @click.option("--status", type=str, default=None, help="Filter by status")
 @click.option("--type", "issue_type", default=None, help="Filter by issue type")
 @click.option("--label", type=str, default=None, help="Filter by label")
+@click.option("--project", "project_filter", default=None, help="Filter by project label")
 @click.option("--limit", type=int, default=50, help="Max tasks to show")
 @click.option("--json", "json_output", is_flag=True, help="JSON output")
 def list_tasks(
     status: str | None,
     type: str | None,
     label: str | None,
+    project_filter: str | None,
     limit: int,
     json_output: bool,
 ) -> None:
@@ -40,6 +42,13 @@ def list_tasks(
     except TaskStoreError as e:
         click.echo(f"Error: {e}", err=True)
         return
+
+    if project_filter:
+        from village.plans.project import filter_by_project
+
+        filtered = filter_by_project([t.to_dict() for t in result], project_filter)
+        filtered_ids = {d["id"] for d in filtered}
+        result = [t for t in result if t.id in filtered_ids]
 
     if json_output:
         click.echo(json.dumps([t.to_dict() for t in result], indent=2))

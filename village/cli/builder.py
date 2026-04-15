@@ -629,7 +629,8 @@ def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
 @click.option("--flat", is_flag=True, help="Force single monolithic PR")
 @click.option("--dry-run", is_flag=True, help="Preview without creating PRs")
 @click.option("--push/--no-push", default=True, help="Push branches to remote")
-def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool) -> None:
+@click.option("--project", "project_filter", default=None, help="Filter by project label")
+def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool, project_filter: str | None) -> None:
     """
     Arrange tasks into stacked PRs based on stack labels.
 
@@ -641,10 +642,11 @@ def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool) -> None:
         village builder arrange --plan auth   # Arrange specific plan
         village builder arrange --flat        # Force single PR
         village builder arrange --dry-run     # Preview only
+        village builder arrange --project myapp --dry-run  # Filter by project
     """
     from village.builder.arrange import arrange_landing
 
-    result = arrange_landing(dry_run=dry_run)
+    result = arrange_landing(dry_run=dry_run, project_filter=project_filter)
 
     if dry_run:
         click.echo("Dry run - would create PRs:")

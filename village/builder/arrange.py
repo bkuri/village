@@ -7,11 +7,12 @@ from village.stack.labels import create_pr_specs
 from village.tasks import get_task_store
 
 
-def arrange_landing(dry_run: bool = False) -> dict[str, Any]:
+def arrange_landing(dry_run: bool = False, project_filter: str | None = None) -> dict[str, Any]:
     """Arrange all done tasks into stacked PRs and trigger landing.
 
     Args:
         dry_run: If True, just return the PR specs without creating them
+        project_filter: If set, only include tasks with matching project label
 
     Returns:
         Dict with created PRs info
@@ -24,6 +25,11 @@ def arrange_landing(dry_run: bool = False) -> dict[str, Any]:
         return {"prs": [], "message": "No completed tasks"}
 
     task_dicts = [{"id": t.id, "title": t.title, "labels": t.labels} for t in done_tasks]
+
+    if project_filter:
+        from village.plans.project import filter_by_project
+
+        task_dicts = filter_by_project(task_dicts, project_filter)
 
     pr_specs = create_pr_specs(task_dicts, "landing", flat=False)
 

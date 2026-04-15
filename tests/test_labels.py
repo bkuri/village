@@ -112,3 +112,43 @@ def test_create_pr_specs_flat():
     specs = create_pr_specs(tasks, "my-feature", flat=True)
     assert len(specs) == 1
     assert len(specs[0]["tasks"]) == 2
+
+
+def test_parse_project_label():
+    info = parse_stack_labels("task1", ["project:my-webapp"])
+    assert info.project == "my-webapp"
+
+
+def test_parse_project_with_stack_labels():
+    info = parse_stack_labels("task1", ["project:my-webapp", "stack:layer:1", "stack:group:auth"])
+    assert info.project == "my-webapp"
+    assert info.layer == 1
+    assert info.group_name == "auth"
+
+
+def test_group_tasks_filters_by_project():
+    tasks = [
+        {"id": "t1", "labels": ["project:webapp", "stack:layer:1"]},
+        {"id": "t2", "labels": ["project:api", "stack:layer:1"]},
+    ]
+    stack = group_tasks_by_label(tasks, project="webapp")
+    assert len(stack.groups) == 1
+    assert "t1" in stack.groups[0].tasks
+    assert "t2" not in stack.groups[0].tasks
+
+
+def test_group_tasks_no_project_filter():
+    tasks = [
+        {"id": "t1", "labels": ["project:webapp", "stack:layer:1"]},
+        {"id": "t2", "labels": ["project:api", "stack:layer:1"]},
+    ]
+    stack = group_tasks_by_label(tasks)
+    assert len(stack.groups) == 2
+
+
+def test_create_pr_specs_with_project():
+    tasks = [
+        {"id": "t1", "labels": ["project:webapp", "stack:layer:1", "stack:group:auth"]},
+    ]
+    specs = create_pr_specs(tasks, "my-plan", project="webapp")
+    assert len(specs) == 1

@@ -14,6 +14,7 @@ from village.stack.core import Stack, StackGroup
 
 LABEL_LAYER_PATTERN = re.compile(r"^stack:layer:(\d+)$")
 LABEL_GROUP_PATTERN = re.compile(r"^stack:group:(.+)$")
+LABEL_PROJECT_PATTERN = re.compile(r"^project:(.+)$")
 LABEL_FLAT = "stack:flat"
 
 
@@ -25,6 +26,7 @@ class TaskLabelInfo:
     layer: int = 1
     group_name: str | None = None
     is_flat: bool = False
+    project: str | None = None
     raw_labels: list[str] = field(default_factory=list)
 
 
@@ -55,18 +57,25 @@ def parse_stack_labels(task_id: str, labels: list[str]) -> TaskLabelInfo:
             info.group_name = match.group(1)
             continue
 
+        match = LABEL_PROJECT_PATTERN.match(label)
+        if match:
+            info.project = match.group(1)
+            continue
+
     return info
 
 
 def group_tasks_by_label(
     tasks: list[dict[str, Any]],
     flat_override: bool = False,
+    project: str | None = None,
 ) -> Stack:
     """Group tasks into a Stack based on their labels.
 
     Args:
         tasks: List of task dicts with 'id' and 'labels' keys
         flat_override: If True, force all tasks into one PR
+        project: If set, only include tasks matching this project
 
     Returns:
         Stack with groups ordered by layer
@@ -74,6 +83,11 @@ def group_tasks_by_label(
     stack = Stack()
     groups: dict[str | None, StackGroup] = {}
     max_layer = 1
+
+    # Filter by project if specified
+    if project:
+        project_label = f"project:{project}"
+        tasks = [t for t in tasks if project_label in t.get("labels", [])]
 
     if flat_override:
         stack.add_group(
@@ -91,6 +105,11 @@ def group_tasks_by_label(
         key = label_info.group_name
         if key is None:
             key = f"layer:{label_info.layer}"
+
+        # Scope the key by project so tasks from different projects
+        # never merge into the same group.
+        if label_info.project:
+            key = f"project:{label_info.project}/{key}"
 
         if key not in groups:
             groups[key] = StackGroup(
@@ -124,6 +143,7 @@ def create_pr_specs(
     tasks: list[dict[str, Any]],
     plan_slug: str,
     flat: bool = False,
+    project: str | None = None,
 ) -> list[dict[str, Any]]:
     """Create PR specifications from tasks.
 
@@ -131,11 +151,12 @@ def create_pr_specs(
         tasks: List of task dicts
         plan_slug: The plan slug for branch names
         flat: Force single PR
+        project: If set, only include tasks matching this project
 
     Returns:
         List of PR specs with head, base, title, body, layer
     """
-    stack = group_tasks_by_label(tasks, flat_override=flat)
+    stack = group_tasks_by_label(tasks, flat_override=flat, project=project)
     ordered = resolve_stack_order(stack)
 
     pr_specs = []
