@@ -1,3 +1,5 @@
+import pathlib
+
 import click
 
 from village.logging import get_logger
@@ -244,3 +246,148 @@ def inspect_specs(spec_id: str | None, fix_mode: bool, specs_dir: str) -> None:
             click.echo("  No specs were amended.")
         else:
             click.echo(f"\n{amended} spec(s) amended.")
+
+
+@planner_group.command("list")
+@click.option("--all", "filter_state", flag_value="all", default=True, help="Show all plans")
+@click.option("--drafts", "filter_state", flag_value="draft", help="Show drafts only")
+@click.option("--pending", "filter_state", flag_value="approved", help="Show approved (in progress) plans")
+@click.option("--completed", "filter_state", flag_value="landed", help="Show landed plans")
+@click.option("--aborted", "filter_state", flag_value="aborted", help="Show aborted plans")
+def list_plans(filter_state: str) -> None:
+    """List all plans."""
+    from village.config import get_config
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore
+
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    state = None if filter_state == "all" else PlanState(filter_state)
+    plans = store.list(state=state)
+
+    if not plans:
+        click.echo("No plans found.")
+        return
+
+    for plan in plans:
+        status_icon = {
+            PlanState.DRAFT: "○",
+            PlanState.APPROVED: "◐",
+            PlanState.LANDED: "✓",
+            PlanState.ABORTED: "✗",
+            PlanState.PURGED: "⊘",
+        }.get(plan.state, "?")
+        click.echo(f"{status_icon} {plan.slug} [{plan.state.value}]")
+        click.echo(f"   {plan.objective[:60]}...")
+
+
+@planner_group.command("show")
+@click.argument("slug")
+def show_plan(slug: str) -> None:
+    """Show plan details."""
+    from village.config import get_config
+    from village.plans.store import FilePlanStore, PlanNotFoundError
+
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    try:
+        plan = store.get(slug)
+    except PlanNotFoundError:
+        raise click.ClickException(f"Plan '{slug}' not found")
+
+    click.echo(f"# {plan.slug}")
+    click.echo(f"State: {plan.state.value}")
+    click.echo(f"Objective: {plan.objective}")
+    click.echo(f"Created: {plan.created_at}")
+    click.echo(f"Tasks: {len(plan.task_ids)}")
+    if plan.task_ids:
+        click.echo("  - " + "\n  - ".join(plan.task_ids))
+
+
+@planner_group.command("approve")
+@click.argument("slug")
+@click.option("--name", "name_override", default=None, help="Override worktree name")
+def approve_plan(slug: str, name_override: str | None) -> None:
+    """Approve a plan and create worktree to start development."""
+    from village.config import get_config
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore, PlanNotFoundError
+
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    try:
+        plan = store.get(slug)
+    except PlanNotFoundError:
+        raise click.ClickException(f"Plan '{slug}' not found")
+
+    if plan.state != PlanState.DRAFT:
+        raise click.ClickException(f"Plan '{slug}' is not a draft (current state: {plan.state.value})")
+
+    worktree_name = name_override or slug
+    worktrees_dir = config.git_root / ".worktrees"
+    worktree_path: pathlib.Path | None = worktrees_dir / worktree_name
+
+    import subprocess
+
+    result = subprocess.run(
+        ["git", "worktree", "add", "-b", f"plan/{worktree_name}", str(worktree_path), "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        click.echo(f"Warning: worktree creation failed: {result.stderr.strip()}", err=True)
+        worktree_path = None
+
+    plan.state = PlanState.APPROVED
+    plan.worktree_path = str(worktree_path) if worktree_path else None
+    store.update(plan)
+
+    click.echo(f"Plan '{slug}' approved.")
+    if worktree_path:
+        click.echo(f"Worktree created: {worktree_path}")
+    click.echo("Development can begin.")
+
+
+@planner_group.command("delete")
+@click.argument("slug")
+@click.option("--force", is_flag=True, help="Force delete non-draft plans")
+def delete_plan(slug: str, force: bool) -> None:
+    """Delete a plan."""
+    from village.config import get_config
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore, PlanNotFoundError
+
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    try:
+        plan = store.get(slug)
+    except PlanNotFoundError:
+        raise click.ClickException(f"Plan '{slug}' not found")
+
+    if plan.state != PlanState.DRAFT and not force:
+        raise click.ClickException(f"Plan '{slug}' is {plan.state.value}. Use --force to delete non-draft plans.")
+
+    if plan.worktree_path:
+        click.echo(f"Warning: Plan has worktree at {plan.worktree_path}", err=True)
+        click.echo("Delete the worktree manually before deleting the plan.", err=True)
+        return
+
+    store.delete(slug)
+    click.echo(f"Plan '{slug}' deleted.")
+
+
+@planner_group.command("resume")
+@click.argument("slug")
+def resume_plan(slug: str) -> None:
+    """Resume editing a draft plan."""
+    click.echo("Resume functionality coming soon.")
+    click.echo("Use 'village planner design' to create a new plan.")

@@ -615,118 +615,104 @@ def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
         sys.exit(EXIT_ERROR)
 
 
-@builder_group.command("release")
-@click.option("--dry-run", is_flag=True, help="Preview without applying")
-@click.option("--changelog/--no-changelog", default=True, help="Update CHANGELOG.md")
-@click.option("--tag/--no-tag", default=True, help="Create git tag")
-@click.option("--force", is_flag=True, help="Skip unlabeled-task check")
-def release(dry_run: bool, changelog: bool, tag: bool, force: bool) -> None:
+@builder_group.command("arrange")
+@click.option("--plan", default=None, help="Plan slug to arrange")
+@click.option("--flat", is_flag=True, help="Force single monolithic PR")
+@click.option("--dry-run", is_flag=True, help="Preview without creating PRs")
+@click.option("--push/--no-push", default=True, help="Push branches to remote")
+def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool) -> None:
     """
-    Apply pending version bumps.
+    Arrange tasks into stacked PRs based on stack labels.
 
-    Aggregates pending bump types (highest wins) and applies version bump.
-    Updates CHANGELOG.md and creates git tag by default.
+    Reads done tasks from the current plan, groups them by stack:group labels,
+    orders by stack:layer, and creates stacked pull requests.
 
-    \b
     Examples:
-        village builder release                # Apply pending bumps
-        village builder release --dry-run      # Preview what would happen
-        village builder release --no-changelog # Skip CHANGELOG update
-        village builder release --no-tag       # Skip git tag
-        village builder release --force        # Skip unlabeled-task check
-
-    Exit codes:
-        0: Release applied successfully
-        1: Unlabeled closed tasks found, no pending bumps, or error
+        village builder arrange                # Arrange all done tasks
+        village builder arrange --plan auth   # Arrange specific plan
+        village builder arrange --flat        # Force single PR
+        village builder arrange --dry-run     # Preview only
     """
-    import subprocess as _subprocess
-    from datetime import datetime, timezone
+    from village.builder.arrange import arrange_landing
 
-    from village.errors import EXIT_ERROR, EXIT_SUCCESS
-    from village.release import (
-        aggregate_bumps,
-        clear_pending_bumps,
-        compute_next_version,
-        get_pending_bumps,
-        get_unlabeled_closed_tasks,
-        is_no_op_release,
-        record_release,
-        update_changelog,
-    )
-
-    if not force:
-        unlabeled = get_unlabeled_closed_tasks()
-        if unlabeled:
-            click.echo(f"Error: {len(unlabeled)} closed task(s) have no bump label:", err=True)
-            for task in unlabeled:
-                click.echo(f"  {task['id']}  {task['title']}", err=True)
-            click.echo("Label them with: bd label add <id> bump:<major|minor|patch|none>", err=True)
-            click.echo("Or use --force to skip this check.", err=True)
-            sys.exit(EXIT_ERROR)
-
-    pending = get_pending_bumps()
-
-    if not pending:
-        click.echo("No pending version bumps")
-        sys.exit(EXIT_SUCCESS)
-
-    aggregate = aggregate_bumps([b.bump for b in pending])
-
-    if is_no_op_release([b.bump for b in pending]):
-        click.echo("All pending tasks are bump:none — no version change required.")
-        click.echo("Clearing queue without creating a release.")
-        if dry_run:
-            click.echo("(dry-run: would clear queue, no version bump)")
-            return
-        clear_pending_bumps()
-        sys.exit(EXIT_SUCCESS)
-
-    try:
-        version = compute_next_version(aggregate)
-    except ValueError as exc:
-        click.echo(f"Error computing version: {exc}", err=True)
-        sys.exit(EXIT_ERROR)
-
-    click.echo(f"New version: {version} (bump: {aggregate})")
+    result = arrange_landing(dry_run=dry_run)
 
     if dry_run:
-        task_ids_preview = [b.task_id for b in pending]
-        click.echo(f"Pending tasks ({len(pending)}): {', '.join(task_ids_preview)}")
-        click.echo("(dry-run: no changes applied)")
-        return
+        click.echo("Dry run - would create PRs:")
+        for spec in result.get("prs", []):
+            click.echo(f"  Layer {spec['layer']}: {spec['title']}")
+            click.echo(f"    Branch: {spec['head']} -> {spec['base']}")
+            click.echo(f"    Tasks: {', '.join(spec['tasks'])}")
+    else:
+        click.echo("\nArrangement complete!")
+        click.echo(f"Created {len(result.get('prs', []))} PRs against {result.get('trunk', 'main')}")
 
-    if changelog:
-        try:
-            update_changelog(version, pending)
-            click.echo(f"Updated CHANGELOG.md with version {version}")
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"Warning: CHANGELOG update failed: {exc}", err=True)
 
-    if tag:
-        tag_result = _subprocess.run(
-            ["git", "tag", "-a", f"v{version}", "-m", f"Release v{version}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if tag_result.returncode == 0:
-            click.echo(f"Created git tag v{version}")
-        else:
-            click.echo(f"Warning: git tag failed: {tag_result.stderr.strip()}", err=True)
+@builder_group.command("rollback")
+@click.option("--save", "mode", flag_value="save", default=True, help="Preserve worktree (default)")
+@click.option("--purge", "mode", flag_value="purge", help="Delete worktree entirely")
+@click.option("--plan", default=None, help="Plan slug to rollback")
+@click.option("--force", is_flag=True, help="Skip confirmation prompt")
+def rollback(mode: str, plan: str | None, force: bool) -> None:
+    """
+    Rollback the current plan (emergency abort).
 
-    from village.release import ReleaseRecord
+    Stops all workers, writes abort signal, and either preserves or deletes
+    the worktree.
 
-    task_ids = [b.task_id for b in pending]
-    clear_pending_bumps()
+    Examples:
+        village builder rollback              # Preserve worktree (default)
+        village builder rollback --purge    # Delete worktree
+        village builder rollback --force    # Skip confirmation
+    """
+    import shutil
+    import subprocess
+    from pathlib import Path
 
-    record = ReleaseRecord(
-        version=version,
-        released_at=datetime.now(timezone.utc),
-        aggregate_bump=aggregate,
-        tasks=task_ids,
-        changelog_entry="",
-    )
-    record_release(record)
+    from village.config import get_config
+    from village.plans.models import PlanState
+    from village.plans.store import FilePlanStore, PlanNotFoundError
 
-    click.echo(f"Release v{version} applied: {aggregate} bump from {len(pending)} task(s)")
-    click.echo("Run: git push --tags")
+    config = get_config()
+    plans_dir = config.git_root / ".village" / "plans"
+    store = FilePlanStore(plans_dir)
+
+    slug = plan
+    if not slug:
+        approved = store.list(PlanState.APPROVED)
+        if not approved:
+            raise click.ClickException("No active plan to rollback.")
+        slug = approved[0].slug
+
+    try:
+        plan_obj = store.get(slug)
+    except PlanNotFoundError:
+        raise click.ClickException(f"Plan '{slug}' not found.")
+
+    if plan_obj.state != PlanState.APPROVED:
+        raise click.ClickException(f"Plan '{slug}' is not approved (state: {plan_obj.state.value}).")
+
+    abort_file = plans_dir / plan_obj.slug / "abort"
+    abort_file.write_text("aborted", encoding="utf-8")
+
+    click.echo(f"Abort signal written for plan '{slug}'.")
+
+    if not force:
+        confirm = click.confirm("Workers will be signaled to stop. Continue?")
+        if not confirm:
+            click.echo("Rollback cancelled.")
+            return
+
+    if mode == "purge" and plan_obj.worktree_path:
+        worktree = Path(plan_obj.worktree_path)
+        if worktree.exists():
+            shutil.rmtree(worktree)
+            click.echo(f"Deleted worktree: {worktree}")
+
+        subprocess.run(["git", "worktree", "prune"], capture_output=True)
+        click.echo("Pruned git worktrees.")
+
+    plan_obj.state = PlanState.ABORTED if mode == "save" else PlanState.PURGED
+    store.update(plan_obj)
+
+    click.echo(f"Plan '{slug}' marked as {plan_obj.state.value}.")
