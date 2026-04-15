@@ -10,6 +10,9 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+import click
 
 from village.config import Config, get_config
 from village.contracts import generate_spec_contract
@@ -19,6 +22,82 @@ from village.resume import _create_resume_window, _inject_contract
 from village.worktrees import create_worktree
 
 logger = logging.getLogger(__name__)
+
+
+def check_and_trigger_wave(config: Any) -> bool:
+    """Check if a wave should be triggered (task completed).
+
+    Returns True if wave was triggered.
+    """
+    from village.stack.waves import evaluate_wave, format_wave_summary
+    from village.tasks import get_task_store
+    from village.tasks.models import TaskUpdate
+
+    store = get_task_store()
+
+    done_tasks = store.list_tasks(status="done")
+    if not done_tasks:
+        return False
+
+    task_dicts = [{"id": t.id, "title": t.title, "labels": t.labels, "depends_on": []} for t in done_tasks]
+
+    wave = evaluate_wave(task_dicts)
+    if not wave.proposals:
+        return False
+
+    click.echo(format_wave_summary(wave))
+
+    response = input("Accept proposals? (yes/no): ").strip().lower()
+    if response == "yes":
+        from village.stack.waves import apply_proposals
+
+        updated = apply_proposals(task_dicts, wave.proposals)
+        done_labels = set(done_tasks[0].labels) if done_tasks else set()
+        for task_dict in updated:
+            new_labels = [label for label in task_dict["labels"] if label not in done_labels]
+            store.update_task(
+                task_dict["id"],
+                TaskUpdate(add_labels=new_labels),
+            )
+        click.echo("Proposals accepted.")
+        return True
+    else:
+        reason = input("Explain why (or 'cant-continue' to abort): ").strip()
+        if reason.lower() == "cant-continue":
+            raise RuntimeError("User rejected wave proposals without alternative")
+        click.echo(f"Proposals rejected: {reason}")
+        return False
+
+
+def check_landing_trigger(config: Any, plan_slug: str | None = None) -> bool:
+    """Check if all tasks are done and trigger landing.
+
+    Returns True if landing was triggered.
+    """
+    from village.builder.arrange import arrange_landing
+    from village.tasks import get_task_store
+
+    store = get_task_store()
+    all_tasks = store.list_tasks()
+
+    if not all_tasks:
+        return False
+
+    done_ids = {t.id for t in store.list_tasks(status="done")}
+    all_ids = {t.id for t in all_tasks}
+
+    if done_ids == all_ids and done_ids:
+        click.echo("\nAll tasks completed! Triggering landing...")
+        try:
+            arrange_landing(dry_run=False)
+            click.echo("Landing complete!")
+            return True
+        except Exception as e:
+            click.echo(f"Landing failed: {e}", err=True)
+            return False
+
+    return False
+
 
 SPEC_COMPLETE_RE = re.compile(r"^(#{1,3} )?(\*\*)?Status(\*\*)?:\s+COMPLETE", re.IGNORECASE | re.MULTILINE)
 PROMISE_DONE_RE = re.compile(r"<promise>(ALL_)?DONE</promise>")
