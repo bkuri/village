@@ -2,14 +2,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from village.onboard.detector import ProjectInfo
+from village.onboard.models import InterviewResult
 from village.onboard.scaffolds import ScaffoldTemplate
-
-
-@dataclass
-class InterviewResult:
-    answers: dict[str, str] = field(default_factory=dict)
-    project_summary: str = ""
-    raw_transcript: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass
@@ -45,12 +39,24 @@ class Generator:
 
         sections.append("## Build, Lint, and Test Commands")
         sections.append("```bash")
-        for cmd in scaffold_section_label(self.scaffold.build_commands, "Build"):
+
+        user_build = self._get_answer("How do you run tests?", "")
+        user_lint = self._get_answer("What linting or formatting tools do you use?", "")
+
+        build_cmds = self.scaffold.build_commands
+        test_cmds = self.scaffold.test_commands
+        lint_cmds = self.scaffold.lint_commands
+
+        for cmd in scaffold_section_label(build_cmds, "Build"):
             sections.append(f"{cmd}")
-        for cmd in scaffold_section_label(self.scaffold.test_commands, "Test"):
+        for cmd in scaffold_section_label(test_cmds, "Test"):
             sections.append(f"{cmd}")
-        for cmd in scaffold_section_label(self.scaffold.lint_commands, "Lint"):
+        if user_build and not any(user_build in c for c in test_cmds):
+            sections.append(f"# Test (user): {user_build}")
+        for cmd in scaffold_section_label(lint_cmds, "Lint"):
             sections.append(f"{cmd}")
+        if user_lint and not any(user_lint in c for c in lint_cmds):
+            sections.append(f"# Lint (user): {user_lint}")
         for cmd in scaffold_section_label(self.scaffold.typecheck_commands, "Typecheck"):
             sections.append(f"{cmd}")
         sections.append("```")
@@ -91,6 +97,12 @@ class Generator:
         constraints = self._get_answer("What hard rules or constraints must agents follow?", "None specified.")
         sections.append(constraints)
         sections.append("")
+
+        extra = self._get_answer("Anything else agents should know", "")
+        if extra:
+            sections.append("## Additional Notes")
+            sections.append(extra)
+            sections.append("")
 
         return "\n".join(sections)
 
@@ -149,12 +161,35 @@ class Generator:
             content = f"# Active Development\n\n{active}"
             seeds.append(("active-development.md", content))
 
+        has_content = any(a for _, a in self.interview.raw_transcript) or any(m for _, m in self.interview.preamble)
+        if has_content:
+            transcript_lines: list[str] = [
+                "# Onboarding Interview",
+                "",
+                "Transcript of the initial project interview. This provides rich"
+                " context about the project's goals, design decisions, and the"
+                " creator's intent. Useful for scribe queries and future onboarding.",
+                "",
+            ]
+            for role, message in self.interview.preamble:
+                transcript_lines.append(f"**{role}:** {message}")
+                transcript_lines.append("")
+            for q, a in self.interview.raw_transcript:
+                transcript_lines.append(f"**Q:** {q}")
+                transcript_lines.append(f"**A:** {a}")
+                transcript_lines.append("")
+            seeds.append(("interview-transcript.md", "\n".join(transcript_lines)))
+
         return seeds
 
     def _get_answer(self, question_substring: str, default: str) -> str:
         for q, a in self.interview.answers.items():
-            if question_substring.lower() in q.lower():
-                return a if a else default
+            if not a:
+                continue
+            q_lower = q.lower()
+            sub_lower = question_substring.lower()
+            if sub_lower in q_lower or q_lower in sub_lower:
+                return a
         return default
 
     def generate(self) -> GenerationResult:

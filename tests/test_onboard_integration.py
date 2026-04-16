@@ -9,8 +9,8 @@ from pathlib import Path
 from village.config import OnboardConfig
 from village.onboard.detector import detect_project
 from village.onboard.generator import Generator
-from village.onboard.generator import InterviewResult as GenInterviewResult
 from village.onboard.interview import InterviewEngine
+from village.onboard.models import InterviewResult
 from village.onboard.scaffolds import get_scaffold
 
 
@@ -28,24 +28,19 @@ def _run_pipeline(
     root: Path,
     answers: dict[str, str] | None = None,
     config: OnboardConfig | None = None,
-) -> tuple[Generator, GenInterviewResult]:
+) -> tuple[Generator, InterviewResult]:
     info = detect_project(root)
     scaffold = get_scaffold(info)
     cfg = config or OnboardConfig()
     engine = InterviewEngine(config=cfg, project_info=info, scaffold=scaffold)
     interview = engine.run_default(answers=answers or {})
-    gen_interview = GenInterviewResult(
-        answers=interview.answers,
-        project_summary=interview.project_summary,
-        raw_transcript=interview.raw_transcript,
-    )
     gen = Generator(
         project_info=info,
         scaffold=scaffold,
-        interview=gen_interview,
+        interview=interview,
         project_root=root,
     )
-    return gen, gen_interview
+    return gen, interview
 
 
 def _realistic_answers() -> dict[str, str]:
@@ -119,6 +114,39 @@ class TestFullPipelineWithAnswers:
         assert "pytest" in agents_content
         assert "ruff" in agents_content
 
+    def test_user_answers_reflected_in_agents_md(self, tmp_path: Path) -> None:
+        root = _create_python_project(tmp_path)
+        gen, _ = _run_pipeline(root, answers=_realistic_answers())
+        result = gen.generate()
+        gen.write_files(result)
+
+        agents_content = (root / "AGENTS.md").read_text(encoding="utf-8")
+        assert "distributed agent workflows" in agents_content
+        assert "No print()" in agents_content
+        assert "tmux, git, beads" in agents_content
+        assert "pathlib.Path" in agents_content
+
+    def test_user_answers_reflected_in_readme(self, tmp_path: Path) -> None:
+        root = _create_python_project(tmp_path)
+        gen, _ = _run_pipeline(root, answers=_realistic_answers())
+        result = gen.generate()
+        gen.write_files(result)
+
+        readme_content = (root / "README.md").read_text(encoding="utf-8")
+        assert "distributed agent workflows" in readme_content
+        assert "click, httpx, pydantic" in readme_content
+
+    def test_user_answers_reflected_in_wiki_seeds(self, tmp_path: Path) -> None:
+        root = _create_python_project(tmp_path)
+        gen, _ = _run_pipeline(root, answers=_realistic_answers())
+        result = gen.generate()
+
+        seed_names = [name for name, _ in result.wiki_seeds]
+        assert "project-overview.md" in seed_names
+
+        overview_seed = next(c for n, c in result.wiki_seeds if n == "project-overview.md")
+        assert "distributed agent workflows" in overview_seed
+
     def test_wiki_seeds_written_to_ingest(self, tmp_path: Path) -> None:
         root = _create_python_project(tmp_path)
         gen, _ = _run_pipeline(root, answers=_realistic_answers())
@@ -132,6 +160,29 @@ class TestFullPipelineWithAnswers:
         assert len(seed_files) > 0
         seed_names = [f.name for f in seed_files]
         assert "project-overview.md" in seed_names
+
+    def test_interview_transcript_written_to_wiki(self, tmp_path: Path) -> None:
+        root = _create_python_project(tmp_path)
+        gen, interview = _run_pipeline(root, answers=_realistic_answers())
+        interview.preamble.append(("User", "I want to build a splitwise clone"))
+        result = gen.generate()
+
+        seed_names = [name for name, _ in result.wiki_seeds]
+        assert "interview-transcript.md" in seed_names
+
+        transcript_seed = next(c for n, c in result.wiki_seeds if n == "interview-transcript.md")
+        assert "Onboarding Interview" in transcript_seed
+        assert "**Q:**" in transcript_seed
+        assert "**A:**" in transcript_seed
+        assert "splitwise" in transcript_seed
+
+    def test_empty_transcript_no_transcript_seed(self, tmp_path: Path) -> None:
+        root = _create_python_project(tmp_path)
+        gen, _ = _run_pipeline(root, answers={})
+        result = gen.generate()
+
+        seed_names = [name for name, _ in result.wiki_seeds]
+        assert "interview-transcript.md" not in seed_names
 
 
 class TestSkipInterviewScaffoldDefaults:

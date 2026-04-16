@@ -1,13 +1,13 @@
 import json
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import click
 
 from village.config import OnboardConfig
 from village.onboard.detector import ProjectInfo
+from village.onboard.models import InterviewResult
 from village.onboard.scaffolds import ScaffoldTemplate
 from village.prompt import sync_confirm, sync_prompt
 
@@ -15,13 +15,6 @@ if TYPE_CHECKING:
     from village.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class InterviewResult:
-    answers: dict[str, str] = field(default_factory=dict)
-    project_summary: str = ""
-    raw_transcript: list[tuple[str, str]] = field(default_factory=list)
 
 
 _DEFAULT_QUESTIONS = [
@@ -218,10 +211,15 @@ class InterviewEngine:
         answers: dict[str, str] = {}
         if extracted:
             answers = self._map_extracted_to_answers(extracted)
-        if not answers:
-            answers = self._transcript_to_answers(transcript)
 
-        return self._confirm_summary(answers, transcript)
+        transcript_answers = self._transcript_to_answers(transcript)
+        merged = self._merge_answers(answers, transcript_answers)
+        preseeded = dict(self.preseeded_answers)
+        for k, v in preseeded.items():
+            if v:
+                merged[k] = v
+
+        return self._confirm_summary(merged, transcript)
 
     def _build_opening_context(self) -> str:
         parts: list[str] = []
@@ -314,6 +312,32 @@ class InterviewEngine:
             if a:
                 answers[q] = a
         return answers
+
+    def _merge_answers(self, extracted: dict[str, str], transcript: dict[str, str]) -> dict[str, str]:
+        """Merge LLM-extracted answers with raw transcript answers.
+
+        Prefers the user's actual words from the transcript when a question
+        substring matches. Falls back to LLM extraction for topics not
+        covered in the transcript. This ensures the generated docs contain
+        the user's voice, not LLM summaries.
+        """
+        merged: dict[str, str] = {}
+
+        for key, val in extracted.items():
+            if val:
+                merged[key] = val
+
+        for q, a in transcript.items():
+            matched = False
+            for key in list(merged.keys()):
+                if q.lower() in key.lower() or key.lower() in q.lower():
+                    merged[key] = a
+                    matched = True
+                    break
+            if not matched and a:
+                merged[q] = a
+
+        return merged
 
     def _run_fixed_interactive(self) -> InterviewResult:
         questions = self.get_default_questions()

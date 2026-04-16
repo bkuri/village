@@ -116,7 +116,8 @@ def _prompt_path_for_git_repo() -> str:
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
-def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard: bool) -> None:
+@click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
+def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard: bool, skip_interview: bool) -> None:
     """
     Create a new project with village support.
 
@@ -181,7 +182,7 @@ def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard
         project_name,
         parent_dir,
         dashboard=dashboard,
-        onboard=True,
+        onboard=not skip_interview,
         description=description,
     )
 
@@ -319,7 +320,6 @@ def _run_onboard(project_root: Path, force: bool, skip_interview: bool) -> None:
     from village.config import get_config as _get_config
     from village.onboard.detector import detect_project
     from village.onboard.generator import Generator
-    from village.onboard.generator import InterviewResult as GenInterviewResult
     from village.onboard.interview import InterviewEngine
     from village.onboard.scaffolds import get_scaffold
 
@@ -346,14 +346,7 @@ def _run_onboard(project_root: Path, force: bool, skip_interview: bool) -> None:
     else:
         interview_result = engine.run_interactive()
 
-    # Convert interview module's InterviewResult to generator module's InterviewResult
-    gen_interview = GenInterviewResult(
-        answers=interview_result.answers,
-        project_summary=interview_result.project_summary,
-        raw_transcript=interview_result.raw_transcript,
-    )
-
-    gen = Generator(info, scaffold, gen_interview, project_root)
+    gen = Generator(info, scaffold, interview_result, project_root)
     result = gen.generate()
     created = gen.write_files(result)
 
