@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -167,30 +168,33 @@ class InterviewEngine:
         opening_context = self._build_opening_context()
         conversation.append({"role": "user", "content": opening_context})
 
-        first_question = llm.call(
-            prompt=opening_context,
-            system_prompt=system,
-            max_tokens=256,
-            timeout=30,
-        ).strip()
+        first_question = self._sanitize_response(
+            llm.call(
+                prompt=opening_context,
+                system_prompt=system,
+                max_tokens=256,
+                timeout=30,
+            ).strip()
+        )
 
         if first_question.startswith("<complete"):
             return self._build_result({}, [])
 
-        click.echo(f"\n{first_question}\n")
-
+        current_question = first_question
         turn_count = 0
+
         while turn_count < max_turns:
+            click.echo(f"\n{current_question}")
             try:
-                user_input = sync_prompt(first_question, show_default=False).strip()
+                user_input = sync_prompt("", show_default=False, prompt_suffix="  ").strip()
             except (EOFError, KeyboardInterrupt):
                 break
 
             if not user_input or user_input.lower() == "done":
                 break
 
-            transcript.append((first_question, user_input))
-            conversation.append({"role": "assistant", "content": first_question})
+            transcript.append((current_question, user_input))
+            conversation.append({"role": "assistant", "content": current_question})
             conversation.append({"role": "user", "content": user_input})
             turn_count += 1
 
@@ -205,8 +209,7 @@ class InterviewEngine:
             if response.startswith("<complete"):
                 break
 
-            first_question = response
-            click.echo(f"\n{first_question}\n")
+            current_question = self._sanitize_response(response)
 
         click.echo("")
 
@@ -250,6 +253,16 @@ class InterviewEngine:
             role = msg["role"].capitalize()
             lines.append(f"[{role}]: {msg['content']}")
         return "\n".join(lines)
+
+    def _sanitize_response(self, response: str) -> str:
+        """Strip hallucinated role-prefixed turns from LLM output.
+
+        The LLM sees conversation history formatted with [User]: / [Assistant]:
+        prefixes and may continue that pattern, fabricating user responses.
+        """
+        response = re.split(r"\n\[User\]:", response, maxsplit=1)[0]
+        response = re.split(r"\n\[Assistant\]:", response, maxsplit=1)[0]
+        return response.strip()
 
     def _extract_structured(self, llm: "LLMClient", transcript: list[tuple[str, str]]) -> dict[str, str] | None:
         lines: list[str] = []
@@ -330,7 +343,7 @@ class InterviewEngine:
 
             click.echo(f"? {question}")
             try:
-                answer = sync_prompt(f"? {question}", show_default=False).strip()
+                answer = sync_prompt("", show_default=False, prompt_suffix="  ").strip()
             except (EOFError, KeyboardInterrupt):
                 click.echo("")
                 return self._build_result(answers, transcript)
@@ -384,10 +397,23 @@ class InterviewEngine:
 
     def _get_llm_client(self) -> "LLMClient | None":
         try:
-            from village.config import get_global_config
+            from village.config import LLMConfig, get_global_config
             from village.llm.factory import get_llm_client as _get_llm_client
 
             global_cfg = get_global_config()
+
+            interview_model = self.config.interview_model
+            if "/" not in interview_model:
+                raise ValueError(f"Invalid interview_model format (expected provider/model): {interview_model}")
+
+            provider, model = interview_model.split("/", 1)
+            global_cfg.llm = LLMConfig(
+                provider=provider,
+                model=model,
+                api_key_env=global_cfg.llm.api_key_env,
+                timeout=global_cfg.llm.timeout,
+                max_tokens=global_cfg.llm.max_tokens,
+            )
             return _get_llm_client(global_cfg)
         except ValueError:
             logger.debug("No LLM client available for interview (missing API key or config)")

@@ -59,6 +59,7 @@ def sync_prompt(
     default: str = "",
     show_default: bool = True,
     type: type | None = None,
+    prompt_suffix: str = ": ",
 ) -> str:
     bridge = _active_bridge
     if bridge is not None:
@@ -71,7 +72,7 @@ def sync_prompt(
         if type is int and answer:
             return str(int(answer))
         return answer
-    result = click.prompt(text, default=default, show_default=show_default, type=type)
+    result = click.prompt(text, default=default, show_default=show_default, type=type, prompt_suffix=prompt_suffix)
     return str(result)
 
 

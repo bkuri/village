@@ -99,7 +99,9 @@ def test_sync_prompt_without_bridge_falls_back_to_click() -> None:
     with patch("village.prompt.click.prompt", return_value="hello") as mock_prompt:
         result = sync_prompt("What is your name?")
         assert result == "hello"
-        mock_prompt.assert_called_once_with("What is your name?", default="", show_default=True, type=None)
+        mock_prompt.assert_called_once_with(
+            "What is your name?", default="", show_default=True, type=None, prompt_suffix=": "
+        )
 
 
 def test_sync_prompt_with_bridge_and_default() -> None:
