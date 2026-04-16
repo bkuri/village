@@ -6,8 +6,15 @@ import logging
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import anthropic
+import httpx
 
 from village.probes.tools import SubprocessError
+
+if TYPE_CHECKING:
+    from village.config import OnboardConfig
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +159,7 @@ def _run_onboard_pipeline(
     project_dir: Path,
     name: str,
     description: str = "",
-    onboard_config: "OnboardConfig | None" = None,  # noqa: F821
+    onboard_config: OnboardConfig | None = None,
 ) -> list[str]:
     """Run the adaptive onboard pipeline for a new project.
 
@@ -321,7 +328,7 @@ def execute_scaffold(
         try:
             onboard_created = _run_onboard_pipeline(project_dir, name, description)
             created.extend(onboard_created)
-        except Exception as e:
+        except (httpx.HTTPError, anthropic.AnthropicError, ValueError) as e:
             logger.warning(f"Onboard pipeline failed, falling back to minimal files: {e}")
             created.extend(_write_minimal_files(project_dir, name))
     else:

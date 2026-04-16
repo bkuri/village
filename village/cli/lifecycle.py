@@ -1,5 +1,6 @@
 """Lifecycle commands: new, up, down."""
 
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -92,13 +93,30 @@ def _run_create_project_workflow() -> tuple[str, str]:
     return slug, description
 
 
+def _prompt_path_for_git_repo() -> str:
+    """Prompt for a target directory when running inside a git repo.
+
+    Returns:
+        The trimmed path string, or empty string if aborted.
+    """
+    has_village = os.path.exists(".village")
+    if has_village:
+        click.echo("This directory is already a git repository with village initialized.")
+        click.echo("  (Use `village up` to reinitialize, or `village watcher status` to check state.)")
+    else:
+        click.echo("This directory is already a git repository.")
+        click.echo("  (Use `village up` to initialize village here instead.)")
+    click.echo("")
+    return _prompt("Where should I create the project?")
+
+
 @lifecycle_group.command("new")
 @click.argument("name", required=False)
-@click.option("--path", "path", type=click.Path(), default=".", help="Parent directory (default: current directory)")
+@click.option("--path", "path", type=click.Path(), default=None, help="Parent directory (default: current directory)")
 @click.option("--dry-run", is_flag=True, help="Show what would be done")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
-def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool) -> None:
+def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard: bool) -> None:
     """
     Create a new project with village support.
 
@@ -113,7 +131,8 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool)
     When called without a name, starts an interactive create-project workflow
     that prompts for the project name and other details before scaffolding.
 
-    Errors if already inside a git repository (use `village up` instead).
+    When run inside a git repository without --path, prompts for a target
+    directory instead of creating in the current working directory.
 
     Examples:
       village new
@@ -127,8 +146,7 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool)
         plan_scaffold,
     )
 
-    if is_inside_git_repo():
-        raise click.ClickException("Already inside a git repository. Use `village up` instead.")
+    in_git = is_inside_git_repo()
 
     description = ""
     project_name = name
@@ -138,6 +156,16 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool)
             raise click.ClickException("Project name is required.")
     else:
         project_name = _slugify(project_name)
+
+    if in_git and path is None:
+        path = _prompt_path_for_git_repo()
+        if not path:
+            raise click.ClickException(
+                "A target directory is required when inside a git repository.\n"
+                "  Use `village new <name> --path <dir>` or re-run interactively."
+            )
+    elif path is None:
+        path = "."
 
     if dry_run or plan:
         parent_dir = Path(path).resolve()
@@ -163,7 +191,7 @@ def new(name: str | None, path: str, dry_run: bool, plan: bool, dashboard: bool)
         for item in result.created:
             click.echo(f"  - {item}")
         click.echo("\nNext steps:")
-        click.echo(f"  cd {project_name}")
+        click.echo(f"  cd {result.project_dir}")
         click.echo("  village chat   # create your first task")
     else:
         click.echo(f"Failed to create project: {result.error}", err=True)

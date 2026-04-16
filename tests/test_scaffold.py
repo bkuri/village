@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import httpx
 from click.testing import CliRunner
 
 from village.cli.lifecycle import _run_create_project_workflow, _slugify, lifecycle_group
@@ -319,7 +320,7 @@ def test_execute_scaffold_onboard_pipeline_failure_fallback(tmp_path: Path):
         patch("village.probes.tmux.create_session") as mock_create_session,
         patch("village.probes.tmux.session_exists") as mock_session_exists,
         patch("village.probes.tmux.list_windows") as mock_list_windows,
-        patch("village.scaffold._run_onboard_pipeline", side_effect=RuntimeError("onboard failed")),
+        patch("village.scaffold._run_onboard_pipeline", side_effect=httpx.HTTPError("onboard failed")),
     ):
         mock_subprocess.return_value = Mock(returncode=0)
         mock_session_exists.return_value = False
@@ -454,3 +455,75 @@ def test_new_command_without_name_aborted(tmp_path: Path):
         result = runner.invoke(lifecycle_group, ["new", "--path", str(tmp_path)])
         assert result.exit_code != 0
         assert "Project name is required" in result.output
+
+
+def test_new_command_inside_git_repo_with_explicit_path(tmp_path: Path):
+    """Test village new inside git repo proceeds when --path is given."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=True),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "myproject",
+            created=[".gitignore"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "myproject", "--path", str(tmp_path)])
+        assert result.exit_code == 0
+        mock_exec.assert_called_once()
+
+
+def test_new_command_inside_git_repo_prompts_path_without_village(tmp_path: Path):
+    """Test village new prompts for path when inside git repo without .village."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=True),
+        patch("village.cli.lifecycle.os.path.exists", return_value=False),
+        patch("village.cli.lifecycle._prompt", return_value=str(tmp_path)),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "myproject",
+            created=[".gitignore"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "myproject"])
+        assert result.exit_code == 0
+        assert "git repository" in result.output
+        mock_exec.assert_called_once()
+
+
+def test_new_command_inside_git_repo_prompts_path_with_village(tmp_path: Path):
+    """Test village new prompts for path when inside git repo with .village."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=True),
+        patch("village.cli.lifecycle.os.path.exists", return_value=True),
+        patch("village.cli.lifecycle._prompt", return_value=str(tmp_path)),
+        patch("village.scaffold.execute_scaffold") as mock_exec,
+    ):
+        mock_exec.return_value = Mock(
+            success=True,
+            project_dir=tmp_path / "myproject",
+            created=[".gitignore"],
+            error=None,
+        )
+        result = runner.invoke(lifecycle_group, ["new", "myproject"])
+        assert result.exit_code == 0
+        assert "village initialized" in result.output
+        mock_exec.assert_called_once()
+
+
+def test_new_command_inside_git_repo_path_prompt_aborted(tmp_path: Path):
+    """Test village new errors when path prompt is aborted inside git repo."""
+    runner = CliRunner()
+    with (
+        patch("village.scaffold.is_inside_git_repo", return_value=True),
+        patch("village.cli.lifecycle._prompt", return_value=""),
+    ):
+        result = runner.invoke(lifecycle_group, ["new", "myproject"])
+        assert result.exit_code != 0
+        assert "target directory is required" in result.output.lower()
