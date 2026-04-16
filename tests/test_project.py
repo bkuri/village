@@ -37,6 +37,10 @@ def test_sanitize_with_slashes():
     assert sanitize_project_name("code/my-app") == "code/my-app"
 
 
+def test_sanitize_empty_returns_unnamed():
+    assert sanitize_project_name("") == "unnamed"
+
+
 def test_normalize_simple():
     result = normalize_project_path(Path("/home/bk/source/village"))
     assert result == "village"
@@ -66,10 +70,9 @@ def test_get_project_name_default():
 
 
 def test_get_project_name_with_config():
-    config = MagicMock()
-    config.project_name = "Test Project"
-    result = get_project_name(config=config)
-    assert result == "test-project"
+    config = MagicMock(spec=[])
+    result = get_project_name(config=config, project_path=Path("/home/user/code/my-app"))
+    assert result == "my-app"
 
 
 def test_get_project_name_with_path():
@@ -91,6 +94,10 @@ def test_extract_project_non_project_label():
 
 def test_extract_project_empty():
     assert extract_project_from_label("project:") == ""
+
+
+def test_make_project_label_empty():
+    assert make_project_label("unnamed") == "project:unnamed"
 
 
 def test_roundtrip():

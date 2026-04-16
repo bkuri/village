@@ -8,8 +8,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-from village.config import Config
-
 
 def sanitize_project_name(name: str) -> str:
     """Sanitize a project name for use as a label.
@@ -24,6 +22,8 @@ def sanitize_project_name(name: str) -> str:
     name = re.sub(r"[^a-z0-9/]", "-", name)
     name = re.sub(r"-+", "-", name)
     name = name.strip("-")
+    if not name:
+        return "unnamed"
     return name[:50]
 
 
@@ -54,15 +54,14 @@ def normalize_project_path(project_path: Path, base_path: Path | None = None) ->
         return project_path.name
 
 
-def get_project_name(config: Config | None = None, project_path: Path | None = None) -> str:
+def get_project_name(config: Any = None, project_path: Path | None = None) -> str:
     """Derive project name for task labels.
 
     Priority:
-    1. Onboarding project name from config
-    2. Normalized project path
+    1. Normalized project path
 
     Args:
-        config: Village config (optional, reads global if not provided)
+        config: Village config (optional, unused — reserved for future use)
         project_path: Project root path (optional, uses cwd if not provided)
 
     Returns:
@@ -71,25 +70,6 @@ def get_project_name(config: Config | None = None, project_path: Path | None = N
     if project_path is None:
         project_path = Path.cwd()
 
-    # Try onboarding project name first
-    if config is not None:
-        project_name = getattr(config, "project_name", None) or getattr(config, "project", None)
-        if project_name:
-            return sanitize_project_name(project_name)
-
-    # Try reading from onboarding config section
-    try:
-        if config is not None:
-            onboard_config = getattr(config, "onboard", None)
-            if onboard_config:
-                name = getattr(onboard_config, "project_name", None)
-                if name:
-                    return sanitize_project_name(name)
-    except Exception:
-        pass
-
-    # Fallback to normalized path
-    # Determine base path: typically the parent of git root
     base_path = project_path.parent
     normalized = normalize_project_path(project_path, base_path)
     return sanitize_project_name(normalized)

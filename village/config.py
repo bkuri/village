@@ -617,6 +617,60 @@ class ApprovalConfig:
 
 
 @dataclass
+class TelegramConfig:
+    """Telegram bot configuration."""
+
+    bot_token_env: str = "VILLAGE_TELEGRAM_BOT_TOKEN"
+    milestone_interval: int = 50
+    max_context_messages: int = 10
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "TelegramConfig":
+        """Load telegram config from environment variables and config file."""
+        bot_token_env = (
+            os.environ.get("VILLAGE_TELEGRAM_BOT_TOKEN_ENV")
+            or config.get("TELEGRAM.BOT_TOKEN_ENV")
+            or config.get("telegram.bot_token_env")
+        )
+
+        milestone_interval_str = (
+            os.environ.get("VILLAGE_TELEGRAM_MILESTONE_INTERVAL")
+            or config.get("TELEGRAM.MILESTONE_INTERVAL")
+            or config.get("telegram.milestone_interval")
+        )
+        milestone_interval = int(milestone_interval_str) if milestone_interval_str else 50
+
+        max_context_messages_str = (
+            os.environ.get("VILLAGE_TELEGRAM_MAX_CONTEXT_MESSAGES")
+            or config.get("TELEGRAM.MAX_CONTEXT_MESSAGES")
+            or config.get("telegram.max_context_messages")
+        )
+        max_context_messages = int(max_context_messages_str) if max_context_messages_str else 10
+
+        return cls(
+            bot_token_env=bot_token_env or "VILLAGE_TELEGRAM_BOT_TOKEN",
+            milestone_interval=milestone_interval,
+            max_context_messages=max_context_messages,
+        )
+
+
+@dataclass
+class TransportConfig:
+    """Transport configuration."""
+
+    default: str = "cli"
+
+    @classmethod
+    def from_env_and_config(cls, config: dict[str, str]) -> "TransportConfig":
+        """Load transport config from environment variables and config file."""
+        default_env = os.environ.get("VILLAGE_TRANSPORT_DEFAULT")
+        default_config = config.get("TRANSPORT.DEFAULT") or config.get("transport.default")
+        default = default_env or default_config or "cli"
+
+        return cls(default=default)
+
+
+@dataclass
 class Config:
     """Village configuration."""
 
@@ -648,6 +702,8 @@ class Config:
     onboard: OnboardConfig = field(default_factory=OnboardConfig)
     council: CouncilConfig = field(default_factory=CouncilConfig)
     approval: ApprovalConfig = field(default_factory=ApprovalConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    transport: TransportConfig = field(default_factory=TransportConfig)
 
     def __post_init__(self) -> None:
         """Compute derived paths."""
@@ -791,6 +847,8 @@ _SUB_CONFIGS: list[tuple[str, type]] = [
     ("onboard", OnboardConfig),
     ("council", CouncilConfig),
     ("approval", ApprovalConfig),
+    ("telegram", TelegramConfig),
+    ("transport", TransportConfig),
 ]
 
 
@@ -847,6 +905,8 @@ class GlobalConfig:
     approval: ApprovalConfig = field(default_factory=ApprovalConfig)
     ci: CIConfig = field(default_factory=CIConfig)
     notifications: NotificationConfig = field(default_factory=NotificationConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    transport: TransportConfig = field(default_factory=TransportConfig)
 
 
 def get_global_config() -> GlobalConfig:

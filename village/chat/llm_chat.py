@@ -352,9 +352,14 @@ class LLMChat:
         )
 
         try:
-            task_spec_dict = json.loads(response)
+            json_text = response.strip()
+            if json_text.startswith("```"):
+                json_text = json_text.split("```")[1] if "```" in json_text[3:] else json_text
+                if json_text.startswith("json"):
+                    json_text = json_text[4:]
+            task_spec_dict = json.loads(json_text.strip())
         except json.JSONDecodeError:
-            return f"Failed to parse LLM response. Got: {response[:100]}"
+            return f"Failed to parse LLM response. Got: {response[:200]}"
 
         # Validate required fields
         required_fields = ["title", "description", "scope"]
@@ -481,6 +486,7 @@ Return JSON with format: {{"should_decompose": true/false, "reasoning": "brief e
                 baseline=baseline,
                 config=self.config,
                 tasks_state=None,  # Could pass current task state for context
+                llm_client=self.llm_client,
             )
 
             # Validate dependencies

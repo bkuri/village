@@ -17,22 +17,25 @@ class AnthropicClient(LLMClient):
         self,
         api_key: str,
         model: str = "claude-3-5-sonnet-20241022",
+        max_tokens: int = 8192,
     ):
         """Initialize Anthropic client.
 
         Args:
             api_key: Anthropic API key
             model: Model name to use
+            max_tokens: Default max response tokens
         """
         self.client = Anthropic(api_key=api_key)
         self.model = model
+        self.default_max_tokens = max_tokens
 
     def call(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
         tools: Optional[list[ToolDefinition]] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         timeout: int = 300,
     ) -> str:
         """Call Anthropic API with optional tool support.

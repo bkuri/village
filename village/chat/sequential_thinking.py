@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from village.chat.baseline import BaselineReport
 from village.config import Config
@@ -16,6 +16,9 @@ from village.llm.tools import (
     SEQUENTIAL_THINKING_TOOL,
     format_mcp_tool_name,
 )
+
+if TYPE_CHECKING:
+    from village.llm.client import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +80,7 @@ def generate_task_breakdown(
     baseline: BaselineReport,
     config: Config,
     tasks_state: Optional[str] = None,
+    llm_client: Optional["LLMClient"] = None,
 ) -> TaskBreakdown:
     """
     Generate task breakdown using configured strategy.
@@ -88,6 +92,7 @@ def generate_task_breakdown(
         baseline: Collected baseline information
         config: Village configuration
         tasks_state: Optional current tasks (for context)
+        llm_client: Optional LLM client to use (uses get_llm_client(config) if not provided)
 
     Returns:
         TaskBreakdown with parsed task list
@@ -96,17 +101,18 @@ def generate_task_breakdown(
         ValueError: If response is invalid or missing required fields
         json.JSONDecodeError: If response is not valid JSON
     """
+    if llm_client is None:
+        llm_client = get_llm_client(config)
+
     strategy = config.task_breakdown.strategy
 
     if strategy == "st_aot_light":
-        return _st_aot_light_strategy(baseline, config, tasks_state)
+        return _st_aot_light_strategy(baseline, config, tasks_state, llm_client)
 
     # Default sequential strategy (for "sequential" and "atomic")
     prompt = _build_sequential_thinking_prompt(baseline, tasks_state)
 
     logger.info(f"Invoking {strategy} task breakdown via LLM")
-
-    llm_client = get_llm_client(config)
 
     response = llm_client.call(
         prompt,
@@ -470,6 +476,7 @@ def _st_aot_light_strategy(
     baseline: BaselineReport,
     config: Config,
     tasks_state: Optional[str] = None,
+    llm_client: Optional["LLMClient"] = None,
 ) -> TaskBreakdown:
     """
     ST → AoT Light strategy: Deep analysis first, then atomic atomization.
@@ -481,6 +488,7 @@ def _st_aot_light_strategy(
         baseline: Collected baseline information
         config: Village configuration
         tasks_state: Optional current tasks (for context)
+        llm_client: Optional LLM client to use
 
     Returns:
         TaskBreakdown with atomic task list
@@ -489,10 +497,11 @@ def _st_aot_light_strategy(
         ValueError: If response is invalid or missing required fields
         json.JSONDecodeError: If response is not valid JSON
     """
+    if llm_client is None:
+        llm_client = get_llm_client(config)
+
     logger.info("Phase 1: Running Sequential Thinking for deep analysis")
     analysis_prompt = _build_st_analysis_prompt(baseline, tasks_state, config)
-
-    llm_client = get_llm_client(config)
 
     analysis_response = llm_client.call(
         analysis_prompt,
@@ -521,5 +530,6 @@ def _st_aot_light_strategy(
     )
 
     logger.debug(f"AoT-light atomization output length: {len(response)}")
+    logger.debug(f"AoT-light atomization response: {response[:500]}")
 
     return _parse_task_breakdown(response)

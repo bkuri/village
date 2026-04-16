@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import pathlib
 
 import click
 
 from village.logging import get_logger
+from village.prompt import sync_prompt
 from village.roles import run_role_chat
 from village.workflow.loader import WorkflowLoader, WorkflowLoadError
 from village.workflow.planner import Planner
@@ -70,7 +73,7 @@ def show_workflow(ctx: click.Context, name: str | None) -> None:
         click.echo("Available workflows:")
         for i, n in enumerate(names, 1):
             click.echo(f"  {i}. {n}")
-        choice = click.prompt("Which workflow?", type=int)
+        choice = int(sync_prompt("Which workflow?", type=int))
         if choice < 1 or choice > len(names):
             raise click.ClickException("Invalid selection")
         name = names[choice - 1]
@@ -103,7 +106,7 @@ def show_workflow(ctx: click.Context, name: str | None) -> None:
 def design_workflow(goal: str | None) -> None:
     """Design a new workflow interactively."""
     if goal is None:
-        goal = click.prompt("Describe the workflow goal")
+        goal = sync_prompt("Describe the workflow goal")
 
     assert goal is not None
     loader = _get_loader()
@@ -127,7 +130,7 @@ def refine_workflow(goal: str | None) -> None:
         click.echo("Available workflows:")
         for i, n in enumerate(names, 1):
             click.echo(f"  {i}. {n}")
-        choice = click.prompt("Select workflow number", type=int)
+        choice = int(sync_prompt("Select workflow number", type=int))
         if choice < 1 or choice > len(names):
             raise click.ClickException("Invalid selection")
         goal = names[choice - 1]
@@ -140,7 +143,7 @@ def refine_workflow(goal: str | None) -> None:
 
     click.echo("\n--- Refinement mode ---")
     while True:
-        feedback = click.prompt("Feedback (empty to finish)", default="")
+        feedback = sync_prompt("Feedback (empty to finish)", default="")
         if not feedback:
             break
         result = planner.refine(result, feedback)

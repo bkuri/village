@@ -1,7 +1,7 @@
 """Tests for Scribe polling-based file monitor."""
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from village.scribe.monitor import Monitor
 from village.scribe.store import ScribeStore

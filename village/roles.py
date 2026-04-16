@@ -6,6 +6,8 @@ from typing import Any
 
 import click
 
+from village.prompt import sync_prompt
+
 
 class RoutingAction(str, Enum):
     ROUTE = "route"
@@ -237,7 +239,7 @@ def run_role_chat(
 
     while True:
         try:
-            user_input = click.prompt("", default="", show_default=False)
+            user_input = sync_prompt("", default="", show_default=False)
         except (click.exceptions.Abort, EOFError):
             click.echo("")
             break
@@ -260,7 +262,7 @@ def run_role_chat(
                 break
             elif routing.action == RoutingAction.ADVISE:
                 click.echo(f"  That sounds like a job for the {routing.target_role}.")
-                confirm = click.prompt("  Want me to start it? [Y/n]", default="Y")
+                confirm = sync_prompt("  Want me to start it? [Y/n]", default="Y")
                 if confirm.strip().lower() in ("y", "yes", ""):
                     click.echo(f"  ── Routing to {routing.target_role} ──────────")
                     run_role_chat(routing.target_role, context=routing.context)

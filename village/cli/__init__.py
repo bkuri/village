@@ -17,20 +17,79 @@ def _handle_interrupt(signum: int, frame: object) -> None:
     raise InterruptedResume()
 
 
-@click.group()
+@click.group(invoke_without_command=True)
 @click.option("-v", "--verbose", is_flag=True, help="Verbose logging")
+@click.option(
+    "--transport",
+    type=click.Choice(["cli", "telegram", "acp", "stdio"]),
+    default=None,
+    help="Start transport daemon mode",
+)
 @click.version_option(version=__version__)
 @click.pass_context
-def village(ctx: click.Context, verbose: bool) -> None:
+def village(ctx: click.Context, verbose: bool, transport: str | None) -> None:
     """Village - CLI-native parallel development orchestrator."""
+    import asyncio
+
     setup_logging(verbose=verbose)
     clear_pane_cache()
     signal.signal(signal.SIGINT, _handle_interrupt)
     ctx.ensure_object(dict)
 
+    if ctx.invoked_subcommand is None:
+        from village.config import get_config
+
+        config = get_config()
+        transport_mode = transport or config.transport.default
+
+        if transport_mode != "cli":
+            if transport_mode == "telegram":
+                from village.cli.greeter import run_greeter
+
+                asyncio.run(run_greeter(config, "telegram", model=None, no_system_prompt=False))
+            elif transport_mode == "acp":
+                import sys
+
+                if sys.stdin.isatty():
+                    click.echo(
+                        "ACP transport requires a client connection.\n"
+                        "Pipe stdin or use an ACP-compatible editor/agent:\n"
+                        "  village --transport acp < input.json\n"
+                        "  opencode --mcp village --transport acp\n"
+                        "Or run a specific command: village greeter, village tasks, etc."
+                    )
+                    return
+
+                from village.chat.transports.acp import ACPTransportAgent
+                from village.dispatch import start_command_executor, stop_command_executor
+
+                async def _run_acp() -> None:
+                    start_command_executor()
+                    try:
+                        from acp import run_agent
+
+                        agent = ACPTransportAgent(config)
+                        await run_agent(agent)
+                    finally:
+                        stop_command_executor()
+
+                asyncio.run(_run_acp())
+            elif transport_mode == "stdio":
+                from village.chat.transports.stdio import run_stdio_transport
+                from village.dispatch import start_command_executor, stop_command_executor
+
+                async def _run_stdio() -> None:
+                    start_command_executor()
+                    try:
+                        await run_stdio_transport(config)
+                    finally:
+                        stop_command_executor()
+
+                asyncio.run(_run_stdio())
+            return
+
 
 from village.cli import (  # noqa: E402
-    acp,
     builder,
     council,
     doctor,
@@ -55,9 +114,6 @@ village.add_command(greeter.greeter, name="greeter")
 village.add_command(greeter.greeter, name="welcome")
 village.add_command(greeter.greeter, name="chat")
 village.add_command(greeter.greeter, name="help")
-
-# ACP (top-level)
-village.add_command(acp.acp_command, name="acp")
 
 # Tasks (top-level)
 village.add_command(tasks.tasks, name="tasks")

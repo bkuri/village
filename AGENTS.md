@@ -124,17 +124,9 @@ pytest tests/ -k acp -v
 
 **Manual testing:**
 ```bash
-# Start ACP server
-village acp --server start
-
-# Test agent connection
-village acp --client test claude
-
-# Spawn agent
-village acp --client spawn claude
-
-# Check status
-village acp --server status
+# Start greeter with transport
+village greeter --transport cli       # CLI (default)
+village greeter --transport telegram # Telegram bot
 ```
 
 ## Project Structure
@@ -151,13 +143,16 @@ village/
 │   ├── greeter.py      #   village greeter — Q&A session
 │   ├── goals.py        #   village goals — goal hierarchy
 │   ├── lifecycle.py    #   new, up, down
-│   ├── acp.py          #   village acp — agent bridge
-│   ├── tasks.py        #   village tasks — task store management
-│   ├── state.py        #   (logic-only, no CLI decorators)
 │   ├── dashboard.py    #   (logic-only, no CLI decorators)
 │   ├── maintenance.py  #   (logic-only, no CLI decorators)
 │   ├── work.py         #   (logic-only, no CLI decorators)
 │   └── release.py      #   (logic-only, no CLI decorators)
+├── chat/transports/    # Transport abstraction
+│   ├── __init__.py     #   AsyncTransport ABC + factory
+│   ├── cli.py          #   CLI transport
+│   └── telegram.py     #   Telegram transport
+├── prompt.py           # PromptResolver (intercepts click.prompt)
+├── dispatch.py         # Command registry + dispatcher
 ├── config.py           # Config loading
 ├── roles.py            # RoleChat base, routing table, greetings
 ├── loop.py             # Spec-driven autonomous build loop
@@ -338,7 +333,6 @@ village up                        # Initialize village (includes onboarding)
 village down                      # Stop village runtime
 village goals                     # Show goal hierarchy
 village tasks                     # Task store management
-village acp                       # ACP agent bridge
 village greeter                   # Interactive Q&A (aliases: welcome, chat, help)
 ```
 
@@ -365,26 +359,12 @@ village greeter                   # Interactive Q&A (aliases: welcome, chat, hel
 - Inject contract via stdin or file
 - Worker = one tmux pane + one OpenCode instance
 
-### ACP Integration
-- **Server mode**: Village exposes ACP interface for editors (Zed, JetBrains)
-- **Client mode**: Village spawns external ACP agents (Claude Code, Gemini CLI)
-- **Bridge**: `village/acp/bridge.py` translates ACP ↔ Village operations
-- **Configuration**: `[acp]` section in `.village/config` and `type=acp` agents
-- **Testing**: Use `village acp --client test <agent-name>` to verify connections
-- **Commands**: See `village acp --help` for server/client operations
-
-**CLI Commands:**
-```bash
-# Server operations
-village acp --server start [--host HOST] [--port PORT]
-village acp --server stop
-village acp --server status
-
-# Client operations
-village acp --client list
-village acp --client spawn <agent-name>
-village acp --client test <agent-name>
-```
+### Transport Abstraction
+- **CLI transport**: Default stdin/stdout interaction
+- **Telegram transport**: Bot API with long polling, DMs only
+- **PromptResolver**: Intercepts `click.prompt()` and routes through active transport
+- **Dispatcher**: Routes commands to handlers (slash commands for Telegram, natural language fallback)
+- **Future**: ACP transport, stdio transport
 
 ## Constraints
 

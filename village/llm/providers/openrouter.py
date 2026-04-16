@@ -14,17 +14,19 @@ class OpenRouterClient(LLMClient):
         api_key: str,
         model: str = "anthropic/claude-3.5-sonnet",
         base_url: str = "https://openrouter.ai/api/v1",
+        max_tokens: int = 8192,
     ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url
+        self.default_max_tokens = max_tokens
 
     def call(
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
         tools: Optional[list[ToolDefinition]] = None,
-        max_tokens: int = 4096,
+        max_tokens: int = 8192,
         timeout: int = 300,
     ) -> str:
         messages = []
@@ -70,8 +72,16 @@ class OpenRouterClient(LLMClient):
                 response.raise_for_status()
 
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                if "choices" not in data or not data["choices"]:
+                    logger.error("OpenRouter response has no choices")
+                    return ""
+                message = data["choices"][0].get("message", {})
+                content = message.get("content")
 
+                if content is None:
+                    if message.get("tool_calls"):
+                        logger.warning("LLM returned tool call instead of text content")
+                    return ""
                 return str(content)
         except httpx.HTTPStatusError as e:
             logger.error(f"OpenRouter API error: {e.response.status_code} - {e.response.text}")
@@ -119,7 +129,7 @@ class AnthropicClient(LLMClient):
 
         messages = [{"role": "user", "content": prompt}]
 
-        payload: dict = {
+        payload: dict[str, object] = {
             "model": self.model,
             "max_tokens": max_tokens,
             "messages": messages,

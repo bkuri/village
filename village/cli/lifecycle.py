@@ -9,6 +9,7 @@ from village.config import get_config
 from village.event_log import Event, append_event
 from village.logging import get_logger
 from village.probes.tmux import session_exists
+from village.prompt import sync_prompt
 from village.render.text import render_initialization_plan
 from village.runtime import collect_runtime_state, execute_initialization, plan_initialization
 
@@ -28,7 +29,7 @@ def _prompt(question: str) -> str:
         The trimmed answer, or empty string if aborted.
     """
     try:
-        return str(click.prompt(f"  {question}")).strip()
+        return sync_prompt(f"  {question}").strip()
     except (click.exceptions.Abort, EOFError, KeyboardInterrupt):
         click.echo("")
         return ""

@@ -1,5 +1,7 @@
 """Village Watcher — observability and maintenance CLI commands."""
 
+from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path
@@ -10,6 +12,7 @@ import click
 from village.config import get_config
 from village.errors import EXIT_BLOCKED, EXIT_ERROR
 from village.probes.tmux import session_exists
+from village.prompt import sync_prompt
 from village.roles import run_role_chat
 from village.scribe.store import ScribeStore
 from village.status import collect_full_status, collect_workers
@@ -458,7 +461,7 @@ def ledger_show(task_id: str | None, json_output: bool) -> None:
         click.echo("Traced tasks:")
         for i, tid in enumerate(task_ids, 1):
             click.echo(f"  {i}. {tid}")
-        choice = click.prompt("Which task?", type=int)
+        choice = int(sync_prompt("Which task?", type=int))
         if choice < 1 or choice > len(task_ids):
             raise click.ClickException("Invalid selection")
         task_id = task_ids[choice - 1]

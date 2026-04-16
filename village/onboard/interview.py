@@ -8,6 +8,7 @@ import click
 from village.config import OnboardConfig
 from village.onboard.detector import ProjectInfo
 from village.onboard.scaffolds import ScaffoldTemplate
+from village.prompt import sync_confirm, sync_prompt
 
 if TYPE_CHECKING:
     from village.llm.client import LLMClient
@@ -180,8 +181,12 @@ class InterviewEngine:
 
         turn_count = 0
         while turn_count < max_turns:
-            user_input = self._read_input()
-            if user_input is None:
+            try:
+                user_input = sync_prompt(first_question, show_default=False).strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+
+            if not user_input or user_input.lower() == "done":
                 break
 
             transcript.append((first_question, user_input))
@@ -237,44 +242,6 @@ class InterviewEngine:
         )
 
         return " ".join(parts)
-
-    def _read_multiline_input(
-        self,
-        *,
-        on_done: str | None = None,
-        on_skip: str | None = None,
-    ) -> str | None:
-        """Read multiline input from the user.
-
-        Returns None if user types the 'on_done' keyword on the first line.
-        Returns empty string if user types the 'on_skip' keyword on the first line.
-        Otherwise returns the joined lines (blank line or EOF terminates).
-        """
-        lines: list[str] = []
-        try:
-            while True:
-                try:
-                    line = input()
-                except EOFError:
-                    break
-
-                if not lines and on_done and line.lower() == on_done:
-                    return None
-                if not lines and on_skip and line.lower() == on_skip:
-                    return ""
-                if line == "" and lines:
-                    break
-                if line == "" and not lines:
-                    break
-                lines.append(line)
-        except KeyboardInterrupt:
-            click.echo("\n")
-            return None
-
-        return "\n".join(lines)
-
-    def _read_input(self) -> str | None:
-        return self._read_multiline_input(on_done="done", on_skip="skip")
 
     def _format_conversation(self, conversation: list[dict[str, str]]) -> str:
         """Format conversation history as readable text for the LLM."""
@@ -362,12 +329,16 @@ class InterviewEngine:
                 continue
 
             click.echo(f"? {question}")
-            answer_text = self._read_multiline_input(on_done="done", on_skip="skip")
-            if answer_text is None:
+            try:
+                answer = sync_prompt(f"? {question}", show_default=False).strip()
+            except (EOFError, KeyboardInterrupt):
                 click.echo("")
                 return self._build_result(answers, transcript)
 
-            answer = answer_text
+            if answer.lower() == "done":
+                click.echo("")
+                return self._build_result(answers, transcript)
+
             answers[question] = answer
             transcript.append((question, answer))
             click.echo("")
@@ -395,7 +366,7 @@ class InterviewEngine:
 
     def _prompt_confirm(self, question: str) -> bool:
         try:
-            response = click.confirm(f"  {question}", default=True)
+            response = sync_confirm(f"  {question}", default=True)
             return bool(response)
         except (click.exceptions.Abort, EOFError, KeyboardInterrupt):
             click.echo("")

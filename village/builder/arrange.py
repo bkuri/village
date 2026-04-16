@@ -26,12 +26,7 @@ def arrange_landing(dry_run: bool = False, project_filter: str | None = None) ->
 
     task_dicts = [{"id": t.id, "title": t.title, "labels": t.labels} for t in done_tasks]
 
-    if project_filter:
-        from village.plans.project import filter_by_project
-
-        task_dicts = filter_by_project(task_dicts, project_filter)
-
-    pr_specs = create_pr_specs(task_dicts, "landing", flat=False)
+    pr_specs = create_pr_specs(task_dicts, "landing", flat=False, project=project_filter)
 
     if dry_run:
         return {"prs": pr_specs, "message": "Dry run"}

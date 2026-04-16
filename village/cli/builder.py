@@ -4,6 +4,7 @@ import sys
 import click
 
 from village.logging import get_logger
+from village.prompt import sync_confirm
 from village.roles import run_role_chat
 from village.workflow.loader import WorkflowLoader
 
@@ -709,7 +710,7 @@ def rollback(mode: str, plan: str | None, force: bool) -> None:
     click.echo(f"Abort signal written for plan '{slug}'.")
 
     if not force:
-        confirm = click.confirm("Workers will be signaled to stop. Continue?")
+        confirm = sync_confirm("Workers will be signaled to stop. Continue?")
         if not confirm:
             click.echo("Rollback cancelled.")
             return

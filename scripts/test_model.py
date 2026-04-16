@@ -8,8 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import click
-from village.llm.providers.openrouter import OpenRouterClient
 
+from village.llm.providers.openrouter import OpenRouterClient
 
 INTERVIEW_PROMPT = """You are conducting an adaptive onboarding interview. Your goal is to gather information about a software project.
 

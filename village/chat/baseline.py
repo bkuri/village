@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from village.prompt import sync_prompt
 from village.tasks import TaskStoreError, get_task_store
 
 logger = logging.getLogger(__name__)
@@ -91,11 +92,9 @@ def _collect_title(initial_title: Optional[str] = None) -> str:
         click.echo(f"Title: {initial_title}")
         title = initial_title
     else:
-        title = str(
-            click.prompt(
-                "What do you want to break down? (brief, max 100 chars)",
-                show_default=False,
-            )
+        title = sync_prompt(
+            "What do you want to break down? (brief, max 100 chars)",
+            show_default=False,
         )
 
     if not title or len(title.strip()) < 3:
@@ -119,9 +118,7 @@ def _collect_reasoning(title: str) -> str:
     Raises:
         ValueError: If reasoning is empty or too short
     """
-    import click
-
-    reasoning = str(click.prompt(f"Why break down '{title}'?", show_default=False))
+    reasoning = sync_prompt(f"Why break down '{title}'?", show_default=False)
 
     if not reasoning or len(reasoning.strip()) < 10:
         raise ValueError("Reasoning must be at least 10 characters")
@@ -140,19 +137,17 @@ def _collect_optional_fields(title: str, max_followups: int) -> dict[str, Any]:
     Returns:
         Dict with optional fields (parent_task_id, tags)
     """
-    import click
-
     optional_fields: dict[str, Any] = {}
     followups_asked = 0
 
     if followups_asked < max_followups:
-        parent = click.prompt("Parent task ID (leave empty): ", show_default=False, default="")
+        parent = sync_prompt("Parent task ID (leave empty): ", show_default=False, default="")
         if parent:
             optional_fields["parent_task_id"] = parent
             followups_asked += 1
 
     if followups_asked < max_followups:
-        tags_input = click.prompt("Batch tags (comma-separated, leave empty): ", show_default=False, default="")
+        tags_input = sync_prompt("Batch tags (comma-separated, leave empty): ", show_default=False, default="")
         if tags_input:
             optional_fields["tags"] = [t.strip() for t in tags_input.split(",") if t.strip()]
             followups_asked += 1
