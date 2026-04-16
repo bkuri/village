@@ -31,7 +31,7 @@ def clear_pane_cache() -> None:
 def session_exists(session_name: str) -> bool:
     """Check if tmux session exists."""
     cmd = ["tmux", "has-session", "-t", session_name]
-    result = run_command(cmd, capture=False, check=False)
+    result = run_command(cmd, capture=True, check=False)
     exists = result.returncode == 0
     logger.debug(f"Session '{session_name}' exists: {exists}")
     return exists
@@ -129,10 +129,6 @@ def create_session(session_name: str) -> bool:
 
     Returns True if created or already exists, False on error.
     """
-    if session_exists(session_name):
-        logger.debug(f"Session '{session_name}' already exists")
-        return True
-
     cmd = ["tmux", "new-session", "-d", "-s", session_name]
     try:
         run_command(cmd, check=True)
