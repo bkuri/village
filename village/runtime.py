@@ -116,7 +116,7 @@ def _create_dashboard(session_name: str, dry_run: bool) -> bool:
     Uses `watch -n 2 village status --short` for portability.
     """
     dashboard_name = "village:dashboard"
-    dashboard_command = "watch -n 2 village status --short"
+    dashboard_command = "watch -n 2 village watcher status --short"
 
     if not dry_run:
         # Cheap check: does dashboard window exist?
@@ -128,7 +128,8 @@ def _create_dashboard(session_name: str, dry_run: bool) -> bool:
             return True
 
         # Create dashboard window
-        success = create_window(session_name, dashboard_name, dashboard_command)
+        config = get_config()
+        success = create_window(session_name, dashboard_name, dashboard_command, cwd=str(config.git_root))
         return success
 
     return False

@@ -280,3 +280,244 @@ class TestCurate:
 
         assert len(result.broken_links) == 1
         assert result.broken_links[0].entry_id == "url-1"
+
+
+class TestRebuildIndexExclude:
+    def test_excludes_ids_from_index(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="Keep", text="active", entry_id="keep-1")
+        store.put(title="Exclude", text="orphan", entry_id="orph-1")
+        store.put(title="Also keep", text="active", entry_id="keep-2")
+
+        store.rebuild_index(exclude={"orph-1"})
+
+        index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+        assert "keep-1" in index
+        assert "keep-2" in index
+        assert "orph-1" not in index
+
+    def test_no_exclude_includes_all(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="A", text="a", entry_id="a-1")
+        store.put(title="B", text="b", entry_id="b-1")
+
+        store.rebuild_index()
+
+        index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+        assert "a-1" in index
+        assert "b-1" in index
+
+    def test_exclude_nonexistent_id_is_noop(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="A", text="a", entry_id="a-1")
+
+        store.rebuild_index(exclude={"nonexistent"})
+
+        index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+        assert "a-1" in index
+
+    def test_exclude_empty_set_includes_all(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="A", text="a", entry_id="a-1")
+
+        store.rebuild_index(exclude=set())
+
+        index = (tmp_path / "wiki" / "index.md").read_text(encoding="utf-8")
+        assert "a-1" in index
+
+
+class TestArchiveOrphans:
+    def test_writes_orphans_md(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+
+        store.put(title="Orphan page", text="alone", entry_id="orph-1", tags=["old"])
+        store.put(title="Active", text="linked", entry_id="act-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        archived, written = curator._archive_orphans(["orph-1"])
+
+        assert archived == ["orph-1"]
+        assert written is True
+
+        orphans_md = wiki_path / "ORPHANS.md"
+        assert orphans_md.exists()
+        content = orphans_md.read_text(encoding="utf-8")
+        assert "# Orphaned Entries" in content
+        assert "orph-1" in content
+        assert "Orphan page" in content
+        assert "old" in content
+
+    def test_orphans_md_has_table_format(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+
+        store.put(
+            title="Lonely",
+            text="content",
+            entry_id="lonely-1",
+            metadata={"source": "https://example.com/doc"},
+        )
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator._archive_orphans(["lonely-1"])
+
+        content = (wiki_path / "ORPHANS.md").read_text(encoding="utf-8")
+        assert "| ID | Title | Source | Age (days) | Tags |" in content
+        assert "https://example.com/doc" in content
+
+    def test_orphans_md_has_restore_note(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+
+        store.put(title="Orphan", text="content", entry_id="o-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator._archive_orphans(["o-1"])
+
+        content = (wiki_path / "ORPHANS.md").read_text(encoding="utf-8")
+        assert "excluded from the active wiki index" in content
+
+    def test_empty_orphans_returns_empty(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+
+        curator = Curator(store, wiki_path, tmp_path)
+        archived, written = curator._archive_orphans([])
+
+        assert archived == []
+        assert written is False
+        assert not (wiki_path / "ORPHANS.md").exists()
+
+    def test_entry_files_not_deleted(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+        wiki_path.mkdir(parents=True, exist_ok=True)
+
+        store.put(title="Orphan", text="content", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator._archive_orphans(["orph-1"])
+
+        entry_file = wiki_path / "entries" / "orph-1.md"
+        assert entry_file.exists()
+
+
+class TestCurateFix:
+    def test_fix_false_does_nothing(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=False, check_urls=False)
+
+        assert result.orphans_archived == []
+        assert result.orphans_md_written is False
+        assert result.curate_log == []
+        assert not (tmp_path / "wiki" / "ORPHANS.md").exists()
+
+    def test_fix_true_archives_orphans(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Active", text="linked", entry_id="act-1", metadata={"related": "orph-1"})
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        assert "orph-1" not in result.orphans
+        assert "act-1" in result.orphans
+        assert "act-1" in result.orphans_archived
+        assert result.orphans_md_written is True
+        assert (wiki_path / "ORPHANS.md").exists()
+
+    def test_fix_excludes_orphans_from_voice(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Active", text="linked", entry_id="act-1", metadata={"related": "linked-1"})
+        store.put(title="Linked", text="connected", entry_id="linked-1", metadata={"related": "act-1"})
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator.curate(fix=True, check_urls=False)
+
+        voice = (tmp_path / "VOICE.md").read_text(encoding="utf-8")
+        assert "act-1" in voice
+        assert "linked-1" in voice
+        assert "orph-1" not in voice
+
+    def test_fix_excludes_orphans_from_index(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Active", text="linked", entry_id="act-1", metadata={"related": "linked-1"})
+        store.put(title="Linked", text="connected", entry_id="linked-1", metadata={"related": "act-1"})
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator.curate(fix=True, check_urls=False)
+
+        index = (wiki_path / "index.md").read_text(encoding="utf-8")
+        assert "act-1" in index
+        assert "linked-1" in index
+        assert "orph-1" not in index
+
+    def test_fix_populates_curate_log(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Orphan A", text="alone", entry_id="orph-a")
+        store.put(title="Orphan B", text="also alone", entry_id="orph-b")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        assert len(result.curate_log) == 1
+        assert "archived 2 orphan(s)" in result.curate_log[0]
+        assert "orph-a" in result.curate_log[0]
+        assert "orph-b" in result.curate_log[0]
+
+    def test_fix_appends_to_wiki_log(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator.curate(fix=True, check_urls=False)
+
+        log = (wiki_path / "log.md").read_text(encoding="utf-8")
+        assert "CURATE --fix" in log
+        assert "orph-1" in log
+
+    def test_fix_no_orphans_is_noop(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="A", text="a", entry_id="a", metadata={"related": "b"})
+        store.put(title="B", text="b", entry_id="b", metadata={"related": "a"})
+
+        curator = Curator(store, wiki_path, tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        assert result.orphans_archived == []
+        assert result.orphans_md_written is False
+        assert result.curate_log == []
+
+    def test_entry_files_preserved_after_fix(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        wiki_path = tmp_path / "wiki"
+
+        store.put(title="Orphan", text="alone", entry_id="orph-1")
+
+        curator = Curator(store, wiki_path, tmp_path)
+        curator.curate(fix=True, check_urls=False)
+
+        entry_file = wiki_path / "entries" / "orph-1.md"
+        assert entry_file.exists()

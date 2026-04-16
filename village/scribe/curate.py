@@ -41,6 +41,9 @@ class CurateResult:
     voice_updated: bool = False
     goals_updated: bool = False
     total_entries: int = 0
+    orphans_archived: list[str] = field(default_factory=list)
+    orphans_md_written: bool = False
+    curate_log: list[str] = field(default_factory=list)
 
 
 class Curator:
@@ -116,13 +119,72 @@ class Curator:
 
         return broken
 
-    def generate_voice(self) -> bool:
+    def _archive_orphans(self, orphan_ids: list[str]) -> tuple[list[str], bool]:
+        """Write orphaned entries to wiki/ORPHANS.md and exclude from index.
+
+        Returns (archived_ids, orphans_md_written).
+        """
+        if not orphan_ids:
+            return [], False
+
+        now = datetime.now(timezone.utc)
+        orphans_path = self.wiki_path / "ORPHANS.md"
+
+        lines: list[str] = []
+        lines.append("# Orphaned Entries")
+        lines.append(f"> Archived by `village scribe curate --fix` on {now.strftime('%Y-%m-%d')}")
+        lines.append("")
+        lines.append("| ID | Title | Source | Age (days) | Tags |")
+        lines.append("|----|-------|--------|------------|------|")
+
+        archived = []
+        for entry_id in sorted(orphan_ids):
+            entry = self.store.get(entry_id)
+            if entry is None:
+                continue
+            age_days = (now - entry.created).days
+            source = entry.metadata.get("source", "")
+            if not isinstance(source, str):
+                source = ""
+            tags_str = ", ".join(entry.tags) if entry.tags else ""
+            lines.append(f"| {entry.id} | {entry.title} | {source} | {age_days} | {tags_str} |")
+            archived.append(entry_id)
+
+        lines.append("")
+        lines.append(
+            "These entries are excluded from the active wiki index. "
+            "To restore, re-link from another entry or remove from ORPHANS.md "
+            "and run `village scribe curate --fix` again."
+        )
+        lines.append("")
+
+        orphans_path.write_text("\n".join(lines), encoding="utf-8")
+
+        return archived, True
+
+    def _append_curate_log(self, actions: list[str]) -> None:
+        """Append curation actions to wiki/log.md."""
+        log_path = self.wiki_path / "log.md"
+        if log_path.exists():
+            existing = log_path.read_text(encoding="utf-8")
+        else:
+            existing = "# Ingest Log\n\n"
+
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        for action in actions:
+            existing += f"- [{date_str}] {action}\n"
+
+        log_path.write_text(existing, encoding="utf-8")
+
+    def generate_voice(self, exclude: set[str] | None = None) -> bool:
         """Generate VOICE.md at project root from wiki content."""
+        exclude_set = exclude or set()
         entries = self.store.all_entries()
         if not entries:
             return False
 
-        entries_by_recency = sorted(entries, key=lambda e: e.created, reverse=True)
+        active_entries = [e for e in entries if e.id not in exclude_set]
+        entries_by_recency = sorted(active_entries, key=lambda e: e.created, reverse=True)
 
         lines: list[str] = []
         lines.append("# Village Voice")
@@ -135,7 +197,7 @@ class Curator:
             lines.append(f"- [{date_str}] {entry.title} (see: {entry.id})")
         lines.append("")
 
-        convention_entries = [e for e in entries if "convention" in [t.lower() for t in e.tags]]
+        convention_entries = [e for e in active_entries if "convention" in [t.lower() for t in e.tags]]
         if convention_entries:
             lines.append("## Conventions")
             for entry in convention_entries[:10]:
@@ -144,7 +206,7 @@ class Curator:
             lines.append("")
 
         gotcha_tags = {"gotcha", "mistake", "blocker"}
-        gotcha_entries = [e for e in entries if any(t.lower() in gotcha_tags for t in e.tags)]
+        gotcha_entries = [e for e in active_entries if any(t.lower() in gotcha_tags for t in e.tags)]
         if gotcha_entries:
             lines.append("## Known Gotchas")
             for entry in gotcha_entries[:10]:
@@ -208,8 +270,14 @@ class Curator:
             write_goals(goals, goals_path)
         return goals
 
-    def curate(self, max_age_days: int = 90, check_urls: bool = True) -> CurateResult:
-        """Run all health checks and regenerate VOICE.md."""
+    def curate(self, max_age_days: int = 90, check_urls: bool = True, fix: bool = False) -> CurateResult:
+        """Run all health checks and regenerate VOICE.md.
+
+        Args:
+            max_age_days: Age threshold for stale entry detection.
+            check_urls: Whether to HTTP-check URL sources.
+            fix: If True, archive orphans to ORPHANS.md and exclude from index.
+        """
         result = CurateResult()
         result.total_entries = len(self.store.all_entries())
         result.orphans = self.find_orphans()
@@ -218,7 +286,20 @@ class Curator:
         if check_urls:
             result.broken_links = self.check_links()
 
-        result.voice_updated = self.generate_voice()
+        exclude_ids: set[str] = set()
+
+        if fix and result.orphans:
+            archived, written = self._archive_orphans(result.orphans)
+            result.orphans_archived = archived
+            result.orphans_md_written = written
+            exclude_ids = set(archived)
+            result.curate_log.append(
+                f"CURATE --fix: archived {len(archived)} orphan(s) to ORPHANS.md ({', '.join(archived)})"
+            )
+            self._append_curate_log(result.curate_log)
+
+        result.voice_updated = self.generate_voice(exclude=exclude_ids)
+        self.store.rebuild_index(exclude=exclude_ids)
 
         goals = self.generate_goals()
         result.goals_updated = len(goals) > 0

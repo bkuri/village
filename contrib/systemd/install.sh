@@ -5,20 +5,31 @@ set -e
 VILLAGE_DIR="${VILLAGE_DIR:-$HOME/source/village}"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 
-# Ensure systemd directory exists
 mkdir -p "$SYSTEMD_DIR"
 
-# Copy unit files
-cp "$VILLAGE_DIR/contrib/systemd/village-analyze.timer" "$SYSTEMD_DIR/"
-cp "$VILLAGE_DIR/contrib/systemd/village-analyze.service" "$SYSTEMD_DIR/"
+UNITS=(
+    "village-analyze"
+    "village-scribe-curate"
+)
 
-# Replace placeholder paths
-sed -i "s|%h|$HOME|g" "$SYSTEMD_DIR/village-analyze.service"
-sed -i "s|WorkingDirectory=.*|WorkingDirectory=$VILLAGE_DIR|g" "$SYSTEMD_DIR/village-analyze.service"
+for unit in "${UNITS[@]}"; do
+    if [ -f "$VILLAGE_DIR/contrib/systemd/${unit}.service" ]; then
+        cp "$VILLAGE_DIR/contrib/systemd/${unit}.service" "$SYSTEMD_DIR/"
+        cp "$VILLAGE_DIR/contrib/systemd/${unit}.timer" "$SYSTEMD_DIR/"
+        sed -i "s|%h|$HOME|g" "$SYSTEMD_DIR/${unit}.service"
+        sed -i "s|WorkingDirectory=.*|WorkingDirectory=$VILLAGE_DIR|g" "$SYSTEMD_DIR/${unit}.service"
+        systemctl --user enable "${unit}.timer"
+        echo "Installed: ${unit}"
+    else
+        echo "Skipping: ${unit} (files not found)"
+    fi
+done
 
-# Enable and start
 systemctl --user daemon-reload
-systemctl --user enable village-analyze.timer
 
-echo "Village timer installed. Start with: systemctl --user start village-analyze.timer"
+echo ""
+echo "Village timers installed. Start with:"
+echo "  systemctl --user start village-analyze.timer"
+echo "  systemctl --user start village-scribe-curate.timer"
+echo ""
 echo "Check status with: systemctl --user list-timers"

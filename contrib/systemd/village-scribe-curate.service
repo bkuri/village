@@ -1,0 +1,17 @@
+[Unit]
+Description=Village Scribe Curation
+Documentation=https://github.com/anomalyco/village
+After=network-online.target
+
+[Service]
+Type=oneshot
+# Replace %h with home directory at install time
+WorkingDirectory=%h/source/village
+ExecStart=%h/.local/bin/village scribe curate --fix
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=village-scribe-curate
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

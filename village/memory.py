@@ -282,13 +282,20 @@ class MemoryStore:
         self.rebuild_index()
         return True
 
-    def rebuild_index(self) -> None:
-        """Regenerate index.md from entries."""
+    def rebuild_index(self, exclude: set[str] | None = None) -> None:
+        """Regenerate index.md from entries.
+
+        Args:
+            exclude: Optional set of entry IDs to omit from the index.
+        """
         self._ensure_dirs()
         entries = self.all_entries()
+        exclude_set = exclude or set()
 
         lines: list[str] = ["# Memory Index", ""]
         for entry in sorted(entries, key=lambda e: e.created, reverse=True):
+            if entry.id in exclude_set:
+                continue
             tags_str = ", ".join(entry.tags) if entry.tags else ""
             suffix = f" — {tags_str}" if tags_str else ""
             lines.append(f"- [{entry.id}] {entry.title}{suffix}")

@@ -88,14 +88,15 @@ def ask(question: str, save: bool, json_output: bool) -> None:
 
 @scribe_group.command()
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def curate(json_output: bool) -> None:
+@click.option("--fix", is_flag=True, help="Archive orphans to ORPHANS.md and exclude from wiki index")
+def curate(json_output: bool, fix: bool) -> None:
     """Health check and maintain the knowledge base."""
     wiki_path = _find_wiki_path()
     project_root = wiki_path.parent
     store = ScribeStore(wiki_path)
     curator = Curator(store.store, wiki_path, project_root)
 
-    result = curator.curate()
+    result = curator.curate(fix=fix)
 
     if json_output:
         click.echo(
@@ -106,6 +107,9 @@ def curate(json_output: bool) -> None:
                     "stale_count": len(result.stale_entries),
                     "broken_links": len(result.broken_links),
                     "voice_updated": result.voice_updated,
+                    "orphans_archived": result.orphans_archived,
+                    "orphans_md_written": result.orphans_md_written,
+                    "curate_log": result.curate_log,
                 }
             )
         )
@@ -121,6 +125,14 @@ def curate(json_output: bool) -> None:
             for bl in result.broken_links:
                 click.echo(f"  - {bl.url} ({bl.status_code or 'error'})")
         click.echo(f"VOICE.md updated: {result.voice_updated}")
+        if result.orphans_archived:
+            click.echo(f"Orphans archived: {len(result.orphans_archived)}")
+            for oid in result.orphans_archived:
+                click.echo(f"  - {oid}")
+        if result.curate_log:
+            click.echo("Actions:")
+            for entry in result.curate_log:
+                click.echo(f"  - {entry}")
 
 
 @scribe_group.command()
