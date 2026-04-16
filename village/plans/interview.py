@@ -140,12 +140,24 @@ The user will ask questions or suggest changes. Respond helpfully and update the
     print(f"Previous turns: {len(session.turns)}")
     print("\n(Type 'exit' to end the session)\n")
 
+    from village.errors import GracefulExit
+    from village.prompt import InterruptGuard
+
+    guard = InterruptGuard()
+
     while True:
         try:
             user_input = input("You: ").strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print("")
             break
+        except KeyboardInterrupt:
+            try:
+                guard.check_interrupt()
+            except GracefulExit:
+                print("")
+                break
+            continue
 
         if user_input.lower() in ("exit", "quit"):
             break

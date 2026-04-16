@@ -141,12 +141,24 @@ def _interactive_edit(all_goals: list[Goal], goals_path: Path, config: "Config")
         click.echo(f"  {goal.id}: {goal.title} [{goal.status}]")
     click.echo("")
 
+    from village.errors import GracefulExit
+    from village.prompt import InterruptGuard
+
+    guard = InterruptGuard()
+
     while True:
         try:
             action = input("Action (add/edit/done/quit): ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             click.echo("")
             break
+        except KeyboardInterrupt:
+            try:
+                guard.check_interrupt()
+            except GracefulExit:
+                click.echo("")
+                break
+            continue
 
         if action in ("done", "quit", "q"):
             break

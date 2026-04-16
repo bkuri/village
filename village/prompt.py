@@ -2,10 +2,32 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 
 import click
 
+from village.errors import GracefulExit
+
 logger = logging.getLogger(__name__)
+
+
+class InterruptGuard:
+    """Double Ctrl+C confirmation for interactive sessions.
+
+    First interrupt prints a warning. Second interrupt within the timeout
+    window raises GracefulExit. EOFError (Ctrl+D) exits immediately.
+    """
+
+    def __init__(self, timeout: float = 2.0) -> None:
+        self._timeout = timeout
+        self._last_interrupt: float = 0.0
+
+    def check_interrupt(self) -> None:
+        now = time.monotonic()
+        if self._last_interrupt and (now - self._last_interrupt) < self._timeout:
+            raise GracefulExit()
+        self._last_interrupt = now
+        click.echo("\n  Press Ctrl+C again within 2s to exit.")
 
 
 class PromptBridge:

@@ -48,12 +48,24 @@ class TestExitBreaksLoop:
                 run_role_chat("planner")
 
     def test_abort_breaks_loop(self):
-        with patch("village.roles.click.prompt", side_effect=click.exceptions.Abort()):
+        with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), click.exceptions.Abort()]):
             with patch("village.roles.click.echo"):
                 run_role_chat("planner")
 
     def test_eof_breaks_loop(self):
         with patch("village.roles.click.prompt", side_effect=EOFError()):
+            with patch("village.roles.click.echo"):
+                run_role_chat("planner")
+
+    def test_single_abort_shows_warning(self):
+        with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), "/exit"]):
+            with patch("village.roles.click.echo") as mock_echo:
+                run_role_chat("planner")
+                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
+                assert any("Ctrl+C again" in c for c in output_calls)
+
+    def test_single_abort_does_not_exit(self):
+        with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), "/exit"]):
             with patch("village.roles.click.echo"):
                 run_role_chat("planner")
 

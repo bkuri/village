@@ -5,6 +5,7 @@ import time
 from unittest.mock import patch
 
 from village.prompt import (
+    InterruptGuard,
     PromptBridge,
     get_bridge,
     set_bridge,
@@ -325,3 +326,34 @@ def test_set_and_get_bridge() -> None:
     assert get_bridge() is bridge
     set_bridge(None)
     assert get_bridge() is None
+
+
+class TestInterruptGuard:
+    def test_first_interrupt_does_not_raise(self) -> None:
+        guard = InterruptGuard(timeout=2.0)
+        guard.check_interrupt()
+
+    def test_double_interrupt_raises_graceful_exit(self) -> None:
+        from village.errors import GracefulExit
+
+        guard = InterruptGuard(timeout=2.0)
+        guard.check_interrupt()
+        raised = False
+        try:
+            guard.check_interrupt()
+        except GracefulExit:
+            raised = True
+        assert raised
+
+    def test_slow_double_interrupt_does_not_raise(self) -> None:
+        import time
+
+        from village.errors import GracefulExit
+
+        guard = InterruptGuard(timeout=0.05)
+        guard.check_interrupt()
+        time.sleep(0.1)
+        try:
+            guard.check_interrupt()
+        except GracefulExit:
+            raise AssertionError("Should not raise after timeout elapsed")

@@ -6,7 +6,8 @@ from typing import Any
 
 import click
 
-from village.prompt import sync_prompt
+from village.errors import GracefulExit
+from village.prompt import InterruptGuard, sync_prompt
 
 
 class RoutingAction(str, Enum):
@@ -236,11 +237,22 @@ def run_role_chat(
 ) -> None:
     chat = RoleChat(role_name, llm_call_fn=llm_call_fn, context=context)
     click.echo(f"{chat.greeting}\n")
+    guard = InterruptGuard()
 
     while True:
         try:
             user_input = sync_prompt("", default="", show_default=False)
-        except (click.exceptions.Abort, EOFError):
+        except EOFError:
+            click.echo("")
+            break
+        except (click.exceptions.Abort, KeyboardInterrupt):
+            try:
+                guard.check_interrupt()
+            except GracefulExit:
+                click.echo("")
+                break
+            continue
+        except GracefulExit:
             click.echo("")
             break
 
