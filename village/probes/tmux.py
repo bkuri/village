@@ -159,15 +159,24 @@ def kill_session(session_name: str) -> bool:
         return False
 
 
-def create_window(session_name: str, window_name: str, command: str) -> bool:
+def create_window(session_name: str, window_name: str, command: str, cwd: str | None = None) -> bool:
     """
     Create a new window in existing session.
 
     Used for dashboard and resume operations.
 
+    Args:
+        session_name: Target tmux session.
+        window_name: Name for the new window.
+        command: Shell command to run in the window.
+        cwd: Working directory for the window (uses tmux default if None).
+
     Returns True if created, False on error.
     """
-    cmd = ["tmux", "new-window", "-t", session_name, "-n", window_name, command]
+    cmd = ["tmux", "new-window", "-t", session_name, "-n", window_name]
+    if cwd:
+        cmd.extend(["-c", cwd])
+    cmd.append(command)
     try:
         run_command(cmd, check=True)
         logger.debug(f"Created tmux window '{window_name}' in session '{session_name}'")

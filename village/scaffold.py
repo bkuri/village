@@ -176,7 +176,6 @@ def _run_onboard_pipeline(
     from village.config import get_global_config as _get_global_config
     from village.onboard.detector import detect_project
     from village.onboard.generator import Generator
-    from village.onboard.generator import InterviewResult as GenInterviewResult
     from village.onboard.interview import InterviewEngine
     from village.onboard.scaffolds import get_scaffold
 
@@ -204,14 +203,10 @@ def _run_onboard_pipeline(
     )
     interview_result = engine.run_interactive()
 
-    # Convert interview module's InterviewResult to generator module's InterviewResult
-    gen_interview = GenInterviewResult(
-        answers=interview_result.answers,
-        project_summary=interview_result.project_summary,
-        raw_transcript=interview_result.raw_transcript,
-    )
+    if description:
+        interview_result.preamble.append(("User", description))
 
-    gen = Generator(info, scaffold, gen_interview, project_dir)
+    gen = Generator(info, scaffold, interview_result, project_dir)
     result = gen.generate()
     created.extend(gen.write_files(result))
 
@@ -390,10 +385,10 @@ def execute_scaffold(
         from village.probes.tmux import list_windows
 
         dashboard_name = f"{tmux_session}:dashboard"
-        dashboard_cmd = "watch -n 2 village status --short"
+        dashboard_cmd = "watch -n 2 village watcher status --short"
         windows = list_windows(tmux_session)
         if dashboard_name not in windows:
-            if create_window(tmux_session, dashboard_name, dashboard_cmd):
+            if create_window(tmux_session, dashboard_name, dashboard_cmd, cwd=str(project_dir)):
                 created.append(f"tmux window: {dashboard_name}")
                 logger.debug("Created dashboard window")
             else:

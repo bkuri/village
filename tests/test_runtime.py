@@ -305,7 +305,10 @@ def test_create_dashboard_success():
 
             assert result is True
             mock_create.assert_called_once_with(
-                "test_session", "village:dashboard", "watch -n 2 village status --short"
+                "test_session",
+                "village:dashboard",
+                "watch -n 2 village watcher status --short",
+                cwd=str(Path.cwd()),
             )
 
 
