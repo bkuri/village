@@ -120,6 +120,8 @@ class ACPTransportAgent(Agent):
         while elapsed < timeout:
             if pending.future.done() or pending.bridge.has_pending_prompt:
                 return
+            if pending.progress and pending.progress.has_progress:
+                return
             await asyncio.sleep(interval)
             elapsed += interval
 
@@ -142,6 +144,20 @@ class ACPTransportAgent(Agent):
             if pending.bridge.has_pending_prompt:
                 pending.bridge.provide_answer(message)
                 await self._wait_for_command(pending)
+            else:
+                await self._wait_for_command(pending)
+
+            if (
+                pending.progress
+                and pending.progress.has_progress
+                and not pending.bridge.has_pending_prompt
+                and not pending.future.done()
+            ):
+                progress_text = pending.progress.drain_progress()
+                return PromptResponse(
+                    stop_reason="end_turn",
+                    field_meta={"progress": progress_text},
+                )
 
             if pending.future.done():
                 try:
@@ -173,6 +189,18 @@ class ACPTransportAgent(Agent):
             if result is not None:
                 self._pending_commands[session_id] = result
                 await self._wait_for_command(result)
+
+                if (
+                    result.progress
+                    and result.progress.has_progress
+                    and not result.bridge.has_pending_prompt
+                    and not result.future.done()
+                ):
+                    progress_text = result.progress.drain_progress()
+                    return PromptResponse(
+                        stop_reason="end_turn",
+                        field_meta={"progress": progress_text},
+                    )
 
                 if result.bridge.has_pending_prompt:
                     prompt_text = result.bridge.get_prompt_text() or ""
@@ -229,8 +257,13 @@ class ACPTransportAgent(Agent):
             from village.chat.llm_chat import LLMChat
             from village.llm.factory import get_llm_client
 
-            llm_client = get_llm_client(self._config)
-            llm_chat = LLMChat(llm_client, config=self._config)
+            if session_id not in self._sessions:
+                self._sessions[session_id] = {}
+            llm_chat = self._sessions[session_id].get("llm_chat")
+            if llm_chat is None:
+                llm_client = get_llm_client(self._config)
+                llm_chat = LLMChat(llm_client, config=self._config)
+                self._sessions[session_id]["llm_chat"] = llm_chat
             result = await llm_chat.handle_message(message)
             return result or ""
         except Exception as e:
@@ -271,6 +304,8 @@ class ACPTransportAgent(Agent):
             pending.bridge.cancel()
             if not pending.future.done():
                 pending.future.cancel()
+        if session_id in self._sessions:
+            self._sessions[session_id].pop("llm_chat", None)
 
     async def ext_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {}
