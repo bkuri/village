@@ -91,7 +91,10 @@ _SUB_CONFIGS: list[tuple[str, type]] = [
 
 
 def _build_sub_configs(file_config: dict[str, str]) -> dict[str, object]:
-    return {name: cls.from_env_and_config(file_config) for name, cls in _SUB_CONFIGS}
+    result: dict[str, object] = {}
+    for name, cls in _SUB_CONFIGS:
+        result[name] = cls.from_env_and_config(file_config)  # type: ignore[attr-defined]
+    return result
 
 
 def _global_config_path() -> Path:
@@ -145,7 +148,7 @@ def get_global_config() -> GlobalConfig:
     raw_config = _load_global_config()
     file_config = _normalize_config(raw_config)
     sub_configs = _build_sub_configs(file_config)
-    return GlobalConfig(**sub_configs)
+    return GlobalConfig(**sub_configs)  # type: ignore[arg-type]
 
 
 @dataclass
@@ -346,5 +349,5 @@ def _build_config(git_root: Path) -> Config:
         queue_ttl_minutes=queue_ttl_minutes,
         default_agent=default_agent,
         agents=agents,
-        **sub_configs,
+        **sub_configs,  # type: ignore[arg-type]
     )

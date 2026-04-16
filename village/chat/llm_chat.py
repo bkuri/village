@@ -16,6 +16,7 @@ from village.chat.breakdown import (
 from village.chat.chat_session import ChatSession
 from village.chat.prompts import TASK_SPEC_SYSTEM_PROMPT
 from village.chat.renderers import render_task_spec, task_spec_to_text
+from village.chat.sequential_thinking import TaskBreakdown
 from village.chat.task_spec import TaskSpec
 from village.extensibility import ExtensionRegistry
 from village.extensibility.context import SessionContext
@@ -122,7 +123,7 @@ class LLMChat:
 
         raise last_error or Exception("LLM call failed after retries")
 
-    def _parse_task_spec_response(self, response: str, defaults: dict | None = None) -> tuple[dict | None, str]:
+    def _parse_task_spec_response(self, response: str, defaults: dict | None = None) -> tuple[dict | None, str]:  # type: ignore[type-arg]
         try:
             json_text = response.strip()
             if json_text.startswith("```"):
@@ -574,12 +575,12 @@ Use exact task IDs (e.g., tsk-abc123) for best results.
     def render_task_spec(self, spec: TaskSpec, refinement_count: int = 0) -> str:
         return render_task_spec(spec, refinement_count)
 
-    def _render_breakdown(self, breakdown) -> str:
+    def _render_breakdown(self, breakdown: TaskBreakdown) -> str:
         from village.chat.renderers import render_breakdown
 
         return render_breakdown(breakdown)
 
-    def _breakdown_to_text(self, breakdown) -> str:
+    def _breakdown_to_text(self, breakdown: TaskBreakdown) -> str:
         from village.chat.renderers import breakdown_to_text
 
         return breakdown_to_text(breakdown)
