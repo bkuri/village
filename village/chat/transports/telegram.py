@@ -186,6 +186,7 @@ class TelegramTransport(AsyncTransport):
         self._chat_id: int | None = None
         self._message_queue: asyncio.Queue[str] = asyncio.Queue()
         self._running = False
+        self._pending: dict[int, Any] = {}
 
     @property
     def name(self) -> str:
@@ -235,6 +236,11 @@ class TelegramTransport(AsyncTransport):
 
     async def stop(self) -> None:
         self._running = False
+        for pending in self._pending.values():
+            pending.bridge.cancel()
+            if not pending.future.done():
+                pending.future.cancel()
+        self._pending.clear()
         if self._application:
             updater = self._application.updater
             if updater:
@@ -268,6 +274,50 @@ class TelegramTransport(AsyncTransport):
     def _dispatch_ctx(self) -> dict[str, Any]:
         return {"config": self._config}
 
+    async def _poll_pending(self, pending: Any, chat_id: int, timeout: float = 5.0) -> None:
+        elapsed = 0.0
+        interval = 0.05
+        while elapsed < timeout:
+            if pending.future.done() or pending.bridge.has_pending_prompt:
+                return
+            await asyncio.sleep(interval)
+            elapsed += interval
+
+    async def _handle_interactive(self, chat_id: int, text: str) -> bool:
+        pending = self._pending.get(chat_id)
+        if pending is None:
+            return False
+
+        if not pending.bridge.has_pending_prompt:
+            return False
+
+        pending.bridge.provide_answer(text)
+        await self._poll_pending(pending, chat_id)
+
+        if pending.future.done():
+            try:
+                output = pending.future.result(timeout=0.1)
+            except Exception as e:
+                output = f"Error: {e}"
+            del self._pending[chat_id]
+            if self._bot:
+                await self._bot.send_message(chat_id=chat_id, text=output or "Done.")
+            return True
+
+        if pending.bridge.has_pending_prompt:
+            prompt_text = pending.bridge.get_prompt_text() or ""
+            if self._bot:
+                await self._bot.send_message(chat_id=chat_id, text=f"❓ {prompt_text}")
+            return True
+
+        if pending.progress and pending.progress.has_progress:
+            progress_text = pending.progress.drain_progress()
+            if self._bot and progress_text.strip():
+                await self._bot.send_message(chat_id=chat_id, text=progress_text[:4000])
+            return True
+
+        return True
+
     async def _handle_message(
         self,
         update: Update,
@@ -276,17 +326,53 @@ class TelegramTransport(AsyncTransport):
         if not update.message or not update.effective_chat:
             return
 
+        chat_id = update.effective_chat.id
+
         if self._chat_id is None:
-            self._chat_id = update.effective_chat.id
+            self._chat_id = chat_id
             await self._init_state_manager()
 
         text = update.message.text or ""
 
+        if await self._handle_interactive(chat_id, text):
+            if self._state_manager:
+                self._state_manager.track_message(text)
+                await self._state_manager.tick()
+            return
+
         result = await dispatch(self, text, self._dispatch_ctx)
         if result is not None:
-            if self._bot:
+            if self._bot and self._chat_id:
                 await self._bot.send_message(chat_id=self._chat_id, text=result)
             return
+
+        from village.dispatch import parse_command, spawn_command_by_name
+
+        cmd_name, cmd_args = parse_command(text)
+        if cmd_name:
+            spawned = spawn_command_by_name(cmd_name, cmd_args)
+            if spawned is not None:
+                self._pending[chat_id] = spawned
+                await self._poll_pending(spawned, chat_id)
+
+                if spawned.bridge.has_pending_prompt:
+                    prompt_text = spawned.bridge.get_prompt_text() or ""
+                    if self._bot:
+                        await self._bot.send_message(chat_id=chat_id, text=f"❓ {prompt_text}")
+                    if self._state_manager:
+                        self._state_manager.track_message(text)
+                        await self._state_manager.tick()
+                    return
+
+                if spawned.future.done():
+                    try:
+                        output = spawned.future.result(timeout=0.1)
+                    except Exception as e:
+                        output = f"Error: {e}"
+                    del self._pending[chat_id]
+                    if self._bot:
+                        await self._bot.send_message(chat_id=chat_id, text=output or "Done.")
+                    return
 
         await self._message_queue.put(text)
 
