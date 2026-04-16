@@ -1,6 +1,7 @@
 """Tests for automatic rollback in resume operations."""
 
 import json
+import os  # noqa: F401 (used in skipif)
 import subprocess
 from pathlib import Path
 from unittest.mock import patch
@@ -43,6 +44,11 @@ def rollback_test_setup(mock_config: Config) -> None:
 class TestResumeWithRollback:
     """Tests for automatic rollback on task failure."""
 
+    # These tests require tmux + an agent binary, skip on CI
+    pytestmark = pytest.mark.skipif(
+        "os.environ.get('CI') == 'true'",
+        reason="Requires tmux + agent binary (not available on CI)",
+    )
     def test_resume_failure_with_rollback(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that task failure triggers rollback when enabled."""
         # Create worktree

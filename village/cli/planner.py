@@ -306,7 +306,7 @@ def list_plans(filter_state: str) -> None:
         click.echo(f"   {plan.objective[:60]}...")
 
 
-@planner_group.command("show")
+@planner_group.command("plan")
 @click.argument("slug", shell_complete=_complete_slug)
 def show_plan(slug: str) -> None:
     """Show plan details."""

@@ -1,3 +1,4 @@
+import os  # noqa: F401 (used in skipif)
 from pathlib import Path
 
 import pytest
@@ -288,17 +289,29 @@ class TestGetLlmClient:
         engine = _make_engine()
         assert engine._get_llm_client() is not None
 
+    @pytest.mark.skipif(
+        "not os.environ.get('OLLAMA_HOST')",
+        reason="Ollama not available in CI",
+    )
     def test_returns_client_with_ollama(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VILLAGE_LLM_PROVIDER", "ollama")
         engine = _make_engine()
         assert engine._get_llm_client() is not None
 
+    @pytest.mark.skipif(
+        "not os.environ.get('CI') is None and not os.environ.get('VENICE_API_KEY')",
+        reason="Venice API not available in CI",
+    )
     def test_returns_client_with_venice(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VILLAGE_LLM_PROVIDER", "venice")
         monkeypatch.setenv("VENICE_API_KEY", "venice-key")
         engine = _make_engine()
         assert engine._get_llm_client() is not None
 
+    @pytest.mark.skipif(
+        "not os.environ.get('ZAI_API_KEY')",
+        reason="ZAI API not available in CI",
+    )
     def test_returns_client_with_zai(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("VILLAGE_LLM_PROVIDER", "zai")
         monkeypatch.setenv("ZAI_API_KEY", "zai-key")
