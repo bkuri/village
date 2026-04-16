@@ -87,24 +87,27 @@ async def _collect_until_output(
     conn: Any,
     session_id: str,
     initial_resp: PromptResponse,
-    max_turns: int = 30,
+    max_turns: int = 60,
 ) -> dict[str, str]:
     meta = initial_resp.field_meta or {}
     if "output" in meta:
         return meta
 
     for _ in range(max_turns):
-        if "prompt" not in meta:
-            return meta
-
-        prompt_text = meta.get("prompt", "")
-        if "[Y/n]" in prompt_text or "[y/N]" in prompt_text:
-            answer = "Y"
+        if "prompt" in meta:
+            prompt_text = meta.get("prompt", "")
+            if "[Y/n]" in prompt_text or "[y/N]" in prompt_text:
+                answer = "Y"
+            else:
+                answer = "skip"
         else:
-            answer = "skip"
+            answer = ""
 
         resp = await _send_prompt(conn, session_id, answer)
         meta = resp.field_meta or {}
+
+        if "output" in meta:
+            return meta
 
     return meta
 
@@ -459,7 +462,7 @@ async def test_acp_doctor_diagnose() -> None:
             resp = await _send_prompt(conn, session.session_id, "/doctor diagnose")
             assert resp.stop_reason == "end_turn"
 
-            meta = resp.field_meta or {}
+            meta = await _collect_until_output(conn, session.session_id, resp)
             assert "output" in meta
 
             await conn.close()

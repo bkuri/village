@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
@@ -23,12 +24,41 @@ class CommandEntry:
     interactive: bool = True
 
 
+class ProgressStream(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._progress: list[str] = []
+        self._last_poll_idx: int = 0
+
+    def write(self, s: str) -> int:
+        with self._lock:
+            n = super().write(s)
+            if s:
+                self._progress.append(s)
+            return n
+
+    def drain_progress(self) -> str:
+        with self._lock:
+            if self._last_poll_idx >= len(self._progress):
+                return ""
+            chunks = self._progress[self._last_poll_idx :]
+            self._last_poll_idx = len(self._progress)
+            return "".join(chunks)
+
+    @property
+    def has_progress(self) -> bool:
+        with self._lock:
+            return self._last_poll_idx < len(self._progress)
+
+
 @dataclass
 class PendingCommand:
     future: Future[str]
     bridge: PromptBridge
     cmd_name: str
     output: str = ""
+    progress: ProgressStream | None = None
 
 
 async def _invoke_click_command(
@@ -78,10 +108,11 @@ def _run_command_in_thread(
     args: list[str],
     bridge: PromptBridge,
     cwd: str | None = None,
+    progress: ProgressStream | None = None,
 ) -> str:
     import os
 
-    stdout_buf = io.StringIO()
+    stdout_buf: io.StringIO = progress or io.StringIO()
     stderr_buf = io.StringIO()
     prev_cwd: str | None = None
     if cwd:
@@ -114,8 +145,9 @@ def spawn_command(cmd_name: str, cmd: click.Command, args: list[str], cwd: str |
         start_command_executor()
     assert _executor is not None
     bridge = PromptBridge()
-    future = _executor.submit(_run_command_in_thread, cmd_name, cmd, args, bridge, cwd)
-    return PendingCommand(future=future, bridge=bridge, cmd_name=cmd_name)
+    progress = ProgressStream()
+    future = _executor.submit(_run_command_in_thread, cmd_name, cmd, args, bridge, cwd, progress)
+    return PendingCommand(future=future, bridge=bridge, cmd_name=cmd_name, progress=progress)
 
 
 def spawn_command_by_name(cmd_name: str, args: list[str], cwd: str | None = None) -> PendingCommand | None:
