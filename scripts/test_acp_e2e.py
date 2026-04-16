@@ -7,11 +7,13 @@ import asyncio
 from acp import PROTOCOL_VERSION, spawn_agent_process
 from acp.schema import (
     CreateTerminalResponse,
+    Implementation,
     KillTerminalCommandResponse,
     ReadTextFileResponse,
     ReleaseTerminalResponse,
     RequestPermissionResponse,
     TerminalOutputResponse,
+    TextContentBlock,
     WaitForTerminalExitResponse,
     WriteTextFileResponse,
 )
@@ -107,8 +109,6 @@ async def main() -> None:
         print("E2E test complete!")
         print("=" * 60)
 
-
-from acp.schema import Implementation, TextContentBlock
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -311,11 +311,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [
@@ -339,11 +338,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [
@@ -366,11 +364,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [
@@ -393,11 +390,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [
@@ -438,11 +434,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [
@@ -465,11 +460,10 @@ class TestUpdateChangelogCategorization:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        mock_run = lambda args, **kwargs: (
-            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-            if "rev-parse" in args
-            else type("obj", (object,), {"returncode": 0})()
-        )
+        def mock_run(args: list[str], **kwargs: object) -> object:
+            if "rev-parse" in args:
+                return type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            return type("obj", (object,), {"returncode": 0})()
 
         with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
             pending = [

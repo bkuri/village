@@ -11,7 +11,8 @@ import click
 
 from village.llm.providers.openrouter import OpenRouterClient
 
-INTERVIEW_PROMPT = """You are conducting an adaptive onboarding interview. Your goal is to gather information about a software project.
+INTERVIEW_PROMPT = """You are conducting an adaptive onboarding interview. \
+Your goal is to gather information about a software project.
 
 Rules:
 - Ask ONE question at a time
