@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from village.fs import ensure_parent
 from village.tasks.ids import generate_task_id
 from village.tasks.models import (
     DependencyInfo,
@@ -36,7 +37,7 @@ class FileTaskStore(TaskStore):
         self._tasks_file = tasks_file
 
     def _ensure_dir(self) -> None:
-        self._tasks_file.parent.mkdir(parents=True, exist_ok=True)
+        ensure_parent(self._tasks_file)
 
     def _read_all(self) -> dict[str, Task]:
         """Read all tasks, returning latest version of each by ID."""

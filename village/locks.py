@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from village.config import Config, get_config
+from village.fs import atomic_write
 from village.probes.tmux import pane_exists, panes
 
 logger = logging.getLogger(__name__)
@@ -123,13 +124,8 @@ def write_lock(lock: Lock) -> None:
         content += f"model={lock.model}\n"
 
     # Ensure parent directory exists
-    lock.path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Atomic write
-    temp_path = lock.path.with_suffix(".tmp")
     try:
-        temp_path.write_text(content, encoding="utf-8")
-        temp_path.replace(lock.path)
+        atomic_write(lock.path, content)
         logger.debug(f"Wrote lock: {lock.path}")
     except (IOError, OSError) as e:
         logger.error(f"Failed to write lock {lock.path}: {e}")

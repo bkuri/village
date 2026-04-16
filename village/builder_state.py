@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
+from village.fs import read_json, write_json
+
 
 class RunStatus(str, Enum):
     PENDING = "pending"
@@ -107,7 +109,7 @@ class RunState:
         path = self._manifest_path(run_id)
         if not path.exists():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = read_json(path)
         return RunManifest(
             run_id=data["run_id"],
             workflow_name=data["workflow_name"],
@@ -146,7 +148,7 @@ class RunState:
             return []
         runs = []
         for path in sorted(self.runs_dir.glob("*.json")):
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = read_json(path)
             runs.append(
                 RunManifest(
                     run_id=data["run_id"],
@@ -185,10 +187,7 @@ class RunState:
             "started_at": manifest.started_at,
             "completed_at": manifest.completed_at,
         }
-        self.runs_dir.mkdir(parents=True, exist_ok=True)
-        tmp = self._manifest_path(manifest.run_id).with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(self._manifest_path(manifest.run_id))
+        write_json(self._manifest_path(manifest.run_id), data)
 
 
 def generate_run_id() -> str:

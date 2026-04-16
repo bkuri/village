@@ -10,6 +10,7 @@ from typing import Optional
 
 from village.config import Config, get_config
 from village.event_log import Event
+from village.fs import atomic_write
 
 logger = logging.getLogger(__name__)
 
@@ -155,9 +156,7 @@ class TaskStateMachine:
             else:
                 new_content = f"state={state.value}\n"
 
-            temp_path = lock_path.with_suffix(".tmp")
-            temp_path.write_text(new_content, encoding="utf-8")
-            temp_path.replace(lock_path)
+            atomic_write(lock_path, new_content)
             logger.debug(f"Wrote state to lock {task_id}: {state.value}")
         except (IOError, OSError) as e:
             logger.error(f"Failed to write state to lock {lock_path}: {e}")
@@ -250,9 +249,7 @@ class TaskStateMachine:
             else:
                 new_content = f"state_history={history_json}\n"
 
-            temp_path = lock_path.with_suffix(".tmp")
-            temp_path.write_text(new_content, encoding="utf-8")
-            temp_path.replace(lock_path)
+            atomic_write(lock_path, new_content)
             logger.debug(f"Wrote state history to lock {task_id}: {len(history)} entries")
         except (IOError, OSError) as e:
             logger.error(f"Failed to write state history to lock {lock_path}: {e}")

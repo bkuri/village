@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal, cast
 
 logger = logging.getLogger(__name__)
 
@@ -50,3 +50,18 @@ class TaskSpec:
             parts.append(f"blocks: {blocks_str}")
 
         return "; ".join(parts)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "TaskSpec":
+        """Create TaskSpec from a dict, with safe defaults for missing fields."""
+        return cls(
+            title=str(d.get("title", "")),
+            description=str(d.get("description", "")),
+            scope=cast(Literal["fix", "feature", "config", "docs", "test", "refactor"], str(d.get("scope", "feature"))),
+            blocks=list(d.get("blocks") or []),
+            blocked_by=list(d.get("blocked_by") or []),
+            success_criteria=list(d.get("success_criteria") or []),
+            estimate=str(d.get("estimate", "unknown")),
+            confidence=cast(Literal["high", "medium", "low"], str(d.get("confidence", "medium"))),
+            search_hints=dict(d.get("search_hints") or {}),
+        )

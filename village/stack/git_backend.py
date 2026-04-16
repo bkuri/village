@@ -3,6 +3,7 @@
 import subprocess
 from pathlib import Path
 
+from village.probes.tools import run_command
 from village.stack.backend import StackBackend
 
 
@@ -12,12 +13,11 @@ class GitStackBackend(StackBackend):
     def __init__(self, repo_root: Path | None = None) -> None:
         self.repo_root = repo_root or Path.cwd()
 
-    def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess:
-        return subprocess.run(
+    def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
+        return run_command(
             ["git"] + args,
             cwd=self.repo_root,
-            capture_output=True,
-            text=True,
+            capture=True,
             check=check,
         )
 
@@ -42,11 +42,11 @@ class GitStackBackend(StackBackend):
         body_file = self.repo_root / ".pr_body.txt"
         body_file.write_text(body, encoding="utf-8")
         gh_args.extend(["--body-file", str(body_file)])
-        result = subprocess.run(
+        result = run_command(
             ["gh"] + gh_args,
             cwd=self.repo_root,
-            capture_output=True,
-            text=True,
+            capture=True,
+            check=False,
         )
         body_file.unlink(missing_ok=True)
         if result.returncode != 0:
@@ -63,11 +63,11 @@ class GitStackBackend(StackBackend):
             self._run(["checkout", current])
 
     def merge_pr(self, pr_ref: str) -> None:
-        result = subprocess.run(
+        result = run_command(
             ["gh", "pr", "merge", pr_ref, "--squash", "--delete-branch"],
             cwd=self.repo_root,
-            capture_output=True,
-            text=True,
+            capture=True,
+            check=False,
         )
         if result.returncode != 0:
             raise RuntimeError(f"gh pr merge failed: {result.stderr}")

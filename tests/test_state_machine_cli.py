@@ -148,7 +148,10 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=in_progress\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.config.get_config", return_value=mock_config):
+        with (
+            patch("village.config.get_config", return_value=mock_config),
+            patch("village.cli.work.get_config", return_value=mock_config),
+        ):
             from village.cli.builder import builder_group
 
             result = runner.invoke(builder_group, ["pause", "bd-a3f8"])
@@ -167,7 +170,10 @@ class TestPauseCommand:
         lock_content = "id=bd-a3f8\npane=%12\nwindow=build-1-bd-a3f8\nagent=build\nstate=queued\n"
         lock_path.write_text(lock_content, encoding="utf-8")
 
-        with patch("village.config.get_config", return_value=mock_config):
+        with (
+            patch("village.config.get_config", return_value=mock_config),
+            patch("village.cli.work.get_config", return_value=mock_config),
+        ):
             from village.cli.builder import builder_group
 
             result = runner.invoke(builder_group, ["pause", "bd-a3f8"])
@@ -183,7 +189,10 @@ class TestPauseCommand:
 
         events_log_path = mock_config.village_dir / "events.log"
 
-        with patch("village.config.get_config", return_value=mock_config):
+        with (
+            patch("village.config.get_config", return_value=mock_config),
+            patch("village.cli.work.get_config", return_value=mock_config),
+        ):
             from village.cli.builder import builder_group
 
             runner.invoke(builder_group, ["pause", "bd-a3f8"])

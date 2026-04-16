@@ -24,6 +24,7 @@ from village.github_integration import (
     generate_pr_description,
     sync_pr_status,
 )
+from village.probes.tools import SubprocessError
 
 
 @pytest.fixture
@@ -46,7 +47,7 @@ R100\tvillage/old_name.py\tvillage/new_name.py"""
 class TestRunGhCommand:
     """Tests for _run_gh_command function."""
 
-    @patch("village.github_integration.subprocess.run")
+    @patch("village.github_integration.run_command")
     def test_runs_gh_command_successfully(self, mock_run):
         """Test successful gh command execution."""
         mock_run.return_value = subprocess.CompletedProcess(
@@ -61,15 +62,15 @@ class TestRunGhCommand:
         assert result == "PR output"
         mock_run.assert_called_once()
 
-    @patch("village.github_integration.subprocess.run")
+    @patch("village.github_integration.run_command")
     def test_raises_on_command_failure(self, mock_run):
         """Test exception raised on command failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, ["gh", "pr", "view"], stderr="PR not found")
+        mock_run.side_effect = SubprocessError("gh command failed\nPR not found")
 
         with pytest.raises(GitHubError, match="gh command failed"):
             _run_gh_command(["pr", "view", "123"])
 
-    @patch("village.github_integration.subprocess.run")
+    @patch("village.github_integration.run_command")
     def test_raises_on_gh_not_installed(self, mock_run):
         """Test exception raised when gh not installed."""
         mock_run.side_effect = FileNotFoundError()
@@ -81,7 +82,7 @@ class TestRunGhCommand:
 class TestGetGitDiff:
     """Tests for _get_git_diff function."""
 
-    @patch("village.github_integration.subprocess.run")
+    @patch("village.github_integration.run_command")
     def test_gets_git_diff_successfully(self, mock_run, mock_worktree_path):
         """Test successful git diff."""
         mock_run.return_value = subprocess.CompletedProcess(
@@ -96,17 +97,15 @@ class TestGetGitDiff:
         assert result == "M\tfile.py"
         mock_run.assert_called_once_with(
             ["git", "diff", "HEAD", "--name-status"],
-            cwd=mock_worktree_path,
-            capture_output=True,
-            text=True,
+            capture=True,
             check=True,
-            encoding="utf-8",
+            cwd=mock_worktree_path,
         )
 
-    @patch("village.github_integration.subprocess.run")
+    @patch("village.github_integration.run_command")
     def test_raises_on_git_failure(self, mock_run, mock_worktree_path):
         """Test exception raised on git failure."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, ["git", "diff"], stderr="Not a git repository")
+        mock_run.side_effect = SubprocessError("Command failed: git diff HEAD --name-status\nNot a git repository")
 
         with pytest.raises(GitHubError, match="git diff failed"):
             _get_git_diff(mock_worktree_path)

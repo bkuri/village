@@ -18,6 +18,7 @@ def run_command(
     cmd: list[str],
     capture: bool = False,
     check: bool = True,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a subprocess command.
@@ -26,6 +27,7 @@ def run_command(
         cmd: Command and arguments as list (safe, no shell injection)
         capture: Capture stdout/stderr
         check: Raise exception on non-zero exit
+        cwd: Working directory for the command
 
     Returns:
         CompletedProcess with results
@@ -40,6 +42,7 @@ def run_command(
         capture_output=capture,
         text=True,
         check=False,
+        cwd=cwd,
     )
 
     if check and result.returncode != 0:
@@ -84,19 +87,5 @@ def run_command_output_cwd(cmd: list[str], cwd: Optional[Path] = None) -> str:
     Raises:
         SubprocessError: If command fails
     """
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        check=False,
-        cwd=cwd,
-    )
-
-    if result.returncode != 0:
-        error_msg = f"Command failed: {' '.join(cmd)}"
-        if result.stderr:
-            error_msg += f"\n{result.stderr}"
-        logger.error(error_msg)
-        raise SubprocessError(error_msg)
-
+    result = run_command(cmd, capture=True, check=True, cwd=cwd)
     return result.stdout.strip()

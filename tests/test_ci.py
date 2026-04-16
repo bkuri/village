@@ -203,7 +203,7 @@ class TestTriggerBuild:
         """Test triggering GitHub Actions build successfully."""
         os.environ["GITHUB_TOKEN"] = "ghp_test_token"
 
-        with patch("village.ci_integration._trigger_github_actions") as mock_trigger:
+        with patch("village.ci_integration.runner._trigger_github_actions") as mock_trigger:
             mock_trigger.return_value = BuildResult(
                 success=True,
                 build_id="12345",
@@ -223,7 +223,7 @@ class TestTriggerBuild:
         """Test triggering GitLab CI build successfully."""
         os.environ["GITLAB_TOKEN"] = "glpat_test_token"
 
-        with patch("village.ci_integration._trigger_gitlab_ci") as mock_trigger:
+        with patch("village.ci_integration.runner._trigger_gitlab_ci") as mock_trigger:
             mock_trigger.return_value = BuildResult(
                 success=True,
                 build_id="67890",
@@ -243,7 +243,7 @@ class TestTriggerBuild:
         os.environ["JENKINS_TOKEN"] = "jenkins_token"
         os.environ["JENKINS_URL"] = "https://jenkins.example.com"
 
-        with patch("village.ci_integration._trigger_jenkins") as mock_trigger:
+        with patch("village.ci_integration.runner._trigger_jenkins") as mock_trigger:
             mock_trigger.return_value = BuildResult(
                 success=True,
                 build_id="42",
@@ -270,7 +270,7 @@ class TestTriggerBuild:
         """Test that build trigger is logged to events.log."""
         os.environ["GITHUB_TOKEN"] = "ghp_test_token"
 
-        with patch("village.ci_integration._trigger_github_actions") as mock_trigger:
+        with patch("village.ci_integration.runner._trigger_github_actions") as mock_trigger:
             mock_trigger.return_value = BuildResult(
                 success=True,
                 build_id="12345",
@@ -316,7 +316,7 @@ class TestMonitorBuild:
         """Test monitoring build until success."""
         os.environ["GITHUB_TOKEN"] = "ghp_test_token"
 
-        with patch("village.ci_integration._monitor_github_actions") as mock_monitor:
+        with patch("village.ci_integration.runner._monitor_github_actions") as mock_monitor:
             mock_monitor.return_value = BuildStatus(
                 status="success",
                 url="https://github.com/repo/actions/runs/12345",
@@ -334,7 +334,7 @@ class TestMonitorBuild:
         """Test monitoring build until failure."""
         os.environ["GITLAB_TOKEN"] = "glpat_test_token"
 
-        with patch("village.ci_integration._monitor_gitlab_ci") as mock_monitor:
+        with patch("village.ci_integration.runner._monitor_gitlab_ci") as mock_monitor:
             mock_monitor.return_value = BuildStatus(
                 status="failure",
                 url="https://gitlab.com/pipelines/67890",
@@ -352,12 +352,12 @@ class TestMonitorBuild:
         """Test monitoring build times out."""
         os.environ["GITHUB_TOKEN"] = "ghp_test_token"
 
-        with patch("village.ci_integration._monitor_github_actions") as mock_monitor:
+        with patch("village.ci_integration.runner._monitor_github_actions") as mock_monitor:
             mock_monitor.return_value = BuildStatus(status="running", url=None, logs=None)
 
             with pytest.raises(BuildTimeoutError) as exc:
                 # Mock small timeout for testing
-                with patch("village.ci_integration.get_ci_config") as mock_ci_config:
+                with patch("village.ci_integration.runner.get_ci_config") as mock_ci_config:
                     mock_ci_config.return_value = {
                         "github_actions": CIPlatformConfig(
                             token="test",
@@ -377,7 +377,7 @@ class TestMonitorBuild:
         """Test that build completion is logged to events.log."""
         os.environ["GITHUB_TOKEN"] = "ghp_test_token"
 
-        with patch("village.ci_integration._monitor_github_actions") as mock_monitor:
+        with patch("village.ci_integration.runner._monitor_github_actions") as mock_monitor:
             mock_monitor.return_value = BuildStatus(
                 status="success",
                 url="https://github.com/repo/actions/runs/12345",

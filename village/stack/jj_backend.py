@@ -3,6 +3,7 @@
 import subprocess
 from pathlib import Path
 
+from village.probes.tools import run_command
 from village.stack.backend import StackBackend
 
 
@@ -13,11 +14,10 @@ class JJStackBackend(StackBackend):
         self.repo_root = repo_root or Path.cwd()
 
     def _run(self, args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        return run_command(
             ["jj"] + args,
             cwd=self.repo_root,
-            capture_output=True,
-            text=True,
+            capture=True,
             check=check,
         )
 
@@ -42,11 +42,11 @@ class JJStackBackend(StackBackend):
 
         try:
             # Describe the working copy commit with the PR title/body
-            describe_result = subprocess.run(
+            describe_result = run_command(
                 ["jj", "describe", "-m", f"$(cat {desc_file})"],
                 cwd=self.repo_root,
-                capture_output=True,
-                text=True,
+                capture=True,
+                check=False,
             )
 
             if describe_result.returncode != 0:
@@ -69,11 +69,11 @@ class JJStackBackend(StackBackend):
             if draft:
                 pr_cmd.append("--draft")
 
-            pr_result = subprocess.run(
+            pr_result = run_command(
                 pr_cmd,
                 cwd=self.repo_root,
-                capture_output=True,
-                text=True,
+                capture=True,
+                check=False,
             )
 
             if pr_result.returncode != 0:

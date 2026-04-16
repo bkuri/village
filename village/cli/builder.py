@@ -1,6 +1,3 @@
-import os
-import sys
-
 import click
 
 from village.logging import get_logger
@@ -199,7 +196,16 @@ def resume(
     if build:
         _resume_build()
     else:
-        _resume_task(task_id, agent, detached, html, dry_run, select_mode)
+        from village.cli.work import resume as work_resume
+
+        work_resume(
+            task_id=task_id,
+            agent=agent,
+            detached=detached,
+            html=html,
+            dry_run=dry_run,
+            select_mode=select_mode,
+        )
 
 
 def _resume_build() -> None:
@@ -221,119 +227,6 @@ def _resume_build() -> None:
     click.echo("Use 'builder run' to continue.")
 
 
-def _resume_task(
-    task_id: str | None,
-    agent: str | None,
-    detached: bool,
-    html: bool,
-    dry_run: bool,
-    select_mode: bool,
-) -> None:
-    from village.config import get_config
-    from village.interactive import select_from_list
-    from village.queue import generate_queue_plan
-    from village.resume import execute_resume, plan_resume
-    from village.status import collect_workers
-
-    config = get_config()
-
-    if select_mode and task_id is None:
-        from village.state_machine import TaskState, TaskStateMachine
-
-        workers = collect_workers(config.tmux_session)
-        state_machine = TaskStateMachine(config)
-
-        in_progress = [w for w in workers if state_machine.get_state(w.task_id) == TaskState.IN_PROGRESS]
-
-        queue_plan = generate_queue_plan(config.tmux_session, config.max_workers, config)
-
-        ready_tasks = queue_plan.ready_tasks
-
-        if not in_progress and not ready_tasks:
-            click.echo("No tasks to resume")
-            sys.exit(0)
-
-        choices = []
-        for w in in_progress:
-            choices.append((w.task_id, w.status, "in_progress"))
-        for t in ready_tasks:
-            choices.append((t.task_id, "READY", t.agent))
-
-        if not choices:
-            click.echo("No tasks to resume")
-            sys.exit(0)
-
-        selected = select_from_list(
-            choices,
-            "Select task to resume:",
-            formatter=lambda c: f"{c[0]} ({c[1]})",
-        )
-        if selected is None:
-            click.echo("Canceled")
-            sys.exit(0)
-        task_id = selected[0]
-
-    if task_id is None:
-        action = plan_resume(config=config)
-
-        if action.action == "resume":
-            click.echo(f"Ready to resume task: {action.meta.get('task_id')}")
-        elif action.action == "up":
-            click.echo(f"Action: village {action.action}")
-            click.echo(f"Reason: {action.reason}")
-            click.echo(f"Run: {action.meta.get('command', 'village up')}")
-        elif action.action == "status":
-            click.echo(f"Action: village {action.action}")
-            click.echo(f"Reason: {action.reason}")
-            click.echo(f"Run: {action.meta.get('command', 'village status --workers')}")
-        elif action.action == "cleanup":
-            click.echo(f"Action: village {action.action}")
-            click.echo(f"Reason: {action.reason}")
-            click.echo(f"Run: {action.meta.get('command', 'village cleanup')}")
-        elif action.action == "queue":
-            click.echo(f"Action: village {action.action}")
-            click.echo(f"Reason: {action.reason}")
-            click.echo(f"Run: {action.meta.get('command', 'village queue')}")
-        elif action.action == "ready":
-            click.echo(f"Action: village {action.action}")
-            click.echo(f"Reason: {action.reason}")
-            click.echo(f"Run: {action.meta.get('command', 'village ready')}")
-        else:
-            click.echo(f"Action: {action.action}")
-            click.echo(f"Reason: {action.reason}")
-
-        return
-
-    if agent is None:
-        agent = config.default_agent
-
-    result = execute_resume(
-        task_id=task_id,
-        agent=agent,
-        detached=detached,
-        dry_run=dry_run,
-        config=config,
-    )
-
-    if result.success:
-        click.echo(f"✓ Resume successful: {result.task_id}")
-        click.echo(f"  Window: {result.window_name}")
-        click.echo(f"  Pane: {result.pane_id}")
-        click.echo(f"  Worktree: {result.worktree_path}")
-    else:
-        click.echo(f"✗ Resume failed: {result.task_id}")
-        if result.error:
-            click.echo(f"  Error: {result.error}")
-
-    if html and result.success:
-        from village.contracts import generate_contract
-        from village.render.html import render_resume_html
-
-        contract = generate_contract(result.task_id, result.agent, result.worktree_path, result.window_name, config)
-
-        click.echo(render_resume_html(contract))
-
-
 @builder_group.command("queue")
 @click.option("--n", "count", type=int, help="Number of tasks to start")
 @click.option("--plan", is_flag=True, help="Generate queue plan")
@@ -346,11 +239,11 @@ def _resume_task(
 @click.option("--approve-all", is_flag=True, help="Approve all pending tasks")
 @click.option("--reject", "reject_task_id", help="Reject a pending task")
 def queue(
-    count: int,
+    count: int | None,
     plan: bool,
     dry_run: bool,
-    max_workers: int,
-    agent: str,
+    max_workers: int | None,
+    agent: str | None,
     json_output: bool,
     force: bool,
     approve_task_id: str | None,
@@ -379,169 +272,20 @@ def queue(
       village builder queue --agent build        # Start only build tasks
       village builder queue --dry-run 2        # Preview starting 2 tasks
     """
-    import json as _json
+    from village.cli.work import queue as work_queue
 
-    from village.config import get_config
-    from village.errors import EXIT_BLOCKED, EXIT_ERROR, EXIT_PARTIAL, EXIT_SUCCESS
-    from village.queue import (
-        execute_queue_plan,
-        generate_queue_plan,
-        render_queue_plan,
-        render_queue_plan_json,
+    work_queue(
+        count=count,
+        plan=plan,
+        dry_run=dry_run,
+        max_workers=max_workers,
+        agent=agent,
+        json_output=json_output,
+        force=force,
+        approve_task_id=approve_task_id,
+        approve_all=approve_all,
+        reject_task_id=reject_task_id,
     )
-    from village.state_machine import TaskState, TaskStateMachine
-
-    config = get_config()
-
-    if approve_task_id:
-        state_machine = TaskStateMachine(config)
-        current = state_machine.get_state(approve_task_id)
-        if current == TaskState.PENDING_APPROVAL:
-            transition_result = state_machine.transition(
-                task_id=approve_task_id,
-                new_state=TaskState.QUEUED,
-                context={"reason": "user_approved"},
-            )
-            if transition_result.success:
-                click.echo(f"Approved task {approve_task_id}")
-            else:
-                click.echo(f"Failed to approve: {transition_result.message}", err=True)
-                sys.exit(EXIT_ERROR)
-        else:
-            click.echo(
-                f"Task {approve_task_id} is not pending approval (state: {current.value if current else 'none'})",
-                err=True,
-            )
-            sys.exit(EXIT_BLOCKED)
-        return
-
-    if approve_all:
-        state_machine = TaskStateMachine(config)
-        approved_count = 0
-        for lock_file in config.locks_dir.glob("*.lock"):
-            task_id = lock_file.stem
-            current = state_machine.get_state(task_id)
-            if current == TaskState.PENDING_APPROVAL:
-                transition_result = state_machine.transition(
-                    task_id=task_id,
-                    new_state=TaskState.QUEUED,
-                    context={"reason": "bulk_approved"},
-                )
-                if transition_result.success:
-                    approved_count += 1
-        click.echo(f"Approved {approved_count} task(s)")
-        return
-
-    if reject_task_id:
-        state_machine = TaskStateMachine(config)
-        current = state_machine.get_state(reject_task_id)
-        if current == TaskState.PENDING_APPROVAL:
-            transition_result = state_machine.transition(
-                task_id=reject_task_id,
-                new_state=TaskState.FAILED,
-                context={"reason": "user_rejected"},
-            )
-            if transition_result.success:
-                click.echo(f"Rejected task {reject_task_id}")
-            else:
-                click.echo(f"Failed to reject: {transition_result.message}", err=True)
-                sys.exit(EXIT_ERROR)
-        else:
-            click.echo(
-                f"Task {reject_task_id} is not pending approval (state: {current.value if current else 'none'})",
-                err=True,
-            )
-            sys.exit(EXIT_BLOCKED)
-        return
-
-    concurrency_limit = max_workers if max_workers else config.max_workers
-
-    queue_plan = generate_queue_plan(config.tmux_session, concurrency_limit, config, force)
-
-    if agent:
-        queue_plan.ready_tasks = [t for t in queue_plan.ready_tasks if t.agent == agent]
-        queue_plan.available_tasks = [t for t in queue_plan.available_tasks if t.agent == agent]
-        queue_plan.blocked_tasks = [t for t in queue_plan.blocked_tasks if t.agent == agent]
-
-    if plan or count is None:
-        pending_approval = [t for t in queue_plan.blocked_tasks if t.skip_reason == "pending_approval"]
-        ci_mode = os.environ.get("VILLAGE_CI_MODE", "").lower() in ("1", "true", "yes")
-        if ci_mode and pending_approval:
-            click.echo(f"Error: {len(pending_approval)} task(s) pending approval in CI mode", err=True)
-            sys.exit(EXIT_ERROR)
-
-        if json_output:
-            click.echo(render_queue_plan_json(queue_plan))
-        else:
-            click.echo(render_queue_plan(queue_plan))
-        return
-
-    if dry_run:
-        click.echo("(dry-run: previewing execution)")
-        click.echo(render_queue_plan(queue_plan))
-        return
-
-    if count is not None:
-        queue_plan.available_tasks = queue_plan.available_tasks[:count]
-
-    if not queue_plan.available_tasks:
-        if json_output:
-            click.echo(
-                _json.dumps(
-                    {
-                        "tasks_started": 0,
-                        "tasks_failed": 0,
-                        "results": [],
-                        "message": "No tasks available to start",
-                    },
-                    indent=2,
-                )
-            )
-        else:
-            click.echo("No tasks available to start")
-        sys.exit(EXIT_BLOCKED)
-
-    if not json_output:
-        click.echo(f"Starting {len(queue_plan.available_tasks)} task(s)...")
-    results = execute_queue_plan(queue_plan, config.tmux_session, config, force)
-
-    tasks_started = sum(1 for r in results if r.success)
-    tasks_failed = sum(1 for r in results if not r.success)
-
-    if not json_output:
-        click.echo(f"\nTasks started: {tasks_started}")
-        click.echo(f"Tasks failed: {tasks_failed}")
-
-        if tasks_failed > 0:
-            click.echo("\nFailed tasks:")
-            for result in results:
-                if not result.success:
-                    click.echo(f"  - {result.task_id}: {result.error or 'Unknown error'}")
-    else:
-        output = {
-            "tasks_started": tasks_started,
-            "tasks_failed": tasks_failed,
-            "results": [
-                {
-                    "task_id": r.task_id,
-                    "agent": r.agent,
-                    "success": r.success,
-                    "worktree_path": str(r.worktree_path),
-                    "window_name": r.window_name,
-                    "pane_id": r.pane_id,
-                    "error": r.error,
-                }
-                for r in results
-            ],
-        }
-        click.echo(_json.dumps(output, indent=2, sort_keys=True))
-
-    if tasks_started > 0 and tasks_failed == 0:
-        sys.exit(EXIT_SUCCESS)
-    elif tasks_started > 0:
-        sys.exit(EXIT_PARTIAL)
-    else:
-        sys.exit(EXIT_ERROR)
 
 
 @builder_group.command("pause")
@@ -571,58 +315,9 @@ def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
         4: Task not in IN_PROGRESS state
         5: Task not found
     """
-    from village.config import get_config
-    from village.errors import EXIT_BLOCKED, EXIT_ERROR
-    from village.interactive import select_from_list
-    from village.state_machine import TaskState, TaskStateMachine
-    from village.status import collect_workers
+    from village.cli.work import pause as work_pause
 
-    config = get_config()
-
-    if task_id is None or select_mode:
-        workers = collect_workers(config.tmux_session)
-        state_machine = TaskStateMachine(config)
-
-        in_progress = [w for w in workers if state_machine.get_state(w.task_id) == TaskState.IN_PROGRESS]
-        if not in_progress:
-            click.echo("No in-progress tasks found")
-            if task_id is None:
-                sys.exit(0)
-            return
-
-        selected = select_from_list(
-            in_progress,
-            "Select task to pause:",
-            formatter=lambda w: f"{w.task_id} ({w.status})",
-        )
-        if selected is None:
-            click.echo("Canceled")
-            sys.exit(0)
-        task_id = selected.task_id
-
-    state_machine = TaskStateMachine(config)
-
-    current_state = state_machine.get_state(task_id)
-
-    if current_state is None:
-        click.echo(f"Task {task_id} not found (no lock file)", err=True)
-        sys.exit(EXIT_BLOCKED)
-
-    if not force and current_state != TaskState.IN_PROGRESS:
-        click.echo(f"Task {task_id} is not IN_PROGRESS (current: {current_state.value})", err=True)
-        sys.exit(EXIT_BLOCKED)
-
-    result = state_machine.transition(
-        task_id,
-        TaskState.PAUSED,
-        context={"reason": "user_paused"},
-    )
-
-    if result.success:
-        click.echo(f"Paused task {task_id}")
-    else:
-        click.echo(f"Failed to pause: {result.message}", err=True)
-        sys.exit(EXIT_ERROR)
+    work_pause(task_id=task_id, force=force, select_mode=select_mode)
 
 
 @builder_group.command("arrange")

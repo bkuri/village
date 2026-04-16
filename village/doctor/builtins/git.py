@@ -4,6 +4,7 @@ import subprocess
 
 from village.doctor.base import Analyzer, AnalyzerResult, Finding
 from village.logging import get_logger
+from village.probes.tools import SubprocessError, run_command
 
 logger = get_logger(__name__)
 
@@ -18,13 +19,13 @@ class GitAnalyzer(Analyzer):
     def is_available(self) -> bool:
         """Check if we're in a git repo."""
         try:
-            subprocess.run(
+            run_command(
                 ["git", "rev-parse", "--is-inside-work-tree"],
-                capture_output=True,
+                capture=True,
                 check=True,
             )
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (SubprocessError, FileNotFoundError):
             return False
 
     def run(self) -> AnalyzerResult:

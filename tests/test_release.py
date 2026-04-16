@@ -33,7 +33,7 @@ def tmp_village_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     class MockConfig:
         village_dir = village_path
 
-    monkeypatch.setattr("village.release.get_config", lambda: MockConfig())
+    monkeypatch.setattr("village.release.queue.get_config", lambda: MockConfig())
     return village_path
 
 
@@ -264,21 +264,21 @@ class TestGetChangelogCategory:
 class TestGetTaskTypeFromBeads:
     """Tests for get_task_type_from_store function."""
 
-    @patch("village.release.get_task_store")
+    @patch("village.release.tasks.get_task_store")
     def test_returns_empty_when_store_unavailable(self, mock_get_store):
         from village.tasks import TaskStoreError
 
         mock_get_store.side_effect = TaskStoreError("not available")
         assert get_task_type_from_store("bd-123") == ""
 
-    @patch("village.release.get_task_store")
+    @patch("village.release.tasks.get_task_store")
     def test_returns_empty_on_task_not_found(self, mock_get_store):
         mock_store = MagicMock()
         mock_store.get_task.return_value = None
         mock_get_store.return_value = mock_store
         assert get_task_type_from_store("bd-123") == ""
 
-    @patch("village.release.get_task_store")
+    @patch("village.release.tasks.get_task_store")
     def test_returns_type_from_valid_task(self, mock_get_store):
         mock_task = MagicMock()
         mock_task.issue_type = "feature"
@@ -287,14 +287,14 @@ class TestGetTaskTypeFromBeads:
         mock_get_store.return_value = mock_store
         assert get_task_type_from_store("bd-123") == "feature"
 
-    @patch("village.release.get_task_store")
+    @patch("village.release.tasks.get_task_store")
     def test_handles_store_error(self, mock_get_store):
         from village.tasks import TaskStoreError
 
         mock_get_store.side_effect = TaskStoreError("error")
         assert get_task_type_from_store("bd-123") == ""
 
-    @patch("village.release.get_task_store")
+    @patch("village.release.tasks.get_task_store")
     def test_handles_missing_type_field(self, mock_get_store):
         mock_task = MagicMock()
         mock_task.issue_type = "task"
@@ -307,196 +307,184 @@ class TestGetTaskTypeFromBeads:
 class TestUpdateChangelogCategorization:
     """Tests for update_changelog with categorization."""
 
-    def test_categorizes_features_as_added(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_categorizes_features_as_added(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-123",
-                bump="minor",
-                completed_at=datetime.now(timezone.utc),
-                title="Add new feature",
-                task_type="feature",
-            )
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-123",
+                    bump="minor",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Add new feature",
+                    task_type="feature",
+                )
+            ]
 
-        update_changelog("1.1.0", pending)
+            update_changelog("1.1.0", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Added" in content
-        assert "Add new feature" in content
-        assert "### Changed" not in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Added" in content
+            assert "Add new feature" in content
+            assert "### Changed" not in content
 
-    def test_categorizes_bugs_as_fixed(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_categorizes_bugs_as_fixed(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-456",
-                bump="patch",
-                completed_at=datetime.now(timezone.utc),
-                title="Fix bug",
-                task_type="bug",
-            )
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-456",
+                    bump="patch",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Fix bug",
+                    task_type="bug",
+                )
+            ]
 
-        update_changelog("1.0.1", pending)
+            update_changelog("1.0.1", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Fixed" in content
-        assert "Fix bug" in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Fixed" in content
+            assert "Fix bug" in content
 
-    def test_categorizes_major_as_breaking(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_categorizes_major_as_breaking(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-789",
-                bump="major",
-                completed_at=datetime.now(timezone.utc),
-                title="Breaking change",
-                task_type="feature",
-            )
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-789",
+                    bump="major",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Breaking change",
+                    task_type="feature",
+                )
+            ]
 
-        update_changelog("2.0.0", pending)
+            update_changelog("2.0.0", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Breaking" in content
-        assert "Breaking change" in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Breaking" in content
+            assert "Breaking change" in content
 
-    def test_groups_multiple_categories(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_groups_multiple_categories(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-111",
-                bump="minor",
-                completed_at=datetime.now(timezone.utc),
-                title="Feature 1",
-                task_type="feature",
-            ),
-            PendingBump(
-                task_id="bd-222",
-                bump="patch",
-                completed_at=datetime.now(timezone.utc),
-                title="Bug fix 1",
-                task_type="bug",
-            ),
-            PendingBump(
-                task_id="bd-333",
-                bump="patch",
-                completed_at=datetime.now(timezone.utc),
-                title="Refactor 1",
-                task_type="task",
-            ),
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-111",
+                    bump="minor",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Feature 1",
+                    task_type="feature",
+                ),
+                PendingBump(
+                    task_id="bd-222",
+                    bump="patch",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Bug fix 1",
+                    task_type="bug",
+                ),
+                PendingBump(
+                    task_id="bd-333",
+                    bump="patch",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Refactor 1",
+                    task_type="task",
+                ),
+            ]
 
-        update_changelog("1.1.0", pending)
+            update_changelog("1.1.0", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Added" in content
-        assert "### Fixed" in content
-        assert "### Changed" in content
-        assert "Feature 1" in content
-        assert "Bug fix 1" in content
-        assert "Refactor 1" in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Added" in content
+            assert "### Fixed" in content
+            assert "### Changed" in content
+            assert "Feature 1" in content
+            assert "Bug fix 1" in content
+            assert "Refactor 1" in content
 
-    def test_excludes_none_bumps(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_excludes_none_bumps(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-999",
-                bump="none",
-                completed_at=datetime.now(timezone.utc),
-                title="Docs update",
-                task_type="task",
-            )
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-999",
+                    bump="none",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Docs update",
+                    task_type="task",
+                )
+            ]
 
-        update_changelog("1.0.1", pending)
+            update_changelog("1.0.1", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Changed" not in content
-        assert "Docs update" not in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Changed" not in content
+            assert "Docs update" not in content
 
-    def test_skips_empty_categories(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_empty_categories(self, tmp_path: Path) -> None:
         changelog_path = tmp_path / "CHANGELOG.md"
         changelog_path.write_text("# Changelog\n\n## [1.0.0] - 2026-01-01\n", encoding="utf-8")
 
-        monkeypatch.setattr(
-            "village.release.subprocess.run",
-            lambda args, **kwargs: (
-                type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
-                if "rev-parse" in args
-                else type("obj", (object,), {"returncode": 0})()
-            ),
+        mock_run = lambda args, **kwargs: (
+            type("obj", (object,), {"returncode": 0, "stdout": str(tmp_path)})()
+            if "rev-parse" in args
+            else type("obj", (object,), {"returncode": 0})()
         )
 
-        pending = [
-            PendingBump(
-                task_id="bd-111",
-                bump="minor",
-                completed_at=datetime.now(timezone.utc),
-                title="Feature 1",
-                task_type="feature",
-            )
-        ]
+        with patch("village.release.changelog.subprocess.run", side_effect=mock_run):
+            pending = [
+                PendingBump(
+                    task_id="bd-111",
+                    bump="minor",
+                    completed_at=datetime.now(timezone.utc),
+                    title="Feature 1",
+                    task_type="feature",
+                )
+            ]
 
-        update_changelog("1.1.0", pending)
+            update_changelog("1.1.0", pending)
 
-        content = changelog_path.read_text(encoding="utf-8")
-        assert "### Added" in content
-        assert "### Fixed" not in content
-        assert "### Breaking" not in content
+            content = changelog_path.read_text(encoding="utf-8")
+            assert "### Added" in content
+            assert "### Fixed" not in content
+            assert "### Breaking" not in content

@@ -8,6 +8,11 @@ import pytest
 
 from village.chat.conversation import (
     ConversationState,
+    start_conversation,
+)
+from village.chat.drafts import DraftTask, generate_draft_id, load_draft, save_draft
+from village.chat.state import SessionSnapshot, load_session_state, save_session_state
+from village.chat.task_commands import (
     _display_batch_summary,
     _handle_discard,
     _handle_drafts,
@@ -15,13 +20,12 @@ from village.chat.conversation import (
     _handle_enable,
     _handle_reset,
     _handle_submit,
-    _handle_task_subcommand,
     _prepare_batch_summary,
     _switch_to_create_mode,
-    start_conversation,
 )
-from village.chat.drafts import DraftTask, generate_draft_id, load_draft, save_draft
-from village.chat.state import SessionSnapshot, load_session_state, save_session_state
+from village.chat.task_commands import (
+    handle_task_subcommand as _handle_task_subcommand,
+)
 
 
 @pytest.fixture

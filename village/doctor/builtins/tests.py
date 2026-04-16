@@ -4,6 +4,7 @@ import subprocess
 
 from village.doctor.base import Analyzer, AnalyzerResult, Finding
 from village.logging import get_logger
+from village.probes.tools import run_command
 
 logger = get_logger(__name__)
 
@@ -18,7 +19,7 @@ class TestAnalyzer(Analyzer):
     def is_available(self) -> bool:
         """Check if pytest is available."""
         try:
-            subprocess.run(["pytest", "--version"], capture_output=True)
+            run_command(["pytest", "--version"], capture=True, check=False)
             return True
         except FileNotFoundError:
             return False

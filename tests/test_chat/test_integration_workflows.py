@@ -5,21 +5,21 @@ from uuid import uuid4
 
 import pytest
 
-from village.chat.conversation import (
-    _handle_discard,
-    _handle_edit,
-    _handle_enable,
-    _handle_reset,
-    _handle_submit,
-    _switch_to_create_mode,
-    start_conversation,
-)
+from village.chat.conversation import start_conversation
 from village.chat.drafts import (
     draft_id_to_task_id,
     load_draft,
     save_draft,
 )
 from village.chat.state import load_session_state, save_session_state
+from village.chat.task_commands import (
+    _handle_discard,
+    _handle_edit,
+    _handle_enable,
+    _handle_reset,
+    _handle_submit,
+    _switch_to_create_mode,
+)
 from village.config import Config
 
 
@@ -76,7 +76,7 @@ def mock_bd_create(monkeypatch):
     mock_store.initialize.return_value = None
 
     monkeypatch.setattr("village.chat.task_extractor.get_task_store", lambda config=None: mock_store)
-    monkeypatch.setattr("village.chat.conversation.get_task_store", lambda config=None: mock_store)
+    monkeypatch.setattr("village.chat.task_commands.get_task_store", lambda config=None: mock_store)
 
     class _Tracker:
         def __init__(self, created, deleted):

@@ -10,7 +10,8 @@ import anyio
 import pytest
 
 from village.chat.baseline import BaselineReport
-from village.chat.conversation import ConversationState, _handle_brainstorm, start_conversation
+from village.chat.brainstorm import handle_brainstorm as _handle_brainstorm
+from village.chat.conversation import ConversationState, start_conversation
 from village.chat.sequential_thinking import TaskBreakdown, TaskBreakdownItem
 from village.config import Config
 
@@ -128,12 +129,12 @@ class TestBrainstormCommandInvocation:
         mock_store.is_available.return_value = True
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
-            patch("village.chat.conversation.get_task_store", return_value=mock_store),
-            patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_task_specs", return_value=[]),
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.brainstorm.get_task_store", return_value=mock_store),
+            patch("village.chat.brainstorm.validate_dependencies", return_value=True),
+            patch("village.chat.brainstorm.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -165,8 +166,8 @@ class TestBrainstormValidation:
         state = fresh_conversation
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.get_task_store"),
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.get_task_store"),
         ):
             mock_collect.side_effect = ValueError("Title must be at least 3 characters")
 
@@ -206,12 +207,12 @@ class TestBrainstormSessionSnapshot:
         mock_store.is_available.return_value = True
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
-            patch("village.chat.conversation.get_task_store", return_value=mock_store),
-            patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_task_specs", return_value=[]),
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.brainstorm.get_task_store", return_value=mock_store),
+            patch("village.chat.brainstorm.validate_dependencies", return_value=True),
+            patch("village.chat.brainstorm.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -254,12 +255,12 @@ class TestBrainstormDraftTasks:
         mock_store.is_available.return_value = True
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
-            patch("village.chat.conversation.get_task_store", return_value=mock_store),
-            patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_task_specs", return_value=[]),
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.brainstorm.get_task_store", return_value=mock_store),
+            patch("village.chat.brainstorm.validate_dependencies", return_value=True),
+            patch("village.chat.brainstorm.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -302,12 +303,12 @@ class TestBrainstormBeadsIntegration:
         mock_store.is_available.return_value = True
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.create_draft_tasks", new_callable=AsyncMock) as mock_create,
-            patch("village.chat.conversation.get_task_store", return_value=mock_store),
-            patch("village.chat.conversation.validate_dependencies", return_value=True),
-            patch("village.chat.conversation.extract_task_specs", return_value=[]),
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.create_draft_tasks", new_callable=AsyncMock) as mock_create,
+            patch("village.chat.brainstorm.get_task_store", return_value=mock_store),
+            patch("village.chat.brainstorm.validate_dependencies", return_value=True),
+            patch("village.chat.brainstorm.extract_task_specs", return_value=[]),
         ):
             mock_collect.return_value = mock_baseline_report
             mock_generate.return_value = mock_task_breakdown
@@ -342,9 +343,9 @@ class TestBrainstormErrorHandling:
         state = fresh_conversation
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.get_task_store") as mock_store,
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.get_task_store") as mock_store,
         ):
             mock_store.return_value.list_tasks.return_value = []
             mock_store.return_value.is_available.return_value = True
@@ -378,9 +379,9 @@ class TestBrainstormErrorHandling:
         state = fresh_conversation
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.get_task_store") as mock_store,
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.get_task_store") as mock_store,
         ):
             mock_store.return_value.list_tasks.return_value = []
             mock_store.return_value.is_available.return_value = True
@@ -417,9 +418,9 @@ class TestBrainstormErrorHandling:
         state = fresh_conversation
 
         with (
-            patch("village.chat.conversation.collect_baseline") as mock_collect,
-            patch("village.chat.conversation.generate_task_breakdown") as mock_generate,
-            patch("village.chat.conversation.get_task_store") as mock_store,
+            patch("village.chat.brainstorm.collect_baseline") as mock_collect,
+            patch("village.chat.brainstorm.generate_task_breakdown") as mock_generate,
+            patch("village.chat.brainstorm.get_task_store") as mock_store,
         ):
             mock_store.return_value.list_tasks.return_value = []
             mock_store.return_value.is_available.return_value = True

@@ -2,10 +2,11 @@
 
 import json
 import logging
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+
+from village.probes.tools import SubprocessError, run_command
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +53,15 @@ def _run_gh_command(args: list[str], cwd: Optional[Path] = None) -> str:
         GitHubError: If gh command fails
     """
     try:
-        result = subprocess.run(
+        result = run_command(
             ["gh", *args],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
+            capture=True,
             check=True,
-            encoding="utf-8",
+            cwd=cwd,
         )
         return result.stdout
-    except subprocess.CalledProcessError as e:
-        error_msg = e.stderr.strip() if e.stderr else str(e)
+    except SubprocessError as e:
+        error_msg = str(e).split("\n", 1)[-1] if "\n" in str(e) else str(e)
         raise GitHubError(f"gh command failed: {error_msg}") from e
     except FileNotFoundError:
         raise GitHubError("GitHub CLI (gh) not installed") from None
@@ -82,17 +81,15 @@ def _get_git_diff(worktree_path: Path) -> str:
         GitHubError: If git diff fails
     """
     try:
-        result = subprocess.run(
+        result = run_command(
             ["git", "diff", "HEAD", "--name-status"],
-            cwd=worktree_path,
-            capture_output=True,
-            text=True,
+            capture=True,
             check=True,
-            encoding="utf-8",
+            cwd=worktree_path,
         )
         return result.stdout
-    except subprocess.CalledProcessError as e:
-        raise GitHubError(f"git diff failed: {e.stderr.strip()}") from e
+    except SubprocessError as e:
+        raise GitHubError(f"git diff failed: {e}") from e
 
 
 def _parse_file_changes(diff_output: str) -> dict[str, list[str]]:

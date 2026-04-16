@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
+from village.fs import ensure_parent
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,8 +65,7 @@ def append_event(event: Event, config_path: Path) -> None:
             sort_keys=True,
         )
 
-        # Ensure directory exists
-        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_parent(event_log_path)
 
         # Atomic append operation
         with open(event_log_path, "a", encoding="utf-8") as f:
@@ -262,7 +263,7 @@ def log_metrics_exported(
     event_log_path = get_event_log_path(config_path)
 
     try:
-        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_parent(event_log_path)
         with open(event_log_path, "a", encoding="utf-8") as f:
             f.write(event_json + "\n")
             f.flush()
@@ -288,7 +289,7 @@ def log_dashboard_refresh(config_path: Path) -> None:
     event_log_path = get_event_log_path(config_path)
 
     try:
-        event_log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_parent(event_log_path)
         with open(event_log_path, "a", encoding="utf-8") as f:
             f.write(event_json + "\n")
             f.flush()
