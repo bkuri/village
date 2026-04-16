@@ -22,13 +22,17 @@ class TestGetScaffold:
         info = ProjectInfo(language="python", framework="flask")
         scaffold = get_scaffold(info)
         assert scaffold.language == "python"
-        assert scaffold.framework == "fastapi"
+        assert scaffold.framework == "flask"
+        assert "flask" in scaffold.common_deps
+        assert "Blueprints" in " ".join(scaffold.conventions)
 
     def test_python_web_django(self) -> None:
         info = ProjectInfo(language="python", framework="django")
         scaffold = get_scaffold(info)
         assert scaffold.language == "python"
-        assert scaffold.framework == "fastapi"
+        assert scaffold.framework == "django"
+        assert "django" in scaffold.common_deps
+        assert "Django" in " ".join(scaffold.conventions)
 
     def test_python_lib_no_framework(self) -> None:
         info = ProjectInfo(language="python", framework=None)
@@ -78,7 +82,7 @@ class TestGetScaffold:
 class TestAllScaffolds:
     def test_returns_all_scaffolds(self) -> None:
         scaffolds = all_scaffolds()
-        assert len(scaffolds) == 7
+        assert len(scaffolds) == 9
 
     def test_scaffolds_have_build_commands(self) -> None:
         for scaffold in all_scaffolds():

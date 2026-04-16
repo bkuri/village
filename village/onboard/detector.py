@@ -111,12 +111,12 @@ def _detect_javascript(path: Path) -> ProjectInfo:
 
     deps = {k.lower() for k in list(data.get("dependencies", {}).keys()) + list(data.get("devDependencies", {}).keys())}
 
-    if "react" in deps:
-        info.language = "typescript" if "typescript" in deps else "javascript"
-        info.framework = "react"
-    elif "next" in deps:
+    if "next" in deps:
         info.language = "typescript" if "typescript" in deps else "javascript"
         info.framework = "nextjs"
+    elif "react" in deps:
+        info.language = "typescript" if "typescript" in deps else "javascript"
+        info.framework = "react"
     elif "vue" in deps:
         info.framework = "vue"
     elif "express" in deps:

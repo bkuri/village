@@ -154,6 +154,18 @@ class TestDetectJavaScriptProject:
 
         assert info.framework == "nextjs"
 
+    def test_nextjs_with_react_detected_as_nextjs(self, tmp_path: Path) -> None:
+        pkg = {
+            "dependencies": {"next": "^14.0.0", "react": "^18.0.0", "react-dom": "^18.0.0"},
+            "devDependencies": {"typescript": "^5.0.0"},
+        }
+        (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")
+
+        info = detect_project(tmp_path)
+
+        assert info.framework == "nextjs"
+        assert info.language == "typescript"
+
     def test_vue_project(self, tmp_path: Path) -> None:
         pkg = {"dependencies": {"vue": "^3.0.0"}, "devDependencies": {}}
         (tmp_path / "package.json").write_text(json.dumps(pkg), encoding="utf-8")

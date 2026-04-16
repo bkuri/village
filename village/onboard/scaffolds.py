@@ -61,6 +61,52 @@ _PYTHON_WEB = ScaffoldTemplate(
     ],
 )
 
+_PYTHON_FLASK = ScaffoldTemplate(
+    language="python",
+    framework="flask",
+    build_commands=["uv sync", "flask run"],
+    test_commands=["uv run pytest", "uv run pytest tests/ -v"],
+    lint_commands=["uv run ruff check .", "uv run ruff format ."],
+    typecheck_commands=["uv run mypy app/"],
+    common_deps=["flask", "httpx"],
+    directory_structure={
+        "app/": "Application code",
+        "app/routes/": "Route blueprints",
+        "app/models/": "Data models",
+        "tests/": "Test files",
+        "pyproject.toml": "Project configuration",
+    },
+    conventions=[
+        "Use Blueprints for route organization",
+        "Use application factory pattern",
+        "Type hints on all params and returns",
+    ],
+)
+
+_PYTHON_DJANGO = ScaffoldTemplate(
+    language="python",
+    framework="django",
+    build_commands=["uv sync", "python manage.py runserver"],
+    test_commands=["uv run pytest", "python manage.py test"],
+    lint_commands=["uv run ruff check .", "uv run ruff format ."],
+    typecheck_commands=["uv run mypy ."],
+    common_deps=["django", "httpx"],
+    directory_structure={
+        "app/": "Django application",
+        "app/models.py": "Data models",
+        "app/views.py": "View functions/classes",
+        "app/urls.py": "URL routing",
+        "tests/": "Test files",
+        "manage.py": "Django management script",
+        "pyproject.toml": "Project configuration",
+    },
+    conventions=[
+        "Use Django ORM for database operations",
+        "Follow Django's MVT pattern",
+        "Type hints on all params and returns",
+    ],
+)
+
 _PYTHON_LIB = ScaffoldTemplate(
     language="python",
     framework=None,
@@ -163,6 +209,8 @@ _GENERIC = ScaffoldTemplate(
 _SCAFFOLDS: list[ScaffoldTemplate] = [
     _PYTHON_CLI,
     _PYTHON_WEB,
+    _PYTHON_FLASK,
+    _PYTHON_DJANGO,
     _PYTHON_LIB,
     _TYPESCRIPT_NODE,
     _RUST_CLI,
@@ -173,8 +221,12 @@ _SCAFFOLDS: list[ScaffoldTemplate] = [
 
 def get_scaffold(info: ProjectInfo) -> ScaffoldTemplate:
     if info.language == "python":
-        if info.framework in ("fastapi", "flask", "django"):
+        if info.framework == "fastapi":
             return _PYTHON_WEB
+        if info.framework == "flask":
+            return _PYTHON_FLASK
+        if info.framework == "django":
+            return _PYTHON_DJANGO
         if info.framework == "cli":
             return _PYTHON_CLI
         return _PYTHON_LIB
