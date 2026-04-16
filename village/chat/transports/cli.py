@@ -5,6 +5,7 @@ import asyncio
 import click
 
 from village.chat.transports import AsyncTransport, TransportCapabilities
+from village.errors import GracefulExit
 
 
 class CLITransport(AsyncTransport):
@@ -27,7 +28,10 @@ class CLITransport(AsyncTransport):
 
     async def receive(self) -> str:
         loop = asyncio.get_event_loop()
-        user_input: str = await loop.run_in_executor(None, lambda: click.prompt("", prompt_suffix="> "))
+        try:
+            user_input: str = await loop.run_in_executor(None, lambda: click.prompt("", prompt_suffix="> "))
+        except (EOFError, KeyboardInterrupt):
+            raise GracefulExit()
         return user_input
 
     async def route(self, target_role: str, context: str | None = None) -> None:

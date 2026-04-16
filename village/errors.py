@@ -80,6 +80,15 @@ class LockValidationError(PermanentError):
         super().__init__(message, exit_code=self.exit_code)
 
 
+class GracefulExit(VillageError):
+    """User requested exit via Ctrl+C or Ctrl+D."""
+
+    exit_code = EXIT_SUCCESS
+
+    def __init__(self, message: str = "Exiting"):
+        super().__init__(message, exit_code=self.exit_code)
+
+
 class InterruptedResume(VillageError):
     """Resume interrupted by user (Ctrl+C)."""
 

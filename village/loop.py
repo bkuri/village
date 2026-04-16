@@ -47,7 +47,11 @@ def check_and_trigger_wave(config: Any) -> bool:
 
     click.echo(format_wave_summary(wave))
 
-    response = input("Accept proposals? (yes/no): ").strip().lower()
+    try:
+        response = input("Accept proposals? (yes/no): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        click.echo("")
+        return False
     if response == "yes":
         from village.stack.waves import apply_proposals
 
@@ -62,7 +66,11 @@ def check_and_trigger_wave(config: Any) -> bool:
         click.echo("Proposals accepted.")
         return True
     else:
-        reason = input("Explain why (or 'cant-continue' to abort): ").strip()
+        try:
+            reason = input("Explain why (or 'cant-continue' to abort): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            click.echo("")
+            return False
         if reason.lower() == "cant-continue":
             raise RuntimeError("User rejected wave proposals without alternative")
         click.echo(f"Proposals rejected: {reason}")

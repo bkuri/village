@@ -141,7 +141,12 @@ The user will ask questions or suggest changes. Respond helpfully and update the
     print("\n(Type 'exit' to end the session)\n")
 
     while True:
-        user_input = input("You: ").strip()
+        try:
+            user_input = input("You: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+
         if user_input.lower() in ("exit", "quit"):
             break
 

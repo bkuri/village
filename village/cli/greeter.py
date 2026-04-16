@@ -10,6 +10,7 @@ import click
 from village.chat.transports import create_transport
 from village.config import get_config
 from village.dispatch import dispatch
+from village.errors import GracefulExit
 from village.logging import get_logger
 from village.roles import RoleChat, RoutingAction
 
@@ -136,8 +137,8 @@ async def run_greeter(
                         continue
 
             await transport.send(response)
-    except KeyboardInterrupt:
-        pass
+    except (KeyboardInterrupt, GracefulExit):
+        click.echo("")
     finally:
         await transport.stop()
 

@@ -168,13 +168,17 @@ def _add_goal_interactive(all_goals: list[Goal], goals_path: Path) -> None:
     next_num = len(all_goals) + 1
     goal_id = f"G{next_num}"
 
-    title = input("Title: ").strip()
-    if not title:
-        click.echo("Canceled.")
-        return
+    try:
+        title = input("Title: ").strip()
+        if not title:
+            click.echo("Canceled.")
+            return
 
-    description = input("Description: ").strip()
-    objectives_raw = input("Objectives (comma-separated): ").strip()
+        description = input("Description: ").strip()
+        objectives_raw = input("Objectives (comma-separated): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        click.echo("")
+        return
     objectives = [o.strip() for o in objectives_raw.split(",") if o.strip()] if objectives_raw else []
 
     new_goal = Goal(
@@ -199,7 +203,11 @@ def _edit_goal_interactive(all_goals: list[Goal], goal_id: str) -> None:
 
     click.echo(f"Editing {goal_id}: {goal.title}")
     click.echo(f"  Current status: {goal.status}")
-    new_status = input("New status (active/completed/dropped): ").strip().lower()
+    try:
+        new_status = input("New status (active/completed/dropped): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        click.echo("")
+        return
     if new_status in ("active", "completed", "dropped"):
         goal.status = new_status
         click.echo(f"  Status updated to {new_status}")
