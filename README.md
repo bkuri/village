@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/github/license/bkuri/village)
 ![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macOS-lightgrey)
 ![tmux](https://img.shields.io/badge/requires-tmux-green)
-![Status](https://img.shields.io/badge/status-alpha-orange)
+![Status](https://img.shields.io/badge/status-stable-brightgreen)
 
 **A tiny operating system for parallel development.**
 
@@ -29,6 +29,109 @@ Village takes a different approach. It treats your local machine like a **tiny o
 - **tmux panes** prove *what is actually running*
 
 If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
+
+---
+
+## 5-Minute Demo
+
+This is the complete journey — from nothing to parallel agents running — on a fresh machine.
+
+### Install
+
+```bash
+pip install village-ai
+# or: uvx village
+```
+
+Requires: Python 3.11+, git, tmux.
+
+### Create a project
+
+```bash
+mkdir my-app && cd my-app && git init
+village up
+```
+
+`village up` is idempotent. It creates the `.village/` directory, a tmux session, and a default config. Run it again and nothing changes.
+
+### Define work
+
+```bash
+village tasks create "Add a CLI entry point with --help"
+village tasks create "Add pytest and a smoke test"
+village tasks create "Add .gitignore for Python"
+village tasks create "Add README with install instructions"
+```
+
+Dependencies? Add `--depends-on <id>` to make tasks wait for each other.
+
+### Plan
+
+```bash
+village planner design "Bootstrap a Python CLI project"
+```
+
+The planner interacts with an LLM to decompose your goal into numbered specs in `specs/`. Each spec has acceptance criteria and a completion signal.
+
+```bash
+village planner inspect     # Review specs for cross-cutting issues
+village planner inspect --fix  # Review and amend
+```
+
+### Build
+
+```bash
+village builder run         # Sequential: one spec at a time
+village builder run -p 3    # Parallel: 3 agents in 3 worktrees
+```
+
+The builder loops through specs. For each one, it spins up an AI agent in an isolated git worktree inside a tmux pane. The agent reads the spec, implements the code, runs tests, and outputs `<promise>DONE</promise>` when all acceptance criteria pass.
+
+If it fails? Village rolls back the worktree and marks the spec for retry.
+
+### Watch
+
+```bash
+village watcher status --system    # What's running right now
+village watcher dashboard --watch  # Live refresh every 2s
+village watcher events             # Recent event log
+```
+
+If your terminal crashes or you reboot:
+
+```bash
+village watcher status --system    # Shows stale locks and orphans
+village watcher cleanup --apply    # Cleans them up
+village builder run                 # Picks up where it left off
+```
+
+### Ship
+
+```bash
+village tasks update <id> --status done  # Mark tasks complete
+village builder release --dry-run        # Preview version bump + changelog
+village builder release                  # Apply and tag
+```
+
+That's it. No daemon. No database. No hidden state.
+
+---
+
+## Village vs Manual Coordination
+
+You have 10 tasks ready. Here's how the two approaches compare:
+
+| | **Manual** | **With Village** |
+|---|---|---|
+| **Start work** | Open 3 terminals, pick tasks by feel | `village builder run -p 3` |
+| **Avoid conflicts** | Slack message: "anyone editing auth.py?" | Lock system + conflict detection |
+| **Know what's running** | Check each terminal manually | `village watcher status --system` |
+| **Recover from crash** | Guess which tasks were running, re-do work | `village watcher cleanup --apply` picks up where you left off |
+| **Track state** | Post-it notes, spreadsheets, hope | Event log, lock files, state machine |
+| **Release** | Manual version bump, copy-paste changelog | `village builder release` — semver + categorized changelog |
+| **Scale to N agents** | Open N more terminals, manage N more contexts | `village builder run -p N` |
+
+**The key difference:** Village makes coordination *boring*. Not exciting, not magical — boring. Boring is reliable. Boring is auditable. Boring lets you focus on the code.
 
 ---
 
