@@ -4,6 +4,37 @@ All notable changes to Village will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.2.0] - 2026-04-19
+
+### Added
+- **5-Minute Demo** walkthrough in README — install to shipping in 5 minutes
+- **Village vs Manual Coordination** comparison table in README
+- 5 end-to-end integration tests proving core guarantees (lifecycle, concurrency, crash recovery, rollback, dedup)
+- Test suite audit report (`tests/MOCK_AUDIT.md`) documenting mock-overfit patterns
+- Coverage report (`tests/COVERAGE_REPORT.md`) with per-module breakdown
+
+### Changed
+- Converted 9 mock-heavy queue tests to use real filesystem instead of MagicMock chains
+- Converted 35 render tests from mock-assert to output verification
+- Rewrote QUICKSTART.md to use native task store (all Beads references removed)
+- Rewrote man page (`village.1.md`) to match current role-based CLI surface
+- Resolved ROADMAP.md contradictions and duplicated sections
+- Fixed CHANGELOG.md `elder` → `scribe` naming inconsistency in v2.0.0 entry
+- Deduplicated AGENTS.md against README.md (reduced from ~24KB to ~12KB)
+- Updated PKGBUILD for hatch-vcs builds
+- Archived stale `docs/chat/` design documents to `docs/archive/`
+- Generated VOICE.md via `village scribe curate`
+- Status badge changed from alpha to stable
+
+### Removed
+- 197 tests that verified Python language features, not Village behavior
+- 12 skipped `beads_client` tests (dead weight from v2.0.0 migration)
+- `village/opencode.py` 9-line stub
+- All remaining Beads references from documentation and examples
+
+### Fixed
+- `test_resume_failure_with_rollback` test now properly simulates failure scenario
+
 ## [2.0.0] - 2026-04-11
 
 ### Breaking
@@ -26,7 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Role-Based CLI Architecture**
   - `village planner` — spec design + inspection
   - `village builder` — spec-driven autonomous build loop
-  - `village elder` — knowledge base + goals
+  - `village scribe` — knowledge base
   - `village ledger` — audit trails
   - `village council` — multi-persona deliberation
   - `village greeter` — Q&A session / triage
@@ -37,13 +68,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Builder state tracking (manifest + step log)
   - Promise signal pattern for completion detection
   - Parallel mode with configurable worktree count
-- **Village Elder Knowledge Base**
-  - `village elder see/fetch <url|file>` — Ingest sources, auto-tag, cross-link
-  - `village elder ask "question"` — Query wiki and synthesize answers
-  - `village elder curate/upkeep` — Health check, find orphans, regenerate VOICE.md
-  - `village elder stats` — Show wiki statistics
-  - `village elder monitor` — Watch wiki/ingest/ for new files
-  - `village elder goals` — Goal hierarchy with coverage tracking
+- **Village Scribe Knowledge Base**
+  - `village scribe fetch <url|file>` — Ingest sources, auto-tag, cross-link
+  - `village scribe ask "question"` — Query wiki and synthesize answers
+  - `village scribe curate` — Health check, find orphans, regenerate VOICE.md
+  - `village scribe monitor` — Watch wiki/ingest/ for new files
+  - `village goals` — Goal hierarchy with coverage tracking
 - **File-based Memory System**
   - Replace memvid with pure markdown memory store
   - MemoryStore: put/get/find/recent/related/delete over markdown files

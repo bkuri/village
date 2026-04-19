@@ -1,4 +1,4 @@
-# Village v2.1.0
+# Village v2.2.0
 
 > **A tiny operating system for parallel development.**
 
@@ -20,72 +20,40 @@ It uses three things you already trust:
 
 Everything is a file. Everything is inspectable. Everything survives a crash.
 
-## What's new in v2.1.0
+## What changed since v2.1.0
 
-This release is the culmination of months of iteration — from a bash script to a 31K-line Python codebase with 2,150 tests, a spec-driven build loop, and a philosophy that refuses to hide state.
+v2.1.0 laid the foundation: standalone task store, role-based CLI, spec-driven build loop, ACP integration. v2.2.0 is the polish pass — documentation accuracy, test quality, and the first-time user experience.
 
-### The big story: standalone and self-contained
+If you're already running v2.1.0, everything works the same. This is a safe upgrade.
 
-Village no longer depends on an external task manager. The native task store (`village tasks`) handles dependencies, priorities, labels, search, and atomic operations — all backed by a JSONL file. No Cargo, no external database, no extra install step.
+### New: 5-minute demo in the README
 
-```bash
-village tasks create "Add authentication" --type feature -p 1
-village tasks create "Write auth tests" --type task --depends-on <id>
-village tasks ready
-```
+The README now has a complete walkthrough from `pip install` to shipping. Install, create a project, define tasks, plan, build, watch, crash and recover, release — each section is 3-5 lines. No prerequisites beyond Python, git, and tmux.
 
-### Role-based CLI
+### New: Village vs Manual comparison
 
-The flat command surface is gone. Village now speaks in roles — each with its own greeting, skills, and cross-routing:
+A 7-row table comparing manual coordination (Slack messages, terminal-hopping, post-it notes) against Village's one-command answers. Conclusion: *Village makes coordination boring. Boring is reliable.*
 
-| Role | Job |
-|------|-----|
-| `village planner` | Design specs, inspect for cross-cutting issues |
-| `village builder` | Autonomous spec-driven build loop |
-| `village watcher` | Real-time observability, cleanup, audit trails |
-| `village scribe` | Knowledge base: fetch, ask, curate |
-| `village council` | Multi-persona deliberation |
-| `village doctor` | Health diagnostics and prescriptions |
-| `village greeter` | Q&A triage, routes to other roles |
+### Documentation cleanup
 
-### Spec-driven build loop
+Every reference to the removed Beads dependency has been purged — quickstart, man page, roadmap, changelog, extensibility docs, templates, examples. The ROADMAP resolved contradictions and duplicated sections. The CHANGELOG fixed the half-completed `elder` → `scribe` rename. The man page (`village.1.md`) was rewritten to match the current role-based CLI surface. The PKGBUILD was updated for hatch-vcs builds.
 
-The planner decomposes goals into numbered markdown specs with acceptance criteria. The builder picks them up one at a time (or in parallel with `-p N`), spins up an AI agent in an isolated git worktree, and loops until every spec is `COMPLETE`.
+### Test suite overhaul
 
-```bash
-village planner design "Add OAuth2 with Google"
-village planner inspect --fix
-village builder run -p 3
-```
-
-If an agent fails, Village rolls back the worktree and retries. If your terminal crashes, `village watcher cleanup --apply` picks up where you left off.
-
-### ACP integration
-
-Village speaks the Agent Client Protocol. Use it as an ACP agent in your editor (Zed, JetBrains) or as a client to orchestrate external agents (Claude Code, Gemini CLI).
-
-```bash
-village acp  # stdio agent for editors
-```
-
-### Extensibility framework
-
-7 extension points for domain customization without forking:
-
-- `ChatProcessor` — pre/post message processing
-- `ToolInvoker` — customize MCP tool invocation
-- `ThinkingRefiner` — domain-specific query refinement
-- `ChatContext` — session state management
-- `TaskHooks` — customize task lifecycle
-- `ServerDiscovery` — dynamic MCP server discovery
-- `LLMProviderAdapter` — customize LLM provider config
+- **Deleted 197 tests** that verified Python language features (dataclass field assignment, identity functions, Click color calls) rather than Village behavior
+- **Converted 9 mock-heavy queue tests** to use real filesystem and real git repos instead of MagicMock chains
+- **Added 5 end-to-end integration tests** proving core guarantees: full task lifecycle, concurrent isolation, crash recovery, rollback on failure, queue deduplication
+- **Converted 35 render tests** from mock-assert to output verification
+- **Audited the remaining 1,869 tests** — 75% clean, 14% minor, 8% moderate, 3% severe. Full findings documented in `tests/MOCK_AUDIT.md`
 
 ### Quality
 
-- **2,150 tests**, 0 failures, 27-second suite
+- **2,150 tests**, 0 failures, 28-second suite
 - Clean lint (`ruff`), strict type checking (`mypy --strict`)
 - CI pipeline: lint → type check → test → build → publish
 - Bump label enforcement on every PR
+
+---
 
 ## Getting started
 
@@ -104,23 +72,54 @@ village builder run -p 3
 
 See the [5-minute demo](https://github.com/bkuri/village#5-minute-demo) in the README for the full walkthrough.
 
+## The rest of the story
+
+The features below shipped in v2.1.0 and are unchanged in v2.2.0. Included here for completeness.
+
+### Role-based CLI
+
+| Role | Job |
+|------|-----|
+| `village planner` | Design specs, inspect for cross-cutting issues |
+| `village builder` | Autonomous spec-driven build loop |
+| `village watcher` | Real-time observability, cleanup, audit trails |
+| `village scribe` | Knowledge base: fetch, ask, curate |
+| `village council` | Multi-persona deliberation |
+| `village doctor` | Health diagnostics and prescriptions |
+| `village greeter` | Q&A triage, routes to other roles |
+
+### Spec-driven build loop
+
+```bash
+village planner design "Add OAuth2 with Google"
+village planner inspect --fix
+village builder run -p 3
+```
+
+### ACP integration
+
+```bash
+village acp  # stdio agent for editors
+```
+
+### Extensibility framework
+
+7 extension points: `ChatProcessor`, `ToolInvoker`, `ThinkingRefiner`, `ChatContext`, `TaskHooks`, `ServerDiscovery`, `LLMProviderAdapter`.
+
 ## Upgrade from v1.x
 
 **Breaking changes:**
 
 - Beads client dependency removed — use `village tasks` instead of `bd` commands
-- CLI restructured from flat commands to role-based groups (`village builder run` instead of `village run`)
-- `village/chat/beads_client.py` and `village/probes/beads.py` removed
-- `village/cli.py` monolith replaced by `village/cli/` package
+- CLI restructured from flat commands to role-based groups
 
 **Migration:**
 
-- Replace `bd create` → `village tasks create`
-- Replace `bd ready` → `village tasks ready`
-- Replace `bd list` → `village tasks list`
-- Replace `village queue` → `village builder queue`
-- Replace `village resume <id>` → `village builder resume --task <id>`
-- Run `village doctor diagnose` to verify your setup
+- `bd create` → `village tasks create`
+- `bd ready` → `village tasks ready`
+- `bd list` → `village tasks list`
+- `village queue` → `village builder queue`
+- `village resume <id>` → `village builder resume --task <id>`
 
 ## Full changelog
 
