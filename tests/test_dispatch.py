@@ -12,6 +12,7 @@ from village.dispatch import (
     COMMAND_REGISTRY,
     PendingCommand,
     _ensure_registry,
+    _invoke_click_command,
     dispatch,
     parse_command,
     spawn_command,
@@ -318,3 +319,140 @@ def test_spawn_command_sets_and_clears_bridge() -> None:
     assert bridge_during[0] is pending.bridge
     assert get_bridge() is None
     stop_command_executor()
+
+
+class TestInvokeClickCommand:
+    """Tests for _invoke_click_command."""
+
+    @pytest.mark.asyncio
+    async def test_stdout_captured(self) -> None:
+        @click.command()
+        def _hello() -> None:
+            click.echo("hello world")
+
+        result = await _invoke_click_command("hello", _hello, [], {})
+        assert result == "hello world"
+
+    @pytest.mark.asyncio
+    async def test_stderr_only_returned(self) -> None:
+        @click.command()
+        def _err_cmd() -> None:
+            import sys
+
+            sys.stderr.write("error output\n")
+
+        result = await _invoke_click_command("err", _err_cmd, [], {})
+        assert result == "error output"
+
+    @pytest.mark.asyncio
+    async def test_stdout_and_stderr_combined(self) -> None:
+        @click.command()
+        def _both() -> None:
+            import sys
+
+            click.echo("stdout line")
+            sys.stderr.write("stderr line\n")
+
+        result = await _invoke_click_command("both", _both, [], {})
+        assert "stdout line" in result
+        assert "stderr line" in result
+
+    @pytest.mark.asyncio
+    async def test_click_exception_handled(self) -> None:
+        @click.command()
+        def _fail() -> None:
+            raise click.ClickException("something went wrong")
+
+        result = await _invoke_click_command("fail", _fail, [], {})
+        assert result == "Error: something went wrong"
+
+    @pytest.mark.asyncio
+    async def test_system_exit_handled(self) -> None:
+        @click.command()
+        def _exit_cmd() -> None:
+            raise SystemExit(0)
+
+        result = await _invoke_click_command("exit", _exit_cmd, [], {})
+        assert result == ""
+
+    @pytest.mark.asyncio
+    async def test_args_passed(self) -> None:
+        @click.command()
+        @click.argument("name")
+        def _greet(name: str) -> None:
+            click.echo(f"hello {name}")
+
+        result = await _invoke_click_command("greet", _greet, ["Alice"], {})
+        assert result == "hello Alice"
+
+    @pytest.mark.asyncio
+    async def test_empty_output(self) -> None:
+        @click.command()
+        def _silent() -> None:
+            pass
+
+        result = await _invoke_click_command("silent", _silent, [], {})
+        assert result == ""
+
+
+class TestProgressStream:
+    """Tests for ProgressStream."""
+
+    def test_write_and_drain(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("chunk1")
+        ps.write("chunk2")
+        assert ps.drain_progress() == "chunk1chunk2"
+
+    def test_drain_empty(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        assert ps.drain_progress() == ""
+
+    def test_drain_only_new_chunks(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("first")
+        ps.drain_progress()
+        ps.write("second")
+        assert ps.drain_progress() == "second"
+
+    def test_has_progress_false_initially(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        assert ps.has_progress is False
+
+    def test_has_progress_after_write(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("data")
+        assert ps.has_progress is True
+
+    def test_has_progress_false_after_drain(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("data")
+        ps.drain_progress()
+        assert ps.has_progress is False
+
+    def test_empty_write_no_progress(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("")
+        assert ps.has_progress is False
+
+    def test_getvalue(self) -> None:
+        from village.dispatch import ProgressStream
+
+        ps = ProgressStream()
+        ps.write("a")
+        ps.write("b")
+        assert ps.getvalue() == "ab"

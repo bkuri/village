@@ -1,108 +1,13 @@
 """Unit tests for task extraction and Beads integration."""
 
 from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from village.chat.baseline import BaselineReport
 from village.chat.sequential_thinking import TaskBreakdown, TaskBreakdownItem
 from village.chat.task_extractor import TaskSubmissionSpec, extract_task_specs
-
-
-class TestTaskSubmissionSpecDefaults:
-    """Tests for TaskSubmissionSpec default values."""
-
-    def test_task_submission_spec_defaults(self) -> None:
-        """Test creating TaskSubmissionSpec with minimal required fields."""
-        spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=[],
-            blockers=[],
-            depends_on=[],
-            batch_id="batch-test-123-20250101-120000",
-            parent_task_id=None,
-            custom_fields={},
-        )
-
-        assert spec.title == "Test Task"
-        assert spec.description == "Test description"
-        assert spec.estimate == "2 hours"
-        assert spec.success_criteria == []
-        assert spec.blockers == []
-        assert spec.depends_on == []
-        assert spec.batch_id == "batch-test-123-20250101-120000"
-        assert spec.parent_task_id is None
-        assert spec.custom_fields == {}
-
-
-class TestTaskSubmissionSpecPostInit:
-    """Tests for TaskSubmissionSpec __post_init__ method."""
-
-    def test_post_init_defaults_depends_on(self) -> None:
-        """Test that depends_on defaults to empty list if None."""
-        spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=[],
-            blockers=[],
-            depends_on=None,  # type: ignore[arg-type]
-            batch_id="batch-test",
-            parent_task_id=None,
-            custom_fields={},
-        )
-
-        assert spec.depends_on == []
-
-    def test_post_init_defaults_success_criteria(self) -> None:
-        """Test that success_criteria defaults to empty list if None."""
-        spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=None,  # type: ignore[arg-type]
-            blockers=[],
-            depends_on=[],
-            batch_id="batch-test",
-            parent_task_id=None,
-            custom_fields={},
-        )
-
-        assert spec.success_criteria == []
-
-    def test_post_init_defaults_blockers(self) -> None:
-        """Test that blockers defaults to empty list if None."""
-        spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=[],
-            blockers=None,  # type: ignore[arg-type]
-            depends_on=[],
-            batch_id="batch-test",
-            parent_task_id=None,
-            custom_fields={},
-        )
-
-        assert spec.blockers == []
-
-    def test_post_init_defaults_custom_fields(self) -> None:
-        """Test that custom_fields defaults to empty dict if None."""
-        spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=[],
-            blockers=[],
-            depends_on=[],
-            batch_id="batch-test",
-            parent_task_id=None,
-            custom_fields=None,  # type: ignore[arg-type]
-        )
-
-        assert spec.custom_fields == {}
 
 
 class TestExtractBeadsSpecs:
@@ -336,39 +241,300 @@ class TestExtractBeadsSpecsWithDependencies:
         assert specs[0].depends_on == []
 
 
-class TestTaskSubmissionSpecRequiredFields:
-    """Tests for TaskSubmissionSpec required fields."""
-
-    def test_beads_task_spec_required_fields(self) -> None:
-        """Test that all required fields (title, description, estimate, etc.) are present."""
+class TestTaskSubmissionSpecDefaults:
+    def test_post_init_defaults_none_to_empty(self) -> None:
         spec = TaskSubmissionSpec(
-            title="Test Task",
-            description="Test description",
-            estimate="2 hours",
-            success_criteria=["Criterion 1", "Criterion 2"],
-            blockers=["Blocker 1"],
-            depends_on=["bd-abc123"],
-            batch_id="batch-test-123",
-            parent_task_id="bd-parent",
-            custom_fields={"key": "value"},
+            title="Test",
+            description="Desc",
+            estimate="1h",
+            success_criteria=None,
+            blockers=None,
+            depends_on=None,
+            batch_id="batch-1",
+            parent_task_id=None,
+            custom_fields=None,
         )
+        assert spec.success_criteria == []
+        assert spec.blockers == []
+        assert spec.depends_on == []
+        assert spec.custom_fields == {}
 
-        assert hasattr(spec, "title")
-        assert hasattr(spec, "description")
-        assert hasattr(spec, "estimate")
-        assert hasattr(spec, "success_criteria")
-        assert hasattr(spec, "blockers")
-        assert hasattr(spec, "depends_on")
-        assert hasattr(spec, "batch_id")
-        assert hasattr(spec, "parent_task_id")
-        assert hasattr(spec, "custom_fields")
+    def test_post_init_preserves_values(self) -> None:
+        spec = TaskSubmissionSpec(
+            title="Test",
+            description="Desc",
+            estimate="1h",
+            success_criteria=["done"],
+            blockers=["blocked"],
+            depends_on=["dep1"],
+            batch_id="batch-1",
+            parent_task_id="parent",
+            custom_fields={"key": "val"},
+        )
+        assert spec.success_criteria == ["done"]
+        assert spec.blockers == ["blocked"]
+        assert spec.depends_on == ["dep1"]
+        assert spec.custom_fields == {"key": "val"}
 
-        assert spec.title == "Test Task"
-        assert spec.description == "Test description"
-        assert spec.estimate == "2 hours"
-        assert spec.success_criteria == ["Criterion 1", "Criterion 2"]
-        assert spec.blockers == ["Blocker 1"]
-        assert spec.depends_on == ["bd-abc123"]
-        assert spec.batch_id == "batch-test-123"
-        assert spec.parent_task_id == "bd-parent"
-        assert spec.custom_fields == {"key": "value"}
+
+class TestInferBumpType:
+    def test_infer_bump_major(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:major"]) == "major"
+
+    def test_infer_bump_minor(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:minor"]) == "minor"
+
+    def test_infer_bump_patch(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:patch"]) == "patch"
+
+    def test_infer_bump_none(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:none"]) == "none"
+
+    def test_infer_bump_default_no_tag(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["frontend", "urgent"]) == "patch"
+
+    def test_infer_bump_empty_tags(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags([]) == "patch"
+
+    def test_infer_bump_invalid_value(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:invalid"]) == "patch"
+
+    def test_infer_bump_case_insensitive(self) -> None:
+        from village.chat.task_extractor import _extract_bump_from_tags
+
+        assert _extract_bump_from_tags(["bump:MAJOR"]) == "major"
+
+
+class TestResolveTaskIds:
+    def test_resolve_index_dependencies(self) -> None:
+        from village.chat.task_extractor import _resolve_task_ids
+
+        spec1 = TaskSubmissionSpec(
+            title="Task 1",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=[],
+            batch_id="b",
+            parent_task_id=None,
+            custom_fields={},
+        )
+        spec2 = TaskSubmissionSpec(
+            title="Task 2",
+            description="D",
+            estimate="2h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=["index-0"],
+            batch_id="b",
+            parent_task_id=None,
+            custom_fields={},
+        )
+        specs = [spec1, spec2]
+        created_tasks = {"Task 1": "tsk-aaa", "Task 2": "tsk-bbb"}
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store"):
+            _resolve_task_ids(created_tasks, specs, config)
+        assert specs[1].depends_on == ["tsk-aaa"]
+
+    def test_resolve_preserves_non_index_deps(self) -> None:
+        from village.chat.task_extractor import _resolve_task_ids
+
+        spec1 = TaskSubmissionSpec(
+            title="Task 1",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=["tsk-existing"],
+            batch_id="b",
+            parent_task_id=None,
+            custom_fields={},
+        )
+        specs = [spec1]
+        created_tasks = {"Task 1": "tsk-aaa"}
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store"):
+            _resolve_task_ids(created_tasks, specs, config)
+        assert specs[0].depends_on == ["tsk-existing"]
+
+    def test_resolve_invalid_index_warns(self) -> None:
+        from village.chat.task_extractor import _resolve_task_ids
+
+        spec1 = TaskSubmissionSpec(
+            title="Task 1",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=["index-99"],
+            batch_id="b",
+            parent_task_id=None,
+            custom_fields={},
+        )
+        specs = [spec1]
+        created_tasks = {"Task 1": "tsk-aaa"}
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store"):
+            _resolve_task_ids(created_tasks, specs, config)
+        assert specs[0].depends_on == []
+
+
+class TestCreateDraftTasks:
+    @pytest.mark.asyncio
+    async def test_create_draft_tasks_success(self) -> None:
+        from village.chat.task_extractor import create_draft_tasks
+
+        spec = TaskSubmissionSpec(
+            title="Draft task",
+            description="Desc",
+            estimate="1h",
+            success_criteria=["done"],
+            blockers=[],
+            depends_on=[],
+            batch_id="batch-1",
+            parent_task_id=None,
+            custom_fields={"batch": "batch-1", "source": "village-brainstorm"},
+        )
+        mock_task = MagicMock()
+        mock_task.id = "tsk-new1"
+
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.create_task.return_value = mock_task
+            mock_get_store.return_value = mock_store
+            result = await create_draft_tasks([spec], config)
+        assert result == {"Draft task": "tsk-new1"}
+        mock_store.initialize.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_create_draft_tasks_propagates_error(self) -> None:
+        from village.chat.task_extractor import create_draft_tasks
+
+        spec = TaskSubmissionSpec(
+            title="Fail task",
+            description="Desc",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=[],
+            batch_id="batch-1",
+            parent_task_id=None,
+            custom_fields={},
+        )
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.create_task.side_effect = Exception("store error")
+            mock_get_store.return_value = mock_store
+            with pytest.raises(Exception, match="store error"):
+                await create_draft_tasks([spec], config)
+
+
+class TestCreateSingleDraft:
+    @pytest.mark.asyncio
+    async def test_labels_include_batch_and_bump(self) -> None:
+        from village.chat.task_extractor import _create_single_draft
+
+        spec = TaskSubmissionSpec(
+            title="Labeled",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=[],
+            batch_id="batch-123",
+            parent_task_id=None,
+            custom_fields={"batch": "batch-123", "source": "village-brainstorm", "tags": "urgent,important"},
+            bump="minor",
+        )
+        mock_task = MagicMock()
+        mock_task.id = "tsk-lbl"
+
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.create_task.return_value = mock_task
+            mock_get_store.return_value = mock_store
+            result = await _create_single_draft(spec, config)
+
+        assert result == "tsk-lbl"
+        call_args = mock_store.create_task.call_args[0][0]
+        assert "batch:batch-123" in call_args.labels
+        assert "bump:minor" in call_args.labels
+        assert "urgent" in call_args.labels
+        assert "important" in call_args.labels
+
+    @pytest.mark.asyncio
+    async def test_parent_task_id_added_to_depends_on(self) -> None:
+        from village.chat.task_extractor import _create_single_draft
+
+        spec = TaskSubmissionSpec(
+            title="Child",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=[],
+            batch_id="batch-1",
+            parent_task_id="tsk-parent",
+            custom_fields={},
+            bump="patch",
+        )
+        mock_task = MagicMock()
+        mock_task.id = "tsk-child"
+
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.create_task.return_value = mock_task
+            mock_get_store.return_value = mock_store
+            await _create_single_draft(spec, config)
+
+        call_args = mock_store.create_task.call_args[0][0]
+        assert "tsk-parent" in call_args.depends_on
+
+    @pytest.mark.asyncio
+    async def test_bump_none_not_added_as_label(self) -> None:
+        from village.chat.task_extractor import _create_single_draft
+
+        spec = TaskSubmissionSpec(
+            title="NoBump",
+            description="D",
+            estimate="1h",
+            success_criteria=[],
+            blockers=[],
+            depends_on=[],
+            batch_id="batch-1",
+            parent_task_id=None,
+            custom_fields={},
+            bump="none",
+        )
+        mock_task = MagicMock()
+        mock_task.id = "tsk-nobump"
+
+        config = MagicMock()
+        with patch("village.chat.task_extractor.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.create_task.return_value = mock_task
+            mock_get_store.return_value = mock_store
+            await _create_single_draft(spec, config)
+
+        call_args = mock_store.create_task.call_args[0][0]
+        assert "bump:none" not in call_args.labels

@@ -2,13 +2,17 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from village.config import Config
 from village.loop import (
     LoopIteration,
     LoopResult,
     SpecInfo,
+    check_and_trigger_wave,
+    check_landing_trigger,
     check_spec_completion,
     detect_promise,
     find_incomplete_specs,
@@ -225,3 +229,277 @@ def test_spec_info_dataclass(tmp_path: Path):
     assert info.path == spec_path
     assert info.name == "001-test.md"
     assert info.is_complete is False
+
+
+class TestCheckWaveTrigger:
+    def test_no_done_tasks_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        with patch("village.tasks.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = []
+            mock_get_store.return_value = mock_store
+            result = check_and_trigger_wave(config)
+        assert result is False
+
+    def test_done_tasks_no_proposals_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_task.title = "Task 1"
+        mock_task.labels = ["bump:patch"]
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.stack.waves.evaluate_wave") as mock_evaluate,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_wave = MagicMock()
+            mock_wave.proposals = []
+            mock_evaluate.return_value = mock_wave
+            result = check_and_trigger_wave(config)
+        assert result is False
+
+    def test_user_accepts_proposals(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_task.title = "Task 1"
+        mock_task.labels = ["bump:patch"]
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.stack.waves.evaluate_wave") as mock_evaluate,
+            patch("village.stack.waves.format_wave_summary") as mock_format,
+            patch("village.stack.waves.apply_proposals") as mock_apply,
+            patch("builtins.input") as mock_input,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_proposal = MagicMock()
+            mock_proposal.__dict__ = {"title": "New subtask"}
+            mock_wave = MagicMock()
+            mock_wave.proposals = [mock_proposal]
+            mock_evaluate.return_value = mock_wave
+            mock_format.return_value = "Wave summary"
+            mock_input.return_value = "yes"
+            mock_apply.return_value = [{"id": "tsk-1", "labels": ["bump:patch", "new-label"]}]
+            result = check_and_trigger_wave(config)
+        assert result is True
+
+    def test_user_rejects_proposals(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_task.title = "Task 1"
+        mock_task.labels = ["bump:patch"]
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.stack.waves.evaluate_wave") as mock_evaluate,
+            patch("village.stack.waves.format_wave_summary") as mock_format,
+            patch("builtins.input") as mock_input,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_proposal = MagicMock()
+            mock_wave = MagicMock()
+            mock_wave.proposals = [mock_proposal]
+            mock_evaluate.return_value = mock_wave
+            mock_format.return_value = "Wave summary"
+            mock_input.side_effect = ["no", "not needed"]
+            result = check_and_trigger_wave(config)
+        assert result is False
+
+    def test_user_rejects_with_cant_continue_raises(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_task.title = "Task 1"
+        mock_task.labels = ["bump:patch"]
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.stack.waves.evaluate_wave") as mock_evaluate,
+            patch("village.stack.waves.format_wave_summary"),
+            patch("builtins.input") as mock_input,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_wave = MagicMock()
+            mock_wave.proposals = [MagicMock()]
+            mock_evaluate.return_value = mock_wave
+            mock_input.side_effect = ["no", "cant-continue"]
+            with pytest.raises(RuntimeError, match="rejected wave proposals"):
+                check_and_trigger_wave(config)
+
+    def test_eof_error_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_task.title = "Task 1"
+        mock_task.labels = ["bump:patch"]
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.stack.waves.evaluate_wave") as mock_evaluate,
+            patch("village.stack.waves.format_wave_summary"),
+            patch("builtins.input", side_effect=EOFError),
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_wave = MagicMock()
+            mock_wave.proposals = [MagicMock()]
+            mock_evaluate.return_value = mock_wave
+            result = check_and_trigger_wave(config)
+        assert result is False
+
+
+class TestCheckLandingTrigger:
+    def test_no_tasks_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        with patch("village.tasks.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = []
+            mock_get_store.return_value = mock_store
+            result = check_landing_trigger(config)
+        assert result is False
+
+    def test_not_all_done_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_done = MagicMock()
+        mock_done.id = "tsk-1"
+        mock_open = MagicMock()
+        mock_open.id = "tsk-2"
+        with patch("village.tasks.get_task_store") as mock_get_store:
+            mock_store = MagicMock()
+            mock_store.list_tasks.side_effect = [
+                [mock_done, mock_open],
+                [mock_done],
+            ]
+            mock_get_store.return_value = mock_store
+            result = check_landing_trigger(config)
+        assert result is False
+
+    def test_all_done_triggers_landing(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.builder.arrange.arrange_landing") as mock_arrange,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            result = check_landing_trigger(config, landing_dry_run=True)
+        assert result is True
+        mock_arrange.assert_called_once_with(dry_run=True)
+
+    def test_landing_failure_returns_false(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.builder.arrange.arrange_landing", side_effect=Exception("landing failed")),
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            result = check_landing_trigger(config)
+        assert result is False
+
+    def test_landing_with_plan_slug(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        mock_plan = MagicMock()
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.builder.arrange.arrange_landing"),
+            patch("village.plans.store.FilePlanStore") as mock_store_cls,
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            mock_plan_store = MagicMock()
+            mock_plan_store.get.return_value = mock_plan
+            mock_store_cls.return_value = mock_plan_store
+            result = check_landing_trigger(config, plan_slug="my-plan", landing_dry_run=True)
+        assert result is True
+        mock_plan_store.update.assert_called_once()
+
+    def test_landing_plan_update_failure_logged(self) -> None:
+        config = _make_config(Path("/tmp"))
+        mock_task = MagicMock()
+        mock_task.id = "tsk-1"
+        with (
+            patch("village.tasks.get_task_store") as mock_get_store,
+            patch("village.builder.arrange.arrange_landing"),
+            patch("village.plans.store.FilePlanStore", side_effect=Exception("store error")),
+        ):
+            mock_store = MagicMock()
+            mock_store.list_tasks.return_value = [mock_task]
+            mock_get_store.return_value = mock_store
+            result = check_landing_trigger(config, plan_slug="bad-plan", landing_dry_run=True)
+        assert result is True
+
+
+class TestRunLoop:
+    def test_run_loop_parallel_warning(self, tmp_path: Path) -> None:
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+        with patch("village.loop.get_config", return_value=config):
+            result = run_loop(specs_dir=specs_dir, max_iterations=1, dry_run=True, parallel=3, config=config)
+        assert result.iterations == 1
+
+    def test_run_loop_max_iterations(self, tmp_path: Path) -> None:
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+        result = run_loop(specs_dir=specs_dir, max_iterations=2, dry_run=True, config=config)
+        assert result.iterations == 2
+
+    def test_run_loop_dry_run_remaining(self, tmp_path: Path) -> None:
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+        result = run_loop(specs_dir=specs_dir, max_iterations=1, dry_run=True, config=config)
+        assert len(result.remaining) == 1
+        assert result.remaining[0] == "001-todo.md"
+
+    def test_run_loop_dry_run_multiple_specs(self, tmp_path: Path) -> None:
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+        result = run_loop(specs_dir=specs_dir, max_iterations=2, dry_run=True, config=config)
+        assert result.total_specs == 2
+        assert result.iterations == 2
+
+    def test_run_loop_no_config_uses_get_config(self, tmp_path: Path) -> None:
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-done.md").write_text("## Status: COMPLETE\n")
+        config = _make_config(tmp_path)
+        with patch("village.loop.get_config", return_value=config):
+            result = run_loop(specs_dir=specs_dir)
+        assert result.total_specs == 1
+        assert result.completed_specs == 1
