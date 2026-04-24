@@ -27,12 +27,15 @@ from village.tasks import TaskCreate, TaskStore, TaskStoreError, get_task_store
 if TYPE_CHECKING:
     from village.config import Config
     from village.llm.client import LLMClient
+    from village.llm.mcp import MCPClient
 
     _Config = Config
     _LLMClient = LLMClient
+    _MCPClient = MCPClient
 else:
     _Config = object
     _LLMClient = object
+    _MCPClient = object
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,7 @@ class LLMChat:
     session: ChatSession
     llm_client: _LLMClient
     extensions: ExtensionRegistry
+    mcp_client: _MCPClient | None = None
     system_prompt: str | None = None
     config: _Config | None = None
     session_id: str = field(default="")
@@ -80,12 +84,14 @@ class LLMChat:
         system_prompt: str | None = None,
         config: _Config | None = None,
         extensions: Optional[ExtensionRegistry] = None,
+        mcp_client: Optional[_MCPClient] = None,
     ) -> None:
         self.session = ChatSession()
         self.llm_client = llm_client
         self.system_prompt = system_prompt
         self.config = config
         self.extensions = extensions or ExtensionRegistry()
+        self.mcp_client = mcp_client
         self.session_id = str(uuid.uuid4())
         self.session_context = None
 
@@ -96,6 +102,9 @@ class LLMChat:
 
     async def set_extensions(self, extensions: ExtensionRegistry) -> None:
         self.extensions = extensions
+
+    async def set_mcp_client(self, mcp_client: _MCPClient) -> None:
+        self.mcp_client = mcp_client
 
     async def _call_llm_with_retry(
         self,
@@ -189,12 +198,12 @@ class LLMChat:
         response = await processor.post_process(response)
         return response
 
-    async def invoke_tool(self, tool_name: str, args: dict[str, object]) -> ToolResult:
+    async def invoke_tool(self, tool_name: str, args: dict[str, object], server_name: str | None = None) -> ToolResult:
         invoker = self.extensions.get_tool_invoker()
         invocation = ToolInvocation(
             tool_name=tool_name,
             args=args,
-            context={"session_id": self.session_id},
+            context={"session_id": self.session_id, "server_name": server_name},
         )
 
         if not await invoker.should_invoke(invocation):
@@ -203,6 +212,15 @@ class LLMChat:
         transformed_args = await invoker.transform_args(invocation)
 
         try:
+            if self.mcp_client is not None and server_name is not None:
+                mcp_result = await self.mcp_client.invoke_tool(
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    tool_input=transformed_args,
+                )
+                processed_result = await invoker.on_success(invocation, mcp_result)
+                return ToolResult(success=True, result=processed_result)
+
             result = {"tool_name": tool_name, "args": transformed_args, "status": "hook_ready"}
             processed_result = await invoker.on_success(invocation, result)
             return ToolResult(success=True, result=processed_result)

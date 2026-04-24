@@ -139,12 +139,48 @@ def cancel_run(run_id: str | None) -> None:
     click.echo("Stop not yet implemented. Use Ctrl+C in the running terminal.")
 
 
-@builder_group.command("logs", hidden=True)
-@click.argument("run_id", required=False)
+@builder_group.command("logs")
+@click.argument("task_id", required=False)
 @click.option("--follow", is_flag=True, help="Follow log output")
-def show_logs(run_id: str | None, follow: bool) -> None:
-    """Show build loop logs."""
-    click.echo("Log viewing not yet implemented.")
+def show_logs(task_id: str | None, follow: bool) -> None:
+    """Show build loop logs for a task or all tasks."""
+    import time
+
+    from village.config import get_config
+    from village.trace import TraceReader, format_trace
+
+    config = get_config()
+    reader = TraceReader(config.traces_dir)
+
+    if task_id is None:
+        task_ids = reader.list_traced_tasks()
+        if not task_ids:
+            raise click.ClickException(f"No traces found in {config.traces_dir}")
+        click.echo(f"Traced tasks ({len(task_ids)}):")
+        for tid in task_ids:
+            events = reader.read(tid)
+            click.echo(f"  {tid} ({len(events)} events)")
+        return
+
+    events = reader.read(task_id)
+    if not events:
+        raise click.ClickException(f"No traces found for {task_id}")
+
+    if follow:
+        try:
+            click.echo(format_trace(events))
+            click.echo("--- following ---")
+            seen = len(events)
+            while True:
+                time.sleep(1)
+                fresh = reader.read(task_id)
+                if len(fresh) > seen:
+                    click.echo(format_trace(fresh[seen:]))
+                    seen = len(fresh)
+        except KeyboardInterrupt:
+            click.echo("\nStopped following.")
+    else:
+        click.echo(format_trace(events))
 
 
 @builder_group.command("resume")
@@ -176,6 +212,7 @@ def show_logs(run_id: str | None, follow: bool) -> None:
     is_flag=True,
     help="Select from ready tasks interactively",
 )
+@click.option("--parallel", "-p", "parallel", default=1, type=int, help="Number of parallel worktrees")
 def resume(
     build: bool,
     task_id: str | None,
@@ -184,6 +221,7 @@ def resume(
     html: bool,
     dry_run: bool,
     select_mode: bool,
+    parallel: int,
 ) -> None:
     """Resume a build loop or a paused task.
 
@@ -194,7 +232,7 @@ def resume(
         raise click.ClickException("specify --build or --task")
 
     if build:
-        _resume_build()
+        _resume_build(parallel=parallel)
     else:
         from village.cli.work import resume as work_resume
 
@@ -208,9 +246,11 @@ def resume(
         )
 
 
-def _resume_build() -> None:
+def _resume_build(parallel: int = 1) -> None:
+    from village.builder_state import BuildRunState, BuildRunStatus
     from village.config import get_config
     from village.loop import find_incomplete_specs
+    from village.loop import run_loop as _run_loop
 
     config = get_config()
     specs_path = config.git_root / "specs"
@@ -218,13 +258,61 @@ def _resume_build() -> None:
     if not specs_path.is_dir():
         raise click.ClickException("No specs directory found.")
 
+    build_state = BuildRunState(config.village_dir / "builds")
+    prior = build_state.find_latest_run()
+
+    skip_specs: set[str] | None = None
+    run_id: str | None = None
+    if prior is not None:
+        run_id = prior.run_id
+        if prior.status == BuildRunStatus.RUNNING:
+            skip_specs = set(prior.completed_specs)
+            click.echo(f"Resuming run {prior.run_id}")
+            click.echo(f"  Prior iterations: {prior.iteration_count}")
+            click.echo(f"  Specs completed: {len(prior.completed_specs)}")
+        elif prior.status in (BuildRunStatus.COMPLETED,):
+            click.echo("Last run completed successfully. Nothing to resume.")
+            return
+        else:
+            click.echo(f"Resuming from stopped run {prior.run_id}")
+            skip_specs = set(prior.completed_specs)
+
     incomplete = find_incomplete_specs(specs_path)
+    if skip_specs:
+        incomplete = [s for s in incomplete if s.name not in skip_specs]
+
     if not incomplete:
         click.echo("All specs complete. Nothing to resume.")
         return
 
-    click.echo(f"Resuming: {len(incomplete)} incomplete specs")
-    click.echo("Use 'builder run' to continue.")
+    click.echo(f"Incomplete specs: {len(incomplete)}")
+    for s in incomplete:
+        click.echo(f"  - {s.name}")
+
+    try:
+        result = _run_loop(
+            specs_dir=specs_path,
+            agent="worker",
+            model=None,
+            max_iterations=None,
+            dry_run=False,
+            config=config,
+            parallel=parallel,
+            run_id=run_id,
+            skip_specs=skip_specs,
+        )
+
+        click.echo(f"\nBuild loop finished ({result.iterations} iterations)")
+        click.echo(f"Completed: {result.completed_specs} / {result.total_specs}")
+        if result.remaining:
+            click.echo(f"Remaining: {', '.join(result.remaining)}")
+            click.echo("\nRun 'builder resume --build' to continue.")
+        else:
+            click.echo("All specs complete!")
+    except KeyboardInterrupt:
+        click.echo("\nBuild loop stopped by user.")
+    except Exception as e:
+        raise click.ClickException(str(e))
 
 
 @builder_group.command("queue")

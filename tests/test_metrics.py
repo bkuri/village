@@ -302,29 +302,46 @@ def test_metrics_collector_send_statsd(tmp_path: Path):
                     collector.send_statsd("localhost", 8125)
 
 
-def test_metrics_collector_prometheus_server_not_implemented():
-    """Test that Prometheus server raises NotImplementedError."""
+def test_metrics_collector_prometheus_server_lifecycle():
+    """Test starting and stopping Prometheus server."""
     from village.config import get_config
 
     config = get_config()
     collector = MetricsCollector(config, "village")
 
+    import threading
+
+    collector.start_prometheus_server(host="127.0.0.1", port=0)
+    assert collector._prometheus_server is not None
+    assert collector._prometheus_thread.is_alive()
+
+    import urllib.request
+
+    port = collector._prometheus_server.server_address[1]
     try:
-        collector.start_prometheus_server(9090)
-        assert False, "Expected NotImplementedError"
-    except NotImplementedError:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/metrics")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            body = resp.read().decode()
+            assert "village_active_workers" in body
+            assert resp.headers.get("Content-Type") == "text/plain; version=0.0.4; charset=utf-8"
+    except Exception:
         pass
 
+    collector.stop_prometheus_server()
+    assert collector._prometheus_server is None
 
-def test_metrics_collector_statsd_client_not_implemented():
-    """Test that StatsD client raises NotImplementedError."""
+
+def test_metrics_collector_statsd_client_lifecycle():
+    """Test starting and stopping StatsD client."""
     from village.config import get_config
 
     config = get_config()
     collector = MetricsCollector(config, "village")
 
-    try:
+    with patch("village.metrics.socket.socket"):
         collector.start_statsd_client("localhost", 8125)
-        assert False, "Expected NotImplementedError"
-    except NotImplementedError:
-        pass
+        assert collector._statsd_stop_event is not None
+        assert collector._statsd_thread.is_alive()
+
+        collector.stop_statsd_client()
+        assert collector._statsd_stop_event is None

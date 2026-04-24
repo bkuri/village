@@ -330,3 +330,113 @@ class TestHandleDiscard:
         chat = _make_chat()
         result = await chat.handle_discard("")
         assert "No current task" in result
+
+
+class TestInvokeToolMCP:
+    @pytest.mark.asyncio
+    async def test_invoke_tool_calls_mcp_client(self) -> None:
+        mock_mcp = MagicMock()
+        mock_mcp.invoke_tool = AsyncMock(return_value="mcp result data")
+        chat = _make_chat()
+        chat.mcp_client = mock_mcp
+        result = await chat.invoke_tool("search", {"q": "test"}, server_name="perplexity")
+        assert result.success is True
+        mock_mcp.invoke_tool.assert_called_once_with(
+            server_name="perplexity",
+            tool_name="search",
+            tool_input={"q": "test"},
+        )
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_mcp_result_passed_through_on_success(self) -> None:
+        extensions = ExtensionRegistry()
+        mock_invoker = MagicMock()
+        mock_invoker.should_invoke = AsyncMock(return_value=True)
+        mock_invoker.transform_args = AsyncMock(return_value={"q": "test"})
+        mock_invoker.on_success = AsyncMock(return_value="processed mcp result")
+        extensions.register_tool_invoker(mock_invoker)
+        mock_mcp = MagicMock()
+        mock_mcp.invoke_tool = AsyncMock(return_value="raw mcp data")
+        chat = _make_chat()
+        chat.extensions = extensions
+        chat.mcp_client = mock_mcp
+        result = await chat.invoke_tool("search", {"q": "test"}, server_name="perplexity")
+        assert result.success is True
+        assert result.result == "processed mcp result"
+        mock_invoker.on_success.assert_called_once()
+        call_args = mock_invoker.on_success.call_args
+        assert call_args[0][1] == "raw mcp data"
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_mcp_error_handled(self) -> None:
+        extensions = ExtensionRegistry()
+        mock_invoker = MagicMock()
+        mock_invoker.should_invoke = AsyncMock(return_value=True)
+        mock_invoker.transform_args = AsyncMock(return_value={"q": "test"})
+        mock_invoker.on_error = AsyncMock()
+        extensions.register_tool_invoker(mock_invoker)
+        mock_mcp = MagicMock()
+        mock_mcp.invoke_tool = AsyncMock(side_effect=RuntimeError("server unavailable"))
+        chat = _make_chat()
+        chat.extensions = extensions
+        chat.mcp_client = mock_mcp
+        result = await chat.invoke_tool("search", {"q": "test"}, server_name="perplexity")
+        assert result.success is False
+        assert result.error is not None
+        assert "server unavailable" in result.error
+        mock_invoker.on_error.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_no_mcp_client_falls_back_to_placeholder(self) -> None:
+        chat = _make_chat()
+        assert chat.mcp_client is None
+        result = await chat.invoke_tool("search", {"q": "test"}, server_name="perplexity")
+        assert result.success is True
+        assert result.result["status"] == "hook_ready"
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_no_server_name_falls_back_to_placeholder(self) -> None:
+        mock_mcp = MagicMock()
+        chat = _make_chat()
+        chat.mcp_client = mock_mcp
+        result = await chat.invoke_tool("search", {"q": "test"})
+        assert result.success is True
+        assert result.result["status"] == "hook_ready"
+        mock_mcp.invoke_tool.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_mcp_client_in_constructor(self) -> None:
+        mock_mcp = MagicMock()
+        mock_mcp.invoke_tool = AsyncMock(return_value="constructor mcp result")
+        chat = LLMChat(llm_client=_make_llm_client(), mcp_client=mock_mcp)
+        assert chat.mcp_client is mock_mcp
+        result = await chat.invoke_tool("tool", {"a": 1}, server_name="server1")
+        assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_set_mcp_client(self) -> None:
+        mock_mcp = MagicMock()
+        chat = _make_chat()
+        assert chat.mcp_client is None
+        await chat.set_mcp_client(mock_mcp)
+        assert chat.mcp_client is mock_mcp
+
+    @pytest.mark.asyncio
+    async def test_invoke_tool_server_name_in_context(self) -> None:
+        extensions = ExtensionRegistry()
+        mock_invoker = MagicMock()
+        mock_invoker.should_invoke = AsyncMock(return_value=True)
+        mock_invoker.transform_args = AsyncMock(return_value={"a": 1})
+        mock_invoker.on_success = AsyncMock(return_value={"status": "ok"})
+        extensions.register_tool_invoker(mock_invoker)
+        mock_mcp = MagicMock()
+        mock_mcp.invoke_tool = AsyncMock(return_value="result")
+        chat = _make_chat()
+        chat.extensions = extensions
+        chat.mcp_client = mock_mcp
+        from village.extensibility.tool_invokers import ToolInvocation
+
+        with patch("village.chat.llm_chat.ToolInvocation", wraps=ToolInvocation) as spy:
+            await chat.invoke_tool("tool", {"a": 1}, server_name="my-server")
+            call_kwargs = spy.call_args
+            assert call_kwargs.kwargs["context"]["server_name"] == "my-server"

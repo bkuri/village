@@ -5,6 +5,7 @@ import socket
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from village.cleanup import find_stale_locks
 from village.config import Config
@@ -189,24 +190,71 @@ class MetricsCollector:
 
         return StatsDMetrics(metrics=lines)
 
-    def start_prometheus_server(self, port: int) -> None:
-        """
-        Start Prometheus HTTP server on specified port.
+    def start_prometheus_server(self, host: str = "0.0.0.0", port: int | None = None) -> None:
+        port = port or self.config.metrics.port
+        collector = self
 
-        Args:
-            port: HTTP port to listen on
-        """
-        raise NotImplementedError("Prometheus server not yet implemented")
+        class _PrometheusHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path == "/metrics":
+                    try:
+                        prom = collector.export_prometheus()
+                        body = "\n".join(prom.metrics).encode("utf-8")
+                        self.send_response(200)
+                        self.send_header("Content-Type", prom.content_type)
+                        self.end_headers()
+                        self.wfile.write(body)
+                    except Exception as e:
+                        logger.error(f"Error generating Prometheus metrics: {e}")
+                        self.send_response(500)
+                        self.end_headers()
+                else:
+                    self.send_response(404)
+                    self.end_headers()
 
-    def start_statsd_client(self, host: str, port: int) -> None:
-        """
-        Start StatsD client for periodic metric export.
+            def log_message(self, format: str, *args: object) -> None:
+                pass
 
-        Args:
-            host: StatsD server host
-            port: StatsD server port
-        """
-        raise NotImplementedError("StatsD client not yet implemented")
+        server = HTTPServer((host, port), _PrometheusHandler)
+        self._prometheus_server: HTTPServer | None = server
+        self._prometheus_thread = threading.Thread(
+            target=server.serve_forever, name="prometheus-server", daemon=True
+        )
+        self._prometheus_thread.start()
+        logger.info(f"Prometheus server started on {host}:{port}")
+
+    def stop_prometheus_server(self) -> None:
+        server = getattr(self, "_prometheus_server", None)
+        if server is not None:
+            server.shutdown()
+            self._prometheus_server = None
+            logger.info("Prometheus server stopped")
+
+    def start_statsd_client(self, host: str | None = None, port: int | None = None) -> None:
+        host = host or self.config.metrics.statsd_host
+        port = port or self.config.metrics.statsd_port
+        interval = self.config.metrics.export_interval_seconds
+        stop_event = threading.Event()
+        self._statsd_stop_event: threading.Event | None = stop_event
+
+        def _loop() -> None:
+            while not stop_event.is_set():
+                try:
+                    self.send_statsd(host, port)
+                except OSError as e:
+                    logger.warning(f"StatsD send error: {e}")
+                stop_event.wait(timeout=interval)
+
+        self._statsd_thread = threading.Thread(target=_loop, name="statsd-client", daemon=True)
+        self._statsd_thread.start()
+        logger.info(f"StatsD client started (interval={interval}s, target={host}:{port})")
+
+    def stop_statsd_client(self) -> None:
+        stop_event = getattr(self, "_statsd_stop_event", None)
+        if stop_event is not None:
+            stop_event.set()
+            self._statsd_stop_event = None
+            logger.info("StatsD client stopped")
 
     def send_statsd(self, host: str, port: int) -> None:
         """
