@@ -4,7 +4,7 @@
 
 Village is a **CLI-native parallel development orchestrator** built on:
 
-- **Beads** - Task DAG and readiness
+- **village tasks** - Task DAG and readiness
 - **tmux** - Execution runtime and observability
 - **git worktrees** - Isolation
 - **OpenCode** - Agent execution
@@ -28,7 +28,7 @@ Village is intentionally:
 2. **Truth over intention**
    - tmux pane IDs are authoritative runtime handle
 3. **One source of readiness**
-   - `bd ready` → work readiness
+   - `village tasks ready` → work readiness
    - `village ready` → execution readiness
 4. **Separation of concerns**
    - `ready` interprets
@@ -62,7 +62,7 @@ Village is **coordination infrastructure**, not just "OpenCode with policies".
 | Observability | ✅ Status system, event logging | ❌ No visibility | Debugging, monitoring, trust |
 | Recovery model | ✅ Orphan detection, cleanup | ❌ No recovery | Survives crashes, interruptions |
 | Conflict detection | ✅ File overlap detection | ❌ No conflict handling | Prevents resource corruption |
-| Beads integration | ✅ DAG-aware scheduling | ❌ Manual task selection | Optimal task ordering |
+| village tasks integration | ✅ DAG-aware scheduling | ❌ Manual task selection | Optimal task ordering |
 | tmux orchestration | ✅ Session/pane lifecycle | ❌ Manual session mgmt | Consistent runtime behavior |
 
 ### The "Local, Auditable" Advantage
@@ -93,7 +93,7 @@ Village is **coordination infrastructure**, not just "OpenCode with policies".
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │ Intent Plane (What to do)                               │
-│ • Beads: Task DAG, readiness, dependencies             │
+│ • village tasks: Task DAG, readiness, dependencies             │
 │ • PPC: Prompt generation (optional)                     │
 └─────────────────────────────────────────────────────────────┘
                           ↓
@@ -135,7 +135,7 @@ Village is **coordination infrastructure**, not just "OpenCode with policies".
 
 ### Task
 
-- Identified by Beads ID (`bd-xxxx`)
+- Identified by village task ID (`village-xxxx`)
 - Has dependencies and readiness
 
 ### Worker
@@ -238,7 +238,7 @@ Ensures:
 - `.village/config` with defaults
 - `.village/locks/` directory
 - `.worktrees/` directory
-- Beads initialized (if available)
+- village tasks initialized (if available)
 - tmux session exists
 - Dashboard window created (optional, default enabled)
 
@@ -264,7 +264,7 @@ Reports:
 - Environment readiness (git repo)
 - Runtime readiness (tmux session)
 - Orphan detection (stale locks, untracked worktrees)
-- Work availability (ready tasks from Beads)
+- Work availability (ready tasks from village tasks)
 - Suggested actions
 
 Supports: `--json`
@@ -299,7 +299,7 @@ Explicit action.
 Acts immediately.
 
 Options:
-- `--agent <name>`: Use specific agent (auto-detect from Beads if not provided)
+- `--agent <name>`: Use specific agent (auto-detect from village tasks if not provided)
 - `--detached`: Run without attaching to tmux pane
 - `--html`: Output HTML with embedded JSON metadata
 - `--dry-run`: Preview mode (no mutations)
@@ -319,7 +319,7 @@ Decision order:
 
 Explicit scheduler.
 
-- Consumes `bd ready`
+- Consumes `village tasks ready`
 - Skips ACTIVE locks
 - Steals STALE locks
 - Auto-names windows (`<agent>-<num>-<task-id>`)
@@ -350,7 +350,7 @@ Conversational interface for knowledge sharing and task creation.
 
 Modes:
 - Knowledge-share (default): Clarify project understanding, document decisions
-- Task-create (`--create`): Define structured tasks for Beads
+- Task-create (`--create`): Define structured tasks for village tasks
 
 Subcommands (read-only):
 - `/tasks`, `/task <id>`, `/ready`, `/status`, `/help`
@@ -444,7 +444,7 @@ village/
     git.py              # GitSCM backend implementation
   probes/               # Runtime probes
     tmux.py             # Tmux session/pane queries
-    beads.py            # Beads availability
+    tasks.py            # native task store availability
     repo.py             # Git repository detection
     tools.py            # Subprocess wrapper
     ppc.py              # PPC availability
@@ -662,7 +662,7 @@ Village v1.0 is production-ready when:
    - [ ] GitHub integration works correctly (if implemented)
    - [ ] CI/CD triggers execute on task completion (if implemented)
    - [ ] Notifications sent for configured events (if implemented)
-   - [ ] Beads sync keeps task status updated
+   - [ ] village tasks sync keeps task status updated
    - [ ] Multi-repo support works (if implemented)
 
 10. **User Experience**

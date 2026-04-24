@@ -430,12 +430,12 @@ Phase 4 (Parallel):
 
 1. **Claim a task**: 
    ```bash
-   bd edit <task-id> --assignee "your-name"
+   village tasks update <task-id> --assignee "your-name"
    ```
 
 2. **Check dependencies**:
    ```bash
-   bd show <task-id>
+   village tasks get <task-id>
    ```
 
 3. **Start working**:
@@ -445,24 +445,24 @@ Phase 4 (Parallel):
 
 4. **Update progress**:
    ```bash
-   bd set-state <task-id> in-progress
+   village tasks update <task-id> --status in_progress
    ```
 
 ### For Project Managers
 
 1. **View all tasks**:
    ```bash
-   bd list --parent bd-4uv
+   village tasks list
    ```
 
 2. **Check readiness**:
    ```bash
-   bd ready
+   village tasks ready
    ```
 
 3. **View dependency graph**:
    ```bash
-   bd graph bd-4uv
+   village tasks list
    ```
 
 ---
@@ -493,5 +493,5 @@ Phase 4 (Parallel):
 
 Contact the epic owner or use:
 ```bash
-bd comments bd-4uv
+village tasks get bd-4uv
 ```

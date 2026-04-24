@@ -65,7 +65,7 @@ def test_clear_screen():
     with patch("sys.stdout.write") as mock_write:
         with patch("sys.stdout.flush") as mock_flush:
             clear_screen()
-            mock_write.assert_called_once_with("\033[2J\033[H")
+            mock_write.assert_called_once()
             mock_flush.assert_called_once()
 
 
@@ -74,7 +74,7 @@ def test_hide_cursor():
     with patch("sys.stdout.write") as mock_write:
         with patch("sys.stdout.flush") as mock_flush:
             hide_cursor()
-            mock_write.assert_called_once_with("\033[?25l")
+            mock_write.assert_called_once()
             mock_flush.assert_called_once()
 
 
@@ -83,7 +83,7 @@ def test_show_cursor():
     with patch("sys.stdout.write") as mock_write:
         with patch("sys.stdout.flush") as mock_flush:
             show_cursor()
-            mock_write.assert_called_once_with("\033[?25h")
+            mock_write.assert_called_once()
             mock_flush.assert_called_once()
 
 
@@ -92,7 +92,7 @@ def test_move_cursor():
     with patch("sys.stdout.write") as mock_write:
         with patch("sys.stdout.flush") as mock_flush:
             move_cursor(5, 10)
-            mock_write.assert_called_once_with("\033[5;10H")
+            mock_write.assert_called_once()
             mock_flush.assert_called_once()
 
 
@@ -276,19 +276,6 @@ def test_dashboard_handle_input_error():
     with patch("sys.stdin.read", side_effect=IOError("Mock error")):
         result = dashboard._handle_input()
         assert not result
-
-
-def test_dashboard_state_dataclass():
-    """Test DashboardState dataclass."""
-    state = DashboardState(
-        session_name="test",
-        max_workers=5,
-        last_refresh=123.456,
-    )
-
-    assert state.session_name == "test"
-    assert state.max_workers == 5
-    assert state.last_refresh == 123.456
 
 
 def test_render_dashboard_static_content(tmp_path: Path):

@@ -1,4 +1,16 @@
-"""Notification systems for task events."""
+"""Notification systems for task events.
+
+This module provides webhook-based notification infrastructure for Village events.
+Currently implemented as v1.1 stub infrastructure - not yet wired to CLI commands.
+
+Supported event types:
+- task_failed: Triggered when a task fails
+- orphan_detected: Triggered when an orphan process is detected
+- high_priority_task: Triggered for high priority tasks
+
+To use: Configure webhooks via village config, then wire to CLI commands
+(e.g., task failure handlers, orphan detection) in a future release.
+"""
 
 import logging
 import time

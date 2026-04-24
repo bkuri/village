@@ -19,6 +19,8 @@ from village.queue import (
     render_queue_plan_json,
 )
 from village.resume import ResumeResult
+from village.tasks import Task, TaskStoreError
+from village.tasks.file_store import FileTaskStore
 
 
 @pytest.fixture
@@ -32,78 +34,75 @@ def mock_config(tmp_path: Path):
     return config
 
 
+def _init_task_store(config: Config) -> FileTaskStore:
+    """Create and initialize a real FileTaskStore from config."""
+    store = FileTaskStore(config.village_dir / "tasks.jsonl")
+    store.initialize()
+    return store
+
+
+def _write_task(store: FileTaskStore, task: Task) -> None:
+    """Write a task directly to the store by appending a record."""
+    store._append_record(task)
+
+
 class TestExtractReadyTasks:
     """Tests for extract_ready_tasks function."""
 
     def test_no_beads_available(self, mock_config: Config):
         """Test when task store is not available."""
         with patch("village.queue.get_task_store") as mock_get_store:
-            from village.tasks import TaskStoreError
-
             mock_get_store.side_effect = TaskStoreError("not available")
             tasks = extract_ready_tasks(mock_config)
             assert tasks == []
 
-    def test_empty_ready_output(self, mock_config: Config):
-        """Test when task store returns no ready tasks."""
-        mock_store = MagicMock()
-        mock_store.get_ready_tasks.return_value = []
-
-        with patch("village.queue.get_task_store", return_value=mock_store):
+    def test_empty_ready_output(self, mock_config: Config, tmp_path: Path):
+        """Test when task store has no ready tasks."""
+        store = _init_task_store(mock_config)
+        with patch("village.queue.get_task_store", return_value=store):
             tasks = extract_ready_tasks(mock_config)
             assert tasks == []
 
-    def test_single_ready_task(self, mock_config: Config):
+    def test_single_ready_task(self, mock_config: Config, tmp_path: Path):
         """Test extracting a single ready task."""
-        mock_store = MagicMock()
-        mock_task = MagicMock()
-        mock_task.id = "bd-a3f8"
-        mock_task.labels = ["agent:build"]
-        mock_store.get_ready_tasks.return_value = [mock_task]
+        store = _init_task_store(mock_config)
+        task = Task(id="bd-a3f8", title="Build thing", labels=["agent:build"])
+        _write_task(store, task)
 
-        with patch("village.queue.get_task_store", return_value=mock_store):
+        with patch("village.queue.get_task_store", return_value=store):
             tasks = extract_ready_tasks(mock_config)
             assert len(tasks) == 1
             assert tasks[0].task_id == "bd-a3f8"
             assert tasks[0].agent == "build"
+            assert tasks[0].title == "Build thing"
+            assert tasks[0].agent_metadata == {"priority": "2"}
 
-    def test_multiple_ready_tasks(self, mock_config: Config):
+    def test_multiple_ready_tasks(self, mock_config: Config, tmp_path: Path):
         """Test extracting multiple ready tasks."""
-        mock_store = MagicMock()
+        store = _init_task_store(mock_config)
+        _write_task(store, Task(id="bd-a3f8", title="Build", labels=["agent:build"], priority=1))
+        _write_task(store, Task(id="bd-b7d2", title="Test", labels=["agent:test"], priority=2))
+        _write_task(store, Task(id="bd-c4e1", title="Work", labels=["agent:worker"], priority=3))
 
-        task1 = MagicMock()
-        task1.id = "bd-a3f8"
-        task1.labels = ["agent:build"]
-
-        task2 = MagicMock()
-        task2.id = "bd-b7d2"
-        task2.labels = ["agent:test"]
-
-        task3 = MagicMock()
-        task3.id = "bd-c4e1"
-        task3.labels = ["agent:worker"]
-
-        mock_store.get_ready_tasks.return_value = [task1, task2, task3]
-
-        with patch("village.queue.get_task_store", return_value=mock_store):
+        with patch("village.queue.get_task_store", return_value=store):
             tasks = extract_ready_tasks(mock_config)
             assert len(tasks) == 3
             assert tasks[0].task_id == "bd-a3f8"
             assert tasks[0].agent == "build"
+            assert tasks[0].agent_metadata == {"priority": "1"}
             assert tasks[1].task_id == "bd-b7d2"
             assert tasks[1].agent == "test"
+            assert tasks[1].agent_metadata == {"priority": "2"}
             assert tasks[2].task_id == "bd-c4e1"
             assert tasks[2].agent == "worker"
+            assert tasks[2].agent_metadata == {"priority": "3"}
 
-    def test_tasks_with_default_agent(self, mock_config: Config):
+    def test_tasks_with_default_agent(self, mock_config: Config, tmp_path: Path):
         """Test tasks without agent label use default."""
-        mock_store = MagicMock()
-        mock_task = MagicMock()
-        mock_task.id = "bd-a3f8"
-        mock_task.labels = ["priority:high"]
-        mock_store.get_ready_tasks.return_value = [mock_task]
+        store = _init_task_store(mock_config)
+        _write_task(store, Task(id="bd-a3f8", title="High prio", labels=["priority:high"]))
 
-        with patch("village.queue.get_task_store", return_value=mock_store):
+        with patch("village.queue.get_task_store", return_value=store):
             tasks = extract_ready_tasks(mock_config)
             assert len(tasks) == 1
             assert tasks[0].task_id == "bd-a3f8"
@@ -111,36 +110,25 @@ class TestExtractReadyTasks:
 
     def test_beads_command_failure(self, mock_config: Config):
         """Test handling of task store failure."""
-        from village.tasks import TaskStoreError
-
-        mock_store = MagicMock()
-        mock_store.get_ready_tasks.side_effect = TaskStoreError("query failed")
-
-        with patch("village.queue.get_task_store", return_value=mock_store):
+        with patch("village.queue.get_task_store") as mock_get_store:
+            mock_get_store.side_effect = TaskStoreError("query failed")
             tasks = extract_ready_tasks(mock_config)
             assert tasks == []
 
-    def test_ignores_empty_lines(self, mock_config: Config):
-        """Test multiple ready tasks are all extracted."""
-        mock_store = MagicMock()
+    def test_only_open_and_draft_tasks(self, mock_config: Config, tmp_path: Path):
+        """Test that only open and draft tasks are extracted as ready."""
+        store = _init_task_store(mock_config)
+        _write_task(store, Task(id="bd-a3f8", title="Open", labels=["agent:build"]))
+        _write_task(store, Task(id="bd-b7d2", title="Draft", status="draft", labels=["agent:test"]))
+        _write_task(store, Task(id="bd-c4e1", title="In progress", status="in_progress", labels=["agent:worker"]))
 
-        task1 = MagicMock()
-        task1.id = "bd-a3f8"
-        task1.labels = ["agent:build"]
-
-        task2 = MagicMock()
-        task2.id = "bd-b7d2"
-        task2.labels = ["agent:test"]
-
-        task3 = MagicMock()
-        task3.id = "bd-c4e1"
-        task3.labels = ["agent:worker"]
-
-        mock_store.get_ready_tasks.return_value = [task1, task2, task3]
-
-        with patch("village.queue.get_task_store", return_value=mock_store):
+        with patch("village.queue.get_task_store", return_value=store):
             tasks = extract_ready_tasks(mock_config)
-            assert len(tasks) == 3
+            assert len(tasks) == 2
+            task_ids = [t.task_id for t in tasks]
+            assert "bd-a3f8" in task_ids
+            assert "bd-b7d2" in task_ids
+            assert "bd-c4e1" not in task_ids
 
 
 class TestQueueTask:
@@ -314,55 +302,51 @@ class TestArbitrateLocks:
 class TestGenerateQueuePlan:
     """Tests for generate_queue_plan function."""
 
-    def test_generates_plan_from_ready_tasks(self, mock_config: Config):
-        """Test generating complete queue plan."""
-        with patch("village.queue.extract_ready_tasks") as mock_extract:
-            with patch("village.queue.arbitrate_locks") as mock_arbitrate:
-                tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
-                mock_extract.return_value = tasks
+    def test_generates_plan_from_ready_tasks(self, mock_config: Config, tmp_path: Path):
+        """Test generating complete queue plan from real task store."""
+        mock_config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=mock_config.git_root, check=True)
+        mock_config.village_dir.mkdir(parents=True, exist_ok=True)
 
-                expected_plan = QueuePlan(
-                    ready_tasks=tasks,
-                    available_tasks=tasks,
-                    blocked_tasks=[],
-                    slots_available=2,
-                    workers_count=0,
-                    concurrency_limit=2,
-                )
-                mock_arbitrate.return_value = expected_plan
+        store = _init_task_store(mock_config)
+        _write_task(store, Task(id="bd-a3f8", title="Build thing", labels=["agent:build"]))
 
-                plan = generate_queue_plan("village", 2, mock_config)
+        with patch("village.status.collect_workers", return_value=[]):
+            plan = generate_queue_plan("village", 2, mock_config)
 
-                mock_extract.assert_called_once_with(mock_config)
-                mock_arbitrate.assert_called_once_with(tasks, "village", 2, mock_config, False)
-                assert plan == expected_plan
+        assert len(plan.ready_tasks) == 1
+        assert plan.ready_tasks[0].task_id == "bd-a3f8"
+        assert plan.ready_tasks[0].agent == "build"
+        assert len(plan.available_tasks) == 1
+        assert plan.available_tasks[0].task_id == "bd-a3f8"
+        assert len(plan.blocked_tasks) == 0
+        assert plan.slots_available == 2
+        assert plan.workers_count == 0
+        assert plan.concurrency_limit == 2
 
     def test_uses_default_config_when_not_provided(self, tmp_path: Path):
         """Test that default config is used when not provided."""
-        with patch("village.queue.get_config") as mock_get_config:
-            with patch("village.queue.extract_ready_tasks") as mock_extract:
-                with patch("village.queue.arbitrate_locks") as mock_arbitrate:
-                    mock_config = Config(
-                        git_root=tmp_path,
-                        village_dir=tmp_path / ".village",
-                        worktrees_dir=tmp_path / ".worktrees",
-                    )
-                    mock_get_config.return_value = mock_config
-                    mock_extract.return_value = []
+        config = Config(
+            git_root=tmp_path,
+            village_dir=tmp_path / ".village",
+            worktrees_dir=tmp_path / ".worktrees",
+        )
+        config.git_root.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "init"], cwd=config.git_root, check=True)
+        config.village_dir.mkdir(parents=True, exist_ok=True)
 
-                    mock_arbitrate.return_value = QueuePlan(
-                        ready_tasks=[],
-                        available_tasks=[],
-                        blocked_tasks=[],
-                        slots_available=2,
-                        workers_count=0,
-                        concurrency_limit=2,
-                    )
+        store = _init_task_store(config)
 
-                    generate_queue_plan("village", 2)
+        with (
+            patch("village.queue.get_config", return_value=config),
+            patch("village.queue.get_task_store", return_value=store),
+            patch("village.status.collect_workers", return_value=[]),
+        ):
+            plan = generate_queue_plan("village", 2)
 
-                    mock_get_config.assert_called_once()
-                    mock_extract.assert_called_once_with(mock_config)
+        assert len(plan.ready_tasks) == 0
+        assert len(plan.available_tasks) == 0
+        assert plan.concurrency_limit == 2
 
 
 class TestRenderQueuePlan:

@@ -929,7 +929,7 @@ class TestFullUserJourneyE2E:
 
 **Responsibilities**:
 - Generate PR descriptions from task metadata + git diff
-- Sync PR status with Beads task completion
+- Sync PR status with village tasks
 - Add PR labels based on task metadata
 - GitHub CLI integration
 
@@ -951,7 +951,7 @@ class PRDescription:
 - [ ] PR status sync functional
 - [ ] PR labels added based on task metadata
 - [ ] GitHub CLI integration working
-- [ ] Integration with Beads task data
+- [ ] Integration with village tasks
 - [ ] Integration with git diff parsing
 - [ ] Unit tests >75% coverage
 - [ ] Type hints and docstrings complete
@@ -1132,9 +1132,9 @@ events=task_failed,orphan_detected,high_priority_task
 
 **CLI Commands**:
 ```bash
-village pr describe bd-a3f8
-village pr sync --from-beads
-village ci trigger --task bd-a3f8 --platform github_actions
+village pr describe <task-id>
+village pr sync --from-tasks
+village ci trigger --task <task-id> --platform github_actions
 village notifications test --backend slack
 ```
 

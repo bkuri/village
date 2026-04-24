@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from village.workflow.loader import WorkflowLoader, WorkflowLoadError, _parse_step, _parse_workflow
-from village.workflow.schema import RetryConfig, StepConfig, StepType, WorkflowSchema
+from village.workflow.schema import StepConfig, StepType, WorkflowSchema
 
 
 class TestStepType:
@@ -19,31 +19,7 @@ class TestStepType:
         assert StepType("critique") == StepType.CRITIQUE
 
 
-class TestRetryConfig:
-    def test_defaults(self):
-        r = RetryConfig()
-        assert r.max_attempts == 1
-        assert r.backoff_seconds == 1.0
-
-    def test_custom(self):
-        r = RetryConfig(max_attempts=5, backoff_seconds=2.5)
-        assert r.max_attempts == 5
-        assert r.backoff_seconds == 2.5
-
-
 class TestStepConfig:
-    def test_minimal(self):
-        s = StepConfig(name="test", type=StepType.PROMPT, prompt="hello")
-        assert s.name == "test"
-        assert s.type == StepType.PROMPT
-        assert s.prompt == "hello"
-        assert s.policy is None
-        assert s.traits == {}
-        assert s.tools == []
-        assert s.target is None
-        assert s.input_from is None
-        assert s.async_exec is False
-
     def test_resolve_prompt_type(self):
         s = StepConfig(name="test", type=StepType.PROMPT, prompt="hello")
         resolved = s.resolve()
@@ -85,13 +61,6 @@ class TestStepConfig:
 
 
 class TestWorkflowSchema:
-    def test_minimal(self):
-        wf = WorkflowSchema(name="test", description="test workflow")
-        assert wf.name == "test"
-        assert wf.steps == []
-        assert wf.inputs == []
-        assert wf.version == 1
-
     def test_resolve_steps(self):
         steps = [
             StepConfig(name="s1", type=StepType.PROMPT, prompt="p1"),

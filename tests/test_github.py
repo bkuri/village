@@ -10,7 +10,6 @@ import pytest
 from village.github_integration import (
     GitHubError,
     PRDescription,
-    SyncResult,
     _generate_changes_summary,
     _generate_commit_suggestions,
     _generate_summary,
@@ -551,56 +550,6 @@ class TestCreatePR:
 
         with pytest.raises(GitHubError, match="Failed to create PR"):
             create_pr("Feature", description, "feature-branch")
-
-
-class TestPRDescription:
-    """Tests for PRDescription dataclass."""
-
-    def test_creates_description(self):
-        """Test creating PRDescription."""
-        desc = PRDescription(
-            summary="Feature",
-            changes="Changes",
-            testing_checklist=["Test 1", "Test 2"],
-            related_tasks=["bd-a3f8"],
-            commit_suggestions=["feat: task"],
-        )
-
-        assert desc.summary == "Feature"
-        assert desc.changes == "Changes"
-        assert len(desc.testing_checklist) == 2
-        assert len(desc.related_tasks) == 1
-        assert len(desc.commit_suggestions) == 1
-
-    def test_creates_minimal_description(self):
-        """Test creating minimal PRDescription."""
-        desc = PRDescription(summary="Feature", changes="Changes")
-
-        assert desc.summary == "Feature"
-        assert desc.testing_checklist == []
-        assert desc.related_tasks == []
-        assert desc.commit_suggestions == []
-
-
-class TestSyncResult:
-    """Tests for SyncResult dataclass."""
-
-    def test_creates_successful_result(self):
-        """Test creating successful SyncResult."""
-        result = SyncResult(success=True, pr_number=123, pr_status="merged", message="PR merged")
-
-        assert result.success is True
-        assert result.pr_number == 123
-        assert result.pr_status == "merged"
-        assert result.message == "PR merged"
-
-    def test_creates_failed_result(self):
-        """Test creating failed SyncResult."""
-        result = SyncResult(success=False, pr_number=123, pr_status="error", message="Error occurred")
-
-        assert result.success is False
-        assert result.pr_status == "error"
-        assert result.message == "Error occurred"
 
 
 class TestGitHubError:

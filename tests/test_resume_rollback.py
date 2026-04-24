@@ -60,19 +60,24 @@ class TestResumeWithRollback:
         test_file = worktree_path / "test.txt"
         test_file.write_text("This should be removed on rollback", encoding="utf-8")
 
-        # Mock reset_workspace to track it's called
-        with patch("village.scm.git.GitSCM.reset_workspace") as mock_reset:
-            result = execute_resume(
-                task_id="bd-a3f8",
-                agent="worker",
-                detached=True,
-                dry_run=False,
-                config=mock_config,
-            )
+        # Mock to trigger task failure and track rollback
+        with patch("village.resume._create_resume_window") as mock_window:
+            with patch("village.resume._inject_contract") as mock_inject:
+                with patch("village.scm.git.GitSCM.reset_workspace") as mock_reset:
+                    mock_window.return_value = "%12"
+                    mock_inject.side_effect = RuntimeError("Task failed")
 
-            assert result.success is False
-            assert mock_reset.called
-            mock_reset.assert_called_once_with(worktree_path)
+                    result = execute_resume(
+                        task_id="bd-a3f8",
+                        agent="worker",
+                        detached=True,
+                        dry_run=False,
+                        config=mock_config,
+                    )
+
+                    assert result.success is False
+                    assert mock_reset.called
+                    mock_reset.assert_called_once_with(worktree_path)
 
     def test_resume_failure_without_rollback(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that rollback is skipped when config disables it."""

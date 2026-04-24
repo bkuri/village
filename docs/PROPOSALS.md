@@ -31,39 +31,39 @@ Each proposal includes:
 **Problem**:
 - Manual PR descriptions are time-consuming
 - No consistency in PR format across team
-- PR status doesn't sync with Beads task completion
+- PR status doesn't sync with village tasks completion
 - Manual labeling and organization
 
 **Solution**:
-Automate GitHub PR workflows via Village. Provide bidirectional sync between Beads tasks and GitHub PRs.
+Automate GitHub PR workflows via Village. Provide bidirectional sync between village tasks and GitHub PRs.
 
 **Proposal**:
 ```bash
 # Generate PR description from task + git diff
-village pr describe bd-a3f8
+village pr describe <task-id>
 
-# Sync PR status with Beads task completion
-village pr sync --from-beads
+# Sync PR status with village tasks
+village pr sync --from-tasks
 ```
 
 **Value**:
 - **Huge time savings**: Automates repetitive PR documentation
 - **Consistent PR quality**: Standard format across all PRs
 - **Better review process**: Automatic testing checklists, linked to tasks
-- **Status visibility**: PRs reflect Beads task completion status
+- **Status visibility**: PRs reflect village tasks completion status
 
 **Effort**: Medium (12-16 hours)
 
 **Use Cases**:
 - Generate PR description from task metadata + git diff
 - Include testing checklist from task success criteria
-- Link PR to related Beads tasks
-- Sync PR status (open, merged) back to Beads
+- Link PR to related village tasks
+- Sync PR status (open, merged) back to village tasks
 - Add PR labels based on task metadata (scope, agent, tags)
 
 **Integration Points**:
 - GitHub CLI for PR creation and status queries
-- Beads task data extraction
+- village tasks data extraction
 - Git diff parsing in worktrees
 - Village task completion events (from event log)
 
@@ -81,7 +81,7 @@ village pr sync --from-beads
 **Dependencies**:
 - GitHub CLI (gh) installed and configured
 - GitHub PAT/token for API access
-- Beads tasks with proper metadata
+- village tasks with proper metadata
 
 ---
 
@@ -94,7 +94,7 @@ village pr sync --from-beads
 - Manual blocking of dependent tasks
 
 **Solution**:
-Trigger CI/CD builds automatically when tasks complete and sync build status back to Beads tasks.
+Trigger CI/CD builds automatically when tasks complete and sync build status back to village tasks.
 
 **Proposal**:
 ```bash
@@ -120,14 +120,14 @@ blocking_on_failure=true
 - Trigger GitHub Actions build when task completes
 - Trigger GitLab CI/CD pipeline on task completion
 - Trigger Jenkins job on task completion
-- Sync build status (success/failure) to Beads task
+- Sync build status (success/failure) to village tasks
 - Block dependent tasks on build failure
 - Send notifications on build failure
 
 **Integration Points**:
 - Village task completion events (event log)
 - GitHub Actions API / GitLab CI API / Jenkins API
-- Beads task status update (to mark as blocked)
+- village tasks status update (to mark as blocked)
 - Notification systems (Slack, Discord, Email)
 
 **Risks**:
@@ -145,7 +145,7 @@ blocking_on_failure=true
 **Dependencies**:
 - GitHub Actions / GitLab CI / Jenkins API access
 - Village event log hooking system
-- Beads task status update capability
+- village tasks status update capability
 - Notification system (optional)
 
 ---
@@ -194,7 +194,7 @@ events=task_failed
 - Village event log hooking system
 - Webhook POST requests (Slack, Discord, Email)
 - Village status queries (to extract context)
-- Beads task metadata (for alert details)
+- village tasks metadata (for alert details)
 
 **Risks**:
 - Notification service outages (Slack downtime, etc.)
@@ -288,7 +288,7 @@ def should_schedule(task, active_workers, system_state):
 **Dependencies**:
 - System load monitoring (psutil, htop, etc.)
 - Task metadata enriched with priority/impact
-- Beads task data with priority fields
+- village tasks with priority fields
 
 ---
 
@@ -298,40 +298,40 @@ def should_schedule(task, active_workers, system_state):
 - Inconsistent PR descriptions across team
 - Manual PR documentation is time-consuming
 - Missing testing checklists in PRs
-- PRs don't link back to Beads tasks
+- PRs don't link back to village tasks
 
 **Solution**:
 Automatically generate PR descriptions from task metadata and git diff.
 
 **Proposal**:
 ```bash
-village pr describe bd-a3f8
-> [Extracts task metadata from Beads]
+village pr describe <task-id>
+> [Extracts task metadata from village tasks]
 > [Analyzes git diff in worktree]
 > [Generates PR description with:]
 >   - Summary (from task title/description)
 >   - Changes (git diff summary)
 >   - Testing checklist (from task success criteria)
->   - Related tasks (from Beads dependencies)
+>   - Related tasks (from village tasks dependencies)
 ```
 
 **Value**:
 - **Improved PR quality**: Consistent format, complete information
 - **Faster PR submission**: Auto-generated, just review and submit
 - **Better review process**: Testing checklist ensures quality
-- **Traceability**: Links PR back to Beads tasks
+- **Traceability**: Links PR back to village tasks
 
 **Effort**: Low (8-12 hours)
 
 **Use Cases**:
 - Generate PR description for completed task
 - Include testing checklist based on task success criteria
-- Link to related Beads tasks (dependencies)
+- Link to related village tasks (dependencies)
 - Format: Summary, Changes, Checklist, Related Issues
 - Output to stdout (to paste into PR form) or create PR directly
 
 **Integration Points**:
-- Beads task data extraction
+- village tasks data extraction
 - Git diff parsing in worktrees
 - Markdown formatting for PR description
 - GitHub CLI (optional, for direct PR creation)
@@ -349,7 +349,7 @@ village pr describe bd-a3f8
 - AI-powered PR descriptions (less integrated)
 
 **Dependencies**:
-- Beads tasks with proper metadata
+- village tasks with proper metadata
 - Git worktree for task
 - Village event log (to know task completed)
 
@@ -412,7 +412,7 @@ village status --repos
 - Path resolution ambiguity (relative vs absolute)
 - Worktree isolation conflicts (same task ID in multiple repos)
 - Configuration complexity
-- Beads task routing (cross-repo dependencies)
+- village tasks routing (cross-repo dependencies)
 
 **Alternatives**:
 - Separate Village instances per repo (current approach)
@@ -421,7 +421,7 @@ village status --repos
 - External coordination tools (less integrated)
 
 **Dependencies**:
-- Beads tasks with repo metadata (labels, custom fields)
+- village tasks with repo metadata (labels, custom fields)
 - Path resolution for multiple repositories
 - Per-repo SCM backend (Git, jj, etc.)
 - Unified lock state or isolated per-repo locks
@@ -498,69 +498,69 @@ quota_disk_gb=20
 ### Proposal: Dynamic DAG Re-evaluation
 
 **Problem**:
-- Stale Beads DAG state may cause incorrect scheduling
+- Stale village tasks DAG state may cause incorrect scheduling
 - Static DAG queries don't reflect runtime changes
-- Manual Beads updates required when DAG changes
+- Manual village tasks updates required when DAG changes
 - Dependencies may be outdated
 
 **Solution**:
-Re-calculate task readiness at queue time by querying Beads DAG and resolving dependencies dynamically.
+Re-calculate task readiness at queue time by querying village tasks DAG and resolving dependencies dynamically.
 
 **Proposal**:
 ```python
 # village/dag_reeval.py
 def generate_queue_plan(session_name, max_workers):
-    # Re-evaluate dependencies (Beads might be stale)
-    tasks = get_beads_ready()
+    # Re-evaluate dependencies (village tasks might be stale)
+    tasks = get_tasks_ready()
     
     for task in tasks:
-        dependencies = get_beads_dependencies(task.id)
+        dependencies = get_task_dependencies(task.id)
         if not all_dependencies_satisfied(dependencies):
             tasks.remove(task)
     
     return tasks
 
-# Beads sync
-village sync --to-beads
+# village tasks sync
+village sync --to-tasks
 ```
 
 **Value**:
-- **Marginal improvement**: Current Beads integration works well
+- **Marginal improvement**: Current village tasks integration works well
 - **Runtime correctness**: Always uses latest DAG state
-- **Reduced manual work**: No need to manually refresh Beads
+- **Reduced manual work**: No need to manually refresh village tasks
 - **Dependency accuracy**: Correct task ordering based on current state
 
 **Effort**: High (16-20 hours)
 
 **Use Cases**:
 - Re-calculate readiness at queue time
-- Detect stale Beads DAG state
+- Detect stale village tasks DAG state
 - Optimize task ordering based on current dependencies
-- Sync Village lock status back to Beads
-- Update task statuses (CLAIMED, IN_PROGRESS, FAILED) in Beads
+- Sync Village lock status back to village tasks
+- Update task statuses (CLAIMED, IN_PROGRESS, FAILED) in village tasks
 
 **Integration Points**:
-- Beads DAG API (tasks, dependencies, status)
+- village tasks DAG API (tasks, dependencies, status)
 - Village queue scheduler (dynamic re-evaluation)
-- Beads task status update API
-- Village event log (sync events to Beads)
+- village tasks status update API
+- Village event log (sync events to village tasks)
 
 **Risks**:
-- Beads API changes require updates
+- village tasks API changes require updates
 - Performance impact (DAG queries can be expensive)
 - Complex dependency resolution logic
 - Stale data caching (if queries are too frequent)
 
 **Alternatives**:
-- Static Beads DAG queries (current approach)
-- Manual Beads refresh (when DAG changes)
+- Static village tasks DAG queries (current approach)
+- Manual village tasks refresh (when DAG changes)
 - External task management (less integrated)
 - Cached DAG with manual invalidation
 
 **Dependencies**:
-- Beads DAG API access
-- Beads task status update API
-- Beads CLI installed and configured
+- village tasks DAG API access
+- village tasks status update API
+- village tasks CLI installed and configured
 
 ---
 
@@ -674,7 +674,7 @@ village chat --digest
 **Integration Points**:
 - Fabric CLI installed and configured
 - Village chat interface (already supports conversational LLM)
-- Beads task creation API
+- village tasks creation API
 - Village context file management
 
 **Risks**:
@@ -709,7 +709,7 @@ village chat --digest
 - No categorization (features, fixes, breaking changes)
 
 **Solution**:
-Automatically generate release notes from completed Beads tasks and git history.
+Automatically generate release notes from completed village tasks and git history.
 
 **Proposal**:
 ```bash
@@ -722,7 +722,7 @@ village release notes v1.0.0 v0.9.0
 **Value**:
 - **Nice convenience**: Faster release preparation
 - **Consistent format**: Standard release note structure
-- **Task linkage**: Links to Beads tasks and changes
+- **Task linkage**: Links to village tasks and changes
 - **Categorization**: Features, fixes, breaking changes
 
 **Effort**: Low (8-12 hours)
@@ -735,7 +735,7 @@ village release notes v1.0.0 v0.9.0
 - Optional: Create release directly (GitHub Releases, GitLab Releases)
 
 **Integration Points**:
-- Beads task data (completed tasks in range)
+- village tasks data (completed tasks in range)
 - Git history between version tags
 - Markdown formatting for release notes
 - Optional GitHub/GitLab Releases API
@@ -753,7 +753,7 @@ village release notes v1.0.0 v0.9.0
 - AI-powered release notes (less integrated)
 
 **Dependencies**:
-- Beads tasks with version tags
+- village tasks with version tags
 - Git history between tags
 - Village event log (to determine task completion)
 - Optional: Fabric for intelligent summarization

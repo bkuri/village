@@ -32,8 +32,8 @@ my-service/
 
 ### Agent Type
 
-| Agent | Purpose | Beads Task Pattern | Example Tasks |
-|-------|---------|-------------------|---------------|
+| Agent | Purpose | Village Task Pattern | Example Tasks |
+|-------|---------|---------------------|---------------|
 | `worker` | General work | Any task ID | "add-auth-api", "refactor-user-model", "update-docs" |
 
 ### Task DAG Example
@@ -136,17 +136,17 @@ With a single agent, task naming is flexible. Use descriptive names that make se
 
 ```bash
 # Feature tasks
-bd create "Add authentication API"
-bd create "Refactor user model"
-bd create "Add rate limiting"
+village tasks create "Add authentication API"
+village tasks create "Refactor user model"
+village tasks create "Add rate limiting"
 
 # Documentation tasks
-bd create "Update API documentation"
-bd create "Add getting started guide"
+village tasks create "Update API documentation"
+village tasks create "Add getting started guide"
 
 # Test tasks
-bd create "Add unit tests for auth"
-bd create "Add integration tests for API"
+village tasks create "Add unit tests for auth"
+village tasks create "Add integration tests for API"
 ```
 
 ---
@@ -157,21 +157,21 @@ Here's a realistic task DAG for adding authentication to a service:
 
 ```bash
 # 1. Setup task
-bd create "setup-auth" --description "Create auth module structure"
+village tasks create "setup-auth" --description "Create auth module structure"
 
 # 2. Feature tasks (can run in parallel)
-bd create "add-auth-api" --depends-on setup-auth
-bd create "add-jwt-tokens" --depends-on setup-auth
-bd create "add-auth-middleware" --depends-on setup-auth
+village tasks create "add-auth-api" --depends-on setup-auth
+village tasks create "add-jwt-tokens" --depends-on setup-auth
+village tasks create "add-auth-middleware" --depends-on setup-auth
 
 # 3. Refactoring task
-bd create "refactor-user-model" --depends-on add-auth-api
+village tasks create "refactor-user-model" --depends-on add-auth-api
 
 # 4. Documentation task
-bd create "update-auth-docs" --depends-on add-auth-api,add-jwt-tokens,add-auth-middleware
+village tasks create "update-auth-docs" --depends-on add-auth-api,add-jwt-tokens,add-auth-middleware
 
 # 5. Testing task
-bd create "add-auth-tests" --depends-on refactor-user-model
+village tasks create "add-auth-tests" --depends-on refactor-user-model
 ```
 
 Now queue tasks:
@@ -235,7 +235,7 @@ ppc_format=markdown
 
 Then create test-specific tasks:
 ```bash
-bd create "test: Add unit tests for auth"
+village tasks create "test: Add unit tests for auth"
 ```
 
 Queue with explicit agent:
@@ -267,10 +267,10 @@ village down
 
 ```bash
 # Create many tasks at once
-bd create "Add user profile feature"
-bd create "Add admin dashboard"
-bd create "Add export functionality"
-bd create "Add import functionality"
+village tasks create "Add user profile feature"
+village tasks create "Add admin dashboard"
+village tasks create "Add export functionality"
+village tasks create "Add import functionality"
 
 # Queue all ready tasks
 village queue --n 10
@@ -290,9 +290,9 @@ village resume test-add-auth-tests
 
 ```bash
 # End of sprint: Documentation tasks
-bd create "Update API docs for auth"
-bd create "Add migration guide"
-bd create "Add troubleshooting section"
+village tasks create "Update API docs for auth"
+village tasks create "Add migration guide"
+village tasks create "Add troubleshooting section"
 
 # Queue documentation tasks
 village queue --n 3
@@ -302,12 +302,12 @@ village queue --n 3
 
 ## Troubleshooting
 
-**Issue: Tasks not starting despite Beads showing ready tasks**
+**Issue: Tasks not starting despite village tasks showing ready tasks**
 
 **Fix:** Verify Village is initialized:
 ```bash
 village up
-village ready
+village tasks ready
 ```
 
 **Issue: Workers starting but completing immediately**
@@ -318,7 +318,7 @@ village ready
 cat contracts/worker.md
 
 # Check task has description
-bd show <task-id>
+village tasks show <task-id>
 ```
 
 **Issue: Too many workers running, system slow**
@@ -358,11 +358,11 @@ If you started with multiple agents but want to simplify to a single agent:
 # Keep only [agent.worker]
 ```
 
-**2. Rename Beads tasks to remove prefixes:**
+**2. Update task titles to remove prefixes:**
 ```bash
 # Old: backend-add-auth-api
 # New: add-auth-api
-bd rename backend-add-auth-api add-auth-api
+village tasks update backend-add-auth-api --title "add-auth-api"
 ```
 
 **3. Use default agent for all tasks:**

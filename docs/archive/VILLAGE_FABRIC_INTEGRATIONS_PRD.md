@@ -1,4 +1,6 @@
-# Village PRD — Fabric Integrations (ROI‑Sorted)
+# DRAFT — Village PRD — Fabric Integrations (ROI‑Sorted)
+
+> **DRAFT** — This is a proposed extension. See [../PROPOSALS.md](../PROPOSALS.md) for the current proposals document.
 
 ## Status
 Draft — optional extensions for v1.x → v2

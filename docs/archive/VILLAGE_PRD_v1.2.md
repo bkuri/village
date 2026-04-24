@@ -1,4 +1,6 @@
-# Village v1.2 PRD — Reliability & Observability
+# DEPRECATED — Village v1.2 PRD — Reliability & Observability
+
+> **DEPRECATED** — This version has been superseded. See [../ROADMAP.md](../ROADMAP.md) for current status.
 
 ## Purpose
 

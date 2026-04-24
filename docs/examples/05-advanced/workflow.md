@@ -21,7 +21,7 @@ While working on a task, press Ctrl+C to interrupt:
 
 ```bash
 # This simulates interrupt during execution
-village builder resume --task bd-a3f8 --agent build
+village builder resume --task village-t1 --agent build
 # (Press Ctrl+C while OpenCode is running)
 ```
 
@@ -44,9 +44,9 @@ Expected output:
 ```
 ORPHANS (2):
   STALE LOCKS (1):
-    bd-a3f8 (pane: %12)
+    village-t1 (pane: %12)
   UNTRACKED WORKTREES (1):
-    .worktrees/bd-a3f8
+    .worktrees/village-t1
 ```
 
 ## Day 1: Clean Up Orphans
@@ -67,10 +67,10 @@ CLEANUP PLAN
 =============
 
 Remove 1 stale lock file?
-  .village/locks/bd-a3f8.lock
+  .village/locks/village-t1.lock
 
 Remove 1 untracked worktree?
-  .worktrees/bd-a3f8
+  .worktrees/village-t1
 
 Run: village watcher cleanup --apply
 ```
@@ -91,7 +91,7 @@ Simulate a corrupted lock file:
 
 ```bash
 # Manually create a corrupted lock
-echo "corrupted=invalid" > .village/locks/bd-corrupted.lock
+echo "corrupted=invalid" > .village/locks/village-corrupted.lock
 
 # Check status - corrupted lock will be logged
 village watcher locks
@@ -99,8 +99,8 @@ village watcher locks
 
 Expected output (error in logs):
 ```
-Corrupted lock .village/locks/bd-corrupted.lock: missing field 'id'
-Corrupted lock .village/locks/bd-corrupted.lock: missing field 'pane'
+Corrupted lock .village/locks/village-corrupted.lock: missing field 'id'
+Corrupted lock .village/locks/village-corrupted.lock: missing field 'pane'
 ```
 
 ## Day 2: Handle Corrupted Lock
@@ -109,10 +109,10 @@ Remove corrupted lock manually:
 
 ```bash
 # Option 1: Use unlock command
-village watcher unlock bd-corrupted --force
+village watcher unlock village-corrupted --force
 
 # Option 2: Manual removal
-rm .village/locks/bd-corrupted.lock
+rm .village/locks/village-corrupted.lock
 ```
 
 ## Day 2: Verify Cleanup
@@ -207,13 +207,13 @@ Lock files are internal state. Let Village manage them.
 
 ```bash
 # Correct: Use village commands
-village builder resume --task bd-a3f8
-village watcher unlock bd-a3f8
+village builder resume --task village-t1
+village watcher unlock village-t1
 village watcher cleanup
 
 # Incorrect: Direct file manipulation
-rm .village/locks/bd-a3f8.lock
-echo "id=..." > .village/locks/bd-a3f8.lock
+rm .village/locks/village-t1.lock
+echo "id=..." > .village/locks/village-t1.lock
 ```
 
 ### 3. Report Corrupt Locks

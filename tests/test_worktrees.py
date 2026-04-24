@@ -14,7 +14,6 @@ from village.scm import (
     parse_window_name,
 )
 from village.worktrees import (
-    WorktreeInfo,
     create_worktree,
     delete_worktree,
     get_worktree_info,
@@ -302,21 +301,3 @@ class TestWorkspaceNamingHelpers:
         incremented = increment_task_id(task_id, 3)
 
         assert incremented == "bd-a3f8-3"
-
-
-class TestWorktreeInfo:
-    """Tests for WorktreeInfo dataclass."""
-
-    def test_worktree_info_creation(self) -> None:
-        """Test WorktreeInfo creation."""
-        info = WorktreeInfo(
-            task_id="bd-a3f8",
-            path=Path("/tmp/.worktrees/bd-a3f8"),
-            branch="refs/heads/worktree-bd-a3f8",
-            commit="abc123",
-        )
-
-        assert info.task_id == "bd-a3f8"
-        assert info.path == Path("/tmp/.worktrees/bd-a3f8")
-        assert info.branch == "refs/heads/worktree-bd-a3f8"
-        assert info.commit == "abc123"

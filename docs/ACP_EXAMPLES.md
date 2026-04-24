@@ -24,7 +24,7 @@ Practical examples of using ACP integration with Village.
 
 - Zed editor 0.120+ installed
 - Village configured with ACP enabled
-- Beads tasks ready
+- village tasks ready
 
 ### Step 1: Configure Village ACP Server
 
@@ -110,8 +110,8 @@ village up
 village acp --server start
 
 # Terminal 2: Create tasks
-bd create "Implement user auth"
-bd create "Add API endpoints"
+village tasks create "Implement user auth"
+village tasks create "Add API endpoints"
 
 # Zed: Use assistant panel to queue and monitor
 ```
@@ -315,7 +315,7 @@ Note: Agent is running. Use the connection object to interact.
 
 ```bash
 # Create task for Claude
-bd create "Research best practices for REST API design" --label research
+village tasks create "Research best practices for REST API design" --label research
 
 # Assign to Claude agent
 village resume bd-research --agent claude
@@ -422,7 +422,7 @@ Testing ACP agent: gemini...
 
 ```bash
 # Create research task
-bd create "Analyze competitor pricing strategies" --label research
+village tasks create "Analyze competitor pricing strategies" --label research
 
 # Assign to Gemini
 village resume bd-competitor-analysis --agent gemini
@@ -515,10 +515,10 @@ contract = contracts/test.md
 
 ```bash
 # 1. Create tasks with labels
-bd create "Implement auth API" --label backend
-bd create "Design login UI" --label frontend
-bd create "Research auth best practices" --label research
-bd create "Write auth tests" --label test
+village tasks create "Implement auth API" --label backend
+village tasks create "Design login UI" --label frontend
+village tasks create "Research auth best practices" --label research
+village tasks create "Write auth tests" --label test
 
 # 2. Queue backend tasks (OpenCode)
 village queue --n 2 --agent backend
@@ -553,8 +553,8 @@ bd-auth-tests    ACTIVE    %23      test      test-1-bd-auth-tests
 
 ```bash
 # Tasks with dependencies
-bd create "Design UI" --label frontend
-bd create "Implement UI" --label frontend --depends-on bd-design-ui
+village tasks create "Design UI" --label frontend
+village tasks create "Implement UI" --label frontend --depends-on village-design-ui
 
 # Village respects dependencies across agent types
 village queue --n 10
@@ -927,7 +927,7 @@ village acp --client spawn custom
 
 ```bash
 # Create task for custom agent
-bd create "Specialized processing" --label custom
+village tasks create "Specialized processing" --label custom
 
 # Assign to custom agent
 village resume bd-special --agent custom

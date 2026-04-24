@@ -23,7 +23,7 @@ This command exists to solve alignment — not orchestration.
 It must never:
 
 - spawn agents
-- create or modify Beads tasks
+- create or modify village tasks
 - invoke tmux
 - acquire locks
 - schedule execution
@@ -120,9 +120,9 @@ The assistant may suggest commands, but never invoke them automatically.
 
 | Command | Description | Backend |
 |--------|-------------|---------|
-| `/tasks` | List all tasks | `bd list` |
-| `/task <id>` | Show task details | `bd show <id>` |
-| `/ready` | Show ready tasks | `bd ready` |
+| `/tasks` | List all tasks | `village tasks list` |
+| `/task <id>` | Show task details | `village tasks show <id>` |
+| `/ready` | Show ready tasks | `village tasks ready` |
 | `/status` | Village runtime summary | `village status --short` |
 | `/help [topic]` | Show chat help (optionally for a topic) | internal |
 
@@ -149,7 +149,7 @@ means:
 > “show the tasks that exist”
 
 not:
-> “run bd list”
+> “run village tasks list”
 
 This allows:
 

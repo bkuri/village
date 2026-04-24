@@ -1,4 +1,6 @@
-# Village v1.1 Roadmap — SCM Hardening
+# DEPRECATED — Village v1.1 Roadmap — SCM Hardening
+
+> **DEPRECATED** — This roadmap has been superseded. See [../ROADMAP.md](../ROADMAP.md) for current status.
 
 ## Phase 1
 - introduce SCM protocol

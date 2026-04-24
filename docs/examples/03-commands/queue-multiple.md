@@ -4,11 +4,11 @@ This example shows how to queue several tasks across different agent types.
 
 ## Use Case
 
-You have multiple ready tasks from Beads:
-- `bd-a3f8` - Build task
-- `bd-b7c2` - Frontend task
-- `bd-d9e3` - Test task
-- `bd-e5a4` - Another build task
+You have multiple ready tasks from village tasks:
+- `village-t1` - Build task
+- `village-t2` - Frontend task
+- `village-t3` - Test task
+- `village-t4` - Another build task
 
 You want to start 2 workers and execute tasks as they become available.
 
@@ -44,9 +44,9 @@ village watcher status --system
 
 Expected output:
 ```
-TASK_ID    STATUS    PANE     AGENT     WINDOW
-bd-a3f8    ACTIVE    %12      worker    worker-1-bd-a3f8
-bd-b7c2    ACTIVE    %13      worker    worker-2-bd-b7c2
+TASK_ID      STATUS    PANE     AGENT     WINDOW
+village-t1    ACTIVE    %12      worker    worker-1-village-t1
+village-t2    ACTIVE    %13      worker    worker-2-village-t2
 ```
 
 ## Queue Specific Agent Type
@@ -66,7 +66,7 @@ Tasks started: 1
 Tasks failed: 1
 
 Failed tasks:
-  - bd-b7c2: Worktree creation failed
+  - village-t2: Worktree creation failed
 ```
 
 You can inspect what went wrong and retry:

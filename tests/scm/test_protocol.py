@@ -33,66 +33,6 @@ class TestProtocolCompliance:
         assert mock_scm.kind in ["git", "jj"]
 
 
-class TestWorkspaceInfo:
-    """Tests for WorkspaceInfo dataclass."""
-
-    def test_workspace_info_creation(self):
-        """Test WorkspaceInfo dataclass creation."""
-        info = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test"),
-            branch="feature/test",
-            commit="abc123",
-        )
-
-        assert info.path == Path("/tmp/.worktrees/test")
-        assert info.branch == "feature/test"
-        assert info.commit == "abc123"
-
-    def test_workspace_info_defaults(self):
-        """Test WorkspaceInfo has all required fields."""
-        info = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test"),
-            branch="main",
-            commit="def456",
-        )
-
-        assert hasattr(info, "path")
-        assert hasattr(info, "branch")
-        assert hasattr(info, "commit")
-
-    def test_workspace_info_equality(self):
-        """Test WorkspaceInfo equality comparison."""
-        info1 = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test"),
-            branch="feature",
-            commit="abc123",
-        )
-
-        info2 = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test"),
-            branch="feature",
-            commit="abc123",
-        )
-
-        assert info1 == info2
-
-    def test_workspace_info_inequality(self):
-        """Test WorkspaceInfo inequality comparison."""
-        info1 = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test1"),
-            branch="feature1",
-            commit="abc123",
-        )
-
-        info2 = WorkspaceInfo(
-            path=Path("/tmp/.worktrees/test2"),
-            branch="feature2",
-            commit="def456",
-        )
-
-        assert info1 != info2
-
-
 class TestProtocolEdgeCases:
     """Test protocol edge cases (without real backends)."""
 

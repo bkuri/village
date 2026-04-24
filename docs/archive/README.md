@@ -1,6 +1,8 @@
-# Archived PRDs
+# DEPRECATED — Archived Documents
 
-This directory contains older PRD and roadmap documents that have been consolidated into the new documentation structure.
+> **DEPRECATED** — These documents are out of date. See the current documentation in the parent `docs/` directory.
+
+This directory contains older PRD, roadmap, and design documents that have been consolidated or superseded.
 
 ## Consolidation Notes
 
@@ -15,6 +17,12 @@ As of January 24, 2026, the following documents have been consolidated:
 ### Roadmaps
 - **VILLAGE_ROADMAP_v1.1.md** → Replaced by [../ROADMAP.md](../ROADMAP.md)
 
+### Chat Design Documents (archived April 2026)
+- **CHAT_HELP.md** — Slash command reference for `village chat`; superseded by inline help
+- **PPC_POLICY_village-chat.md** — LLM policy for knowledge-sharing mode; superseded by embedded prompts
+- **VILLAGE_CHAT_PRD.md** — Product requirements for `village chat`; design finalized and shipped
+- **WORKFLOW_EXAMPLES.md** — Workflow examples for `village chat`; content folded into inline help
+
 ## Current Documentation Structure
 
 ```
@@ -22,9 +30,9 @@ docs/
 ├── PRD.md              # Current v1.0 product requirements
 ├── ROADMAP.md          # Progress tracker + future versions
 ├── PROPOSALS.md        # Optional extensions (Fabric, observability, etc.)
-├── chat/               # Chat-specific docs
-│   ├── VILLAGE_CHAT_PRD.md
-│   └── WORKFLOW_EXAMPLES.md
+├── chat/               # Chat-specific docs (active prompts only)
+│   ├── FABRIC_PATTERN_task-create.md
+│   └── FABRIC_PROMPT_village-chat.md
 ├── examples/           # Working examples
 │   ├── 01-quickstart/
 │   ├── 02-configuration/

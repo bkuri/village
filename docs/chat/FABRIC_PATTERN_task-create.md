@@ -1,7 +1,7 @@
 # fabric: village-task-create
 
 You are Village Task Creation assistant. Your job is to conduct a structured
-interview to define a task for the Beads task system.
+interview to define a task for the village tasks system.
 
 ## Task Creation Q&A Flow
 

@@ -8,7 +8,7 @@ A pre-configured setup for microservices projects — multiple services in separ
 
 Use this template if your project has:
 - Multiple services in separate Git repositories
-- A shared task DAG (via Beads) coordinating work across services
+- A shared task DAG (via village tasks) coordinating work across services
 - Service-specific agents (auth service, payment service, inventory service, etc.)
 - Cross-service dependencies (e.g., auth service must be updated before payment service can use it)
 
@@ -20,21 +20,21 @@ Use this template if your project has:
 service-auth/          # Authentication service
 service-payment/       # Payment service
 service-inventory/     # Inventory service
-shared-tasks/          # (Optional) Shared repo with Beads task DAG
+shared-tasks/          # (Optional) Shared repo with village tasks DAG
 ```
 
-### Beads Integration Options
+### Village Tasks Integration Options
 
 **Option A: Centralized Task DAG (Recommended)**
 - Create a `shared-tasks/` repository
-- Beads DAG lives in `shared-tasks/`
-- Each service Village runs `bd ready` from `shared-tasks/` to get tasks
+- Task DAG lives in `shared-tasks/`
+- Each service Village runs `village tasks ready` to get tasks
 - Pro: Central coordination, easy to view all tasks
 - Con: Requires shared repository
 
 **Option B: Distributed Task DAG**
-- Each service has its own Beads DAG
-- Use Beads cross-repo references for dependencies
+- Each service has its own task DAG
+- Use cross-repo references for dependencies
 - Pro: No shared repo needed
 - Con: More complex setup
 
@@ -44,8 +44,8 @@ This guide assumes **Option A** (centralized).
 
 ## Agent Types
 
-| Agent | Service | Beads Task Pattern | Example Tasks |
-|-------|---------|-------------------|---------------|
+| Agent | Service | Village Task Pattern | Example Tasks |
+|-------|---------|---------------------|---------------|
 | `auth` | Authentication | `auth-*` | "auth-oauth2-migration", "auth-add-ratelimiting" |
 | `payment` | Payment | `payment-*` | "payment-stripe-integration", "payment-webhook-refactor" |
 | `inventory` | Inventory | `inventory-*` | "inventory-optimization", "inventory-stock-tracking" |
@@ -68,8 +68,10 @@ auth-add-ratelimiting ↗
 mkdir shared-tasks
 cd shared-tasks
 git init
-bd init
+village tasks init
 ```
+
+Note: The village tasks store is created automatically when you first run `village tasks create` in a directory.
 
 ### Step 2: Create `.village/config` in Each Service
 
@@ -136,27 +138,27 @@ ppc_traits=verbose
 ppc_format=markdown
 ```
 
-### Step 4: Configure Beads to Use Centralized DAG
+### Step 4: Configure Village Tasks to Use Centralized DAG
 
 Each service's Village must reference the centralized `shared-tasks/` repository.
 
 **Option A: Symlink (Simplest)**
 ```bash
 # In each service repo
-ln -s /path/to/shared-tasks .beads
+ln -s /path/to/shared-tasks .village-tasks
 ```
 
 **Option B: Environment Variable**
 ```bash
-# Set Beads config directory
-export BEADS_DIR=/path/to/shared-tasks
+# Set tasks config directory
+export VILLAGE_TASKS_DIR=/path/to/shared-tasks
 ```
 
-**Option C: Beads remote (Advanced)**
+**Option C: Git Remote (Advanced)**
 ```bash
 # In shared-tasks/
-bd remote add origin git@github.com:yourorg/shared-tasks.git
-bd remote sync
+git remote add origin git@github.com:yourorg/shared-tasks.git
+git push -u origin main
 ```
 
 ### Step 5: Create Agent Contracts (Optional)
@@ -207,16 +209,16 @@ auth-add-ratelimiting     ACTIVE    %13      auth    auth-2-auth-add-rate     20
 
 ### Cross-Service Coordination
 
-Tasks depend on each other across services. Beads ensures dependencies are respected:
+Tasks depend on each other across services. Village tasks ensures dependencies are respected:
 
 ```bash
 # In shared-tasks/
-bd create "auth: Add OAuth2 migration" --depends-on bd-setup
-bd create "payment: Add Stripe integration" --depends-on auth-oauth2-migration
-bd create "inventory: Add stock tracking" --depends-on payment-stripe-integration
+village tasks create "auth: Add OAuth2 migration" --depends-on village-setup
+village tasks create "payment: Add Stripe integration" --depends-on auth-oauth2-migration
+village tasks create "inventory: Add stock tracking" --depends-on payment-stripe-integration
 ```
 
-When `service-auth/` completes `auth-oauth2-migration`, Beads marks `payment-stripe-integration` as ready. The `service-payment/` Village will then queue it.
+When `service-auth/` completes `auth-oauth2-migration`, Village marks `payment-stripe-integration` as ready. The `service-payment/` Village will then queue it.
 
 ---
 
@@ -226,16 +228,16 @@ Use consistent prefixes for service-specific tasks:
 
 ```bash
 # Auth service tasks
-bd create "auth: OAuth2 migration"
-bd create "auth: Add rate limiting"
+village tasks create "auth: OAuth2 migration"
+village tasks create "auth: Add rate limiting"
 
 # Payment service tasks
-bd create "payment: Stripe integration"
-bd create "payment: Webhook refactor"
+village tasks create "payment: Stripe integration"
+village tasks create "payment: Webhook refactor"
 
 # Inventory service tasks
-bd create "inventory: Stock tracking optimization"
-bd create "inventory: Low-stock alerts"
+village tasks create "inventory: Stock tracking optimization"
+village tasks create "inventory: Low-stock alerts"
 ```
 
 ---
@@ -248,16 +250,16 @@ Here's a realistic task DAG for adding payment processing across services:
 # In shared-tasks/
 
 # 1. Auth service work
-bd create "auth: Add payment user role" --depends-on bd-setup
-bd create "auth: Add payment scopes" --depends-on auth-payment-role
+village tasks create "auth: Add payment user role" --depends-on village-setup
+village tasks create "auth: Add payment scopes" --depends-on auth-payment-role
 
 # 2. Payment service work
-bd create "payment: Add Stripe integration" --depends-on auth-payment-scopes
-bd create "payment: Add webhook handler" --depends-on payment-stripe
+village tasks create "payment: Add Stripe integration" --depends-on auth-payment-scopes
+village tasks create "payment: Add webhook handler" --depends-on payment-stripe
 
 # 3. Inventory service work
-bd create "inventory: Add stock reservation" --depends-on payment-webhook
-bd create "inventory: Add payment confirmation" --depends-on inventory-reservation
+village tasks create "inventory: Add stock reservation" --depends-on payment-webhook
+village tasks create "inventory: Add payment confirmation" --depends-on inventory-reservation
 ```
 
 Now queue tasks in each service:
@@ -308,8 +310,8 @@ ppc_format=markdown
 **3. Create notification tasks in shared DAG:**
 ```bash
 cd /path/to/shared-tasks
-bd create "notification: Add payment success email" --depends-on payment-webhook
-bd create "notification: Add payment failure alert" --depends-on payment-webhook
+village tasks create "notification: Add payment success email" --depends-on payment-webhook
+village tasks create "notification: Add payment failure alert" --depends-on payment-webhook
 ```
 
 ### Changing Concurrency Per Service
@@ -332,24 +334,24 @@ MAX_WORKERS=5  # Inventory service can handle more parallel work
 
 **Issue: Tasks not showing as ready in specific service**
 
-**Fix:** Verify Beads DAG is accessible:
+**Fix:** Verify task DAG is accessible:
 ```bash
-# Check Beads can see tasks
-bd ready
+# Check can see tasks
+village tasks list
 
 # Verify dependencies are met
-bd show <task-id>
+village tasks show <task-id>
 ```
 
 **Issue: Cross-service dependencies not working**
 
 **Fix:** Ensure all services reference the same shared-tasks repository:
 ```bash
-# In each service, check Beads config
-bd config show
+# In each service, check task directory
+ls -la .village/
 
-# Verify BEADS_DIR or symlink is correct
-ls -la .beads
+# Verify VILLAGE_TASKS_DIR or symlink is correct
+ls -la .village-tasks
 ```
 
 **Issue: Tasks starting but completing immediately**
@@ -373,14 +375,14 @@ cat contracts/auth.md
 
 ## Alternative: Distributed Task DAG
 
-If you prefer not to have a centralized `shared-tasks/` repository, you can use Beads cross-repo references:
+If you prefer not to have a centralized `shared-tasks/` repository, you can use cross-repo references:
 
 ```bash
 # In service-auth/
-bd create "auth: OAuth2 migration"
+village tasks create "auth: OAuth2 migration"
 
 # In service-payment/ (reference auth task)
-bd create "payment: Stripe integration" --depends-on auth-oauth2-migration@../service-auth
+village tasks create "payment: Stripe integration" --depends-on auth-oauth2-migration@../service-auth
 ```
 
-This requires Beads to support cross-repo dependencies. Check Beads documentation for setup instructions.
+This requires the task store to support cross-repo dependencies. Check Village documentation for setup instructions.

@@ -34,38 +34,6 @@ def mock_config(tmp_path: Path):
     return config
 
 
-class TestWorkerInfo:
-    """Tests for WorkerInfo dataclass."""
-
-    def test_worker_info_creation(self):
-        """Test creating a WorkerInfo."""
-        worker = WorkerInfo(
-            task_id="bd-a3f8",
-            worktree_path=Path("/tmp/.worktrees/bd-a3f8"),
-            pane_id="%12",
-            window_id="build-1-bd-a3f8",
-        )
-        assert worker.task_id == "bd-a3f8"
-        assert worker.worktree_path == Path("/tmp/.worktrees/bd-a3f8")
-        assert worker.pane_id == "%12"
-        assert worker.window_id == "build-1-bd-a3f8"
-
-
-class TestConflict:
-    """Tests for Conflict dataclass."""
-
-    def test_conflict_creation(self):
-        """Test creating a Conflict."""
-        conflict = Conflict(
-            file=Path("/repo/src/main.py"),
-            workers=["bd-a3f8", "bd-b7d2"],
-            worktrees=[Path("/tmp/.worktrees/bd-a3f8"), Path("/tmp/.worktrees/bd-b7d2")],
-        )
-        assert conflict.file == Path("/repo/src/main.py")
-        assert conflict.workers == ["bd-a3f8", "bd-b7d2"]
-        assert len(conflict.worktrees) == 2
-
-
 class TestConflictReport:
     """Tests for ConflictReport dataclass."""
 

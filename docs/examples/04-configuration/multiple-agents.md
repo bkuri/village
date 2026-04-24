@@ -65,17 +65,17 @@ village status --workers
 
 Expected output (with colors):
 ```
-TASK_ID    STATUS    PANE     AGENT     WINDOW            CLAIMED_AT
-bd-a3f8    ACTIVE    %12      build      build-1-bd-a3f8  12:34:56
-bd-b7c2    ACTIVE    %13      frontend   frontend-1-bd-b7c2 12:34:58
-bd-d9e3    ACTIVE    %14      test       test-1-bd-d9e3   12:35:01
+TASK_ID      STATUS    PANE     AGENT     WINDOW              CLAIMED_AT
+village-t1    ACTIVE    %12      build      build-1-village-t1  12:34:56
+village-t2    ACTIVE    %13      frontend   frontend-1-village-t2 12:34:58
+village-t3    ACTIVE    %14      test       test-1-village-t3   12:35:01
 ```
 
 ## Resume with Specific Agent
 
 ```bash
 # Resume a task with frontend agent (override default)
-village resume bd-b7c2 --agent frontend
+village resume village-t2 --agent frontend
 ```
 
 ## Custom Contracts (Optional)

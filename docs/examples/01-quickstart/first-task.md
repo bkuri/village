@@ -5,7 +5,7 @@ This example walks through your very first task with Village.
 ## Prerequisites
 
 - Git repository initialized
-- Beads installed (optional but recommended)
+- village tasks ready (optional but recommended)
 - Village installed: `uv pip install -e .`
 
 ## Setup
@@ -24,12 +24,12 @@ Expected output from `village watcher ready`:
 ```
 Environment: ✅ Runtime
           ✅ Git repo
-Work Available: ✅ Beads ready
+Work Available: ✅ Village tasks ready
 ```
 
 ## Your First Task
 
-Assume Beads reports a ready task: `bd-a3f8`
+Assume village tasks reports a ready task: `village-t1`
 
 ```bash
 # Queue the task (starts it in background)
@@ -54,14 +54,14 @@ village watcher status --system
 Expected output:
 ```
 TASK_ID    STATUS    PANE     AGENT   WINDOW            CLAIMED_AT
-bd-a3f8    ACTIVE    %12      worker   worker-1-bd-a3f8  2024-01-23 12:34:56
+village-t1    ACTIVE    %12      worker   worker-1-village-t1  2024-01-23 12:34:56
 ```
 
 ## Resume the Task
 
 ```bash
 # Attach to the worker pane
-village builder resume --task bd-a3f8
+village builder resume --task village-t1
 ```
 
 You're now inside a tmux pane with OpenCode running on your task. Work on it as needed.

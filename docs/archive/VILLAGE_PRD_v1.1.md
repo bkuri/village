@@ -1,4 +1,6 @@
-# Village v1.1 PRD — SCM-Abstraction Edition
+# DEPRECATED — Village v1.1 PRD — SCM-Abstraction Edition
+
+> **DEPRECATED** — This version has been superseded. See [../ROADMAP.md](../ROADMAP.md) for current status.
 
 ## Purpose
 

@@ -28,8 +28,8 @@ monorepo/
 
 ### Agent Types
 
-| Agent | Purpose | Beads Task Pattern | Example Tasks |
-|-------|---------|-------------------|---------------|
+| Agent | Purpose | Village Task Pattern | Example Tasks |
+|-------|---------|---------------------|---------------|
 | `backend` | Backend work | `backend-*` | "backend-api-auth", "backend-db-migration" |
 | `frontend` | Frontend work | `frontend-*` | "frontend-user-profile", "frontend-auth-flow" |
 | `test` | Testing work | `test-*` | "test-e2e-auth", "test-integration-api" |
@@ -146,20 +146,20 @@ village resume backend-api-auth --agent backend
 
 ## Task Naming Convention
 
-To enable auto-detection of agent types, name your Beads tasks consistently:
+To enable auto-detection of agent types, name your tasks consistently:
 
 ```bash
 # Backend tasks
-bd create "backend: Add authentication API"
-bd create "backend: Migrate user table to new schema"
+village tasks create "backend: Add authentication API"
+village tasks create "backend: Migrate user table to new schema"
 
 # Frontend tasks
-bd create "frontend: Add user profile page"
-bd create "frontend: Implement auth flow"
+village tasks create "frontend: Add user profile page"
+village tasks create "frontend: Implement auth flow"
 
 # Test tasks
-bd create "test: E2E authentication flow"
-bd create "test: Integration test for user API"
+village tasks create "test: E2E authentication flow"
+village tasks create "test: Integration test for user API"
 ```
 
 **Note:** Village uses the first part of the task ID (before the colon) to auto-detect the agent type. If your naming convention differs, use `--agent` flag explicitly.
@@ -172,19 +172,19 @@ Here's a realistic task DAG for a monorepo adding user authentication:
 
 ```bash
 # 1. Backend work
-bd create "backend: Add authentication API" --depends-on bd-setup
-bd create "backend: Add JWT token handling" --depends-on backend-auth-api
+village tasks create "backend: Add authentication API" --depends-on village-setup
+village tasks create "backend: Add JWT token handling" --depends-on backend-auth-api
 
 # 2. Shared library work
-bd create "shared: Add auth utility functions" --depends-on backend-jwt
+village tasks create "shared: Add auth utility functions" --depends-on backend-jwt
 
 # 3. Frontend work
-bd create "frontend: Add login page" --depends-on shared-auth-utils
-bd create "frontend: Implement auth flow" --depends-on frontend-login-page
+village tasks create "frontend: Add login page" --depends-on shared-auth-utils
+village tasks create "frontend: Implement auth flow" --depends-on frontend-login-page
 
 # 4. Testing work
-bd create "test: Integration tests for auth API" --depends-on backend-auth-api
-bd create "test: E2E authentication flow" --depends-on frontend-auth-flow
+village tasks create "test: Integration tests for auth API" --depends-on backend-auth-api
+village tasks create "test: E2E authentication flow" --depends-on frontend-auth-flow
 ```
 
 Now queue tasks:
@@ -213,7 +213,7 @@ ppc_format=markdown
 
 Then create documentation tasks:
 ```bash
-bd create "docs: Document authentication API"
+village tasks create "docs: Document authentication API"
 ```
 
 ### Changing PPC Traits
@@ -240,10 +240,10 @@ ppc_format=markdown
 
 **Issue: Tasks not starting for specific agent type**
 
-**Fix:** Verify Beads task names match agent naming convention:
+**Fix:** Verify task names match agent naming convention:
 ```bash
 # Check task names
-bd list | grep "backend:"
+village tasks list | grep "backend:"
 ```
 
 **Issue: Wrong agent assigned to a task**

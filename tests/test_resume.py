@@ -13,8 +13,6 @@ from village.contracts import ContractEnvelope
 from village.locks import Lock
 from village.probes.tools import SubprocessError
 from village.resume import (
-    ResumeAction,
-    ResumeResult,
     _create_resume_window,
     _ensure_worktree_exists,
     _generate_resume_window,
@@ -48,58 +46,6 @@ def mock_lock(tmp_path: Path) -> Lock:
         agent="build",
         claimed_at=datetime.now(),
     )
-
-
-class TestResumeAction:
-    """Tests for ResumeAction dataclass."""
-
-    def test_action_creation(self) -> None:
-        """Test ResumeAction creation."""
-        action = ResumeAction(
-            action="resume",
-            reason="Ready to resume",
-            blocking=False,
-            meta={"task_id": "bd-a3f8"},
-        )
-
-        assert action.action == "resume"
-        assert action.reason == "Ready to resume"
-        assert action.blocking is False
-        assert action.meta == {"task_id": "bd-a3f8"}
-
-
-class TestResumeResult:
-    """Tests for ResumeResult dataclass."""
-
-    def test_result_creation_success(self) -> None:
-        """Test ResumeResult for success."""
-        result = ResumeResult(
-            success=True,
-            task_id="bd-a3f8",
-            agent="build",
-            worktree_path=Path("/tmp/.worktrees/bd-a3f8"),
-            window_name="worker-1-bd-a3f8",
-            pane_id="%12",
-        )
-
-        assert result.success is True
-        assert result.task_id == "bd-a3f8"
-        assert result.pane_id == "%12"
-
-    def test_result_creation_failure(self) -> None:
-        """Test ResumeResult for failure."""
-        result = ResumeResult(
-            success=False,
-            task_id="bd-a3f8",
-            agent="build",
-            worktree_path=Path(""),
-            window_name="",
-            pane_id="",
-            error="Worktree creation failed",
-        )
-
-        assert result.success is False
-        assert result.error == "Worktree creation failed"
 
 
 class TestPlanResume:

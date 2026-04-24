@@ -1,40 +1,21 @@
 # Village - Agent Development Guide
 
+For command references, configuration, architecture, and quickstart guides, see [README.md](README.md).
+
 ## Build, Lint, and Test Commands
 
-### Package Management (uv)
 ```bash
-uv sync                    # Install dependencies
-uv add <package>           # Add dependency
-uv add --dev <package>     # Add dev dependency
-```
-
-### Running the CLI
-```bash
-uv run village <command>   # Run during development
-uv pip install -e . && village <command>  # Install and run
-```
-
-### Linting
-```bash
-uv run ruff check .        # Lint
-uv run ruff check --fix .  # Auto-fix
-uv run ruff format .       # Format
-```
-
-### Type Checking
-```bash
-uv run mypy village/      # Type check entire module
-```
-
-### Testing
-```bash
-uv run pytest                              # All tests
-uv run pytest tests/test_module.py         # Single file
-uv run pytest tests/test_module.py::test   # Single test
-uv run pytest -k "test_lock_"              # Pattern match
-uv run pytest -s                           # Verbose output
-uv run pytest --cov=village                # With coverage
+uv sync                                  # Install dependencies
+uv run village <command>                 # Run CLI during development
+uv run ruff check .                      # Lint
+uv run ruff check --fix .                # Auto-fix lint issues
+uv run ruff format .                     # Format
+uv run mypy village/                     # Type check
+uv run pytest                            # All tests
+uv run pytest tests/test_module.py       # Single file
+uv run pytest tests/test_module.py::test # Single test
+uv run pytest -k "test_lock_"            # Pattern match
+uv run pytest --cov=village              # With coverage
 ```
 
 ## Code Style Guidelines
@@ -102,279 +83,6 @@ uv run pytest --cov=village                # With coverage
 - Use `pytest` with `tmp_path` fixture
 - Test both success and failure paths
 - Keep tests focused and independent
-- ACP tests: `tests/test_acp_*.py` + `tests/fixtures/acp_fixtures.py`
-
-**Test commands:**
-```bash
-# Test ACP server
-pytest tests/test_acp_server.py -v
-
-# Test ACP client
-pytest tests/test_acp_client.py -v
-
-# Test bridge
-pytest tests/test_acp_bridge.py -v
-
-# Test integration
-pytest tests/test_acp_integration.py -v
-
-# Test all ACP
-pytest tests/ -k acp -v
-```
-
-**Manual testing:**
-```bash
-# Start greeter with transport
-village greeter --transport cli       # CLI (default)
-village greeter --transport telegram # Telegram bot
-```
-
-## Project Structure
-
-```
-village/
-├── cli/                # CLI commands (role-based)
-│   ├── planner.py      #   village planner — spec design + inspection
-│   ├── builder.py      #   village builder — spec-driven autonomous loop
-│   ├── scribe.py       #   village scribe — knowledge base
-│   ├── council.py      #   village council — multi-persona deliberation
-│   ├── watcher.py      #   village watcher — observability and maintenance
-│   ├── doctor.py       #   village doctor — diagnostics
-│   ├── greeter.py      #   village greeter — Q&A session
-│   ├── goals.py        #   village goals — goal hierarchy
-│   ├── lifecycle.py    #   new, up, down
-│   ├── dashboard.py    #   (logic-only, no CLI decorators)
-│   ├── maintenance.py  #   (logic-only, no CLI decorators)
-│   ├── work.py         #   (logic-only, no CLI decorators)
-│   └── release.py      #   (logic-only, no CLI decorators)
-├── chat/transports/    # Transport abstraction
-│   ├── __init__.py     #   AsyncTransport ABC + factory
-│   ├── cli.py          #   CLI transport
-│   └── telegram.py     #   Telegram transport
-├── prompt.py           # PromptResolver (intercepts click.prompt)
-├── dispatch.py         # Command registry + dispatcher
-├── config.py           # Config loading
-├── roles.py            # RoleChat base, routing table, greetings
-├── loop.py             # Spec-driven autonomous build loop
-├── workflow/            # Workflow engine (planner infrastructure)
-│   ├── schema.py       #   Step types, WorkflowSchema
-│   ├── loader.py       #   YAML loader
-│   ├── builder.py      #   Execution engine
-│   ├── planner.py      #   LLM-driven design
-│   └── mcp_tools.py    #   Perplexity/sequential-thinking
-├── council/            # Council deliberation system
-├── scribe/              # Scribe knowledge base + audit trails
-├── onboard/            # Adaptive onboarding
-├── goals.py            # Goal hierarchy (GOALS.md)
-├── trace.py            # TraceWriter/Reader (JSONL)
-├── builder_state.py    # Run state (manifest + step log)
-├── memory.py           # MemoryStore (markdown + YAML frontmatter)
-├── queue.py            # Task queue scheduler
-├── state_machine.py    # Task lifecycle states
-├── locks.py            # Lock file handling
-├── probes/             # Runtime probes
-└── render/             # Output renderers
-workflows/              # Built-in workflow YAML files
-personas/               # Council persona definitions
-tests/
-└── test_*.py
-```
-
-## Village Scribe — Knowledge Base
-
-### Commands
-```bash
-village scribe fetch <url|file>       # Ingest knowledge source
-village scribe ask "question"         # Query knowledge base
-village scribe curate                 # Health check + regenerate VOICE.md
-village scribe drafts                 # List or count draft tasks
-```
-
-### Architecture
-```
-wiki/
-├── ingest/              # Drop sources here
-├── processed/           # Moved after ingestion
-├── pages/               # Wiki pages (markdown + YAML frontmatter)
-├── index.md             # Auto-generated catalog
-└── log.md               # Chronological record
-
-.village/memory/         # Agent cross-session memory (same format)
-VOICE.md                 # Distilled project knowledge for agents
-```
-
-### Village Voice
-Current project knowledge is maintained in `VOICE.md` at the repository root.
-Read it first for project context, conventions, and known issues.
-
-### Manual testing
-```bash
-village scribe fetch ./docs/guide.md
-village scribe fetch https://docs.example.com/api
-village scribe ask "how do I configure auth?"
-village scribe curate
-```
-
-## Adaptive Onboarding
-
-### Commands
-```bash
-village new <name>                # Create project with adaptive interview
-village new <name> --skip-onboard # Create with minimal templates
-village up                        # Detects incomplete setup, runs interview if needed
-village up --skip-onboard         # Skip onboarding check
-village up --force                # Overwrite existing AGENTS.md/README.md
-village up --skip-interview       # Use scaffold defaults without interview
-```
-
-### Configuration
-```ini
-[onboard]
-interview_model = openrouter/anthropic/claude-3-haiku
-max_questions = 15
-critic_persona = red-team        # devil's-advocate | red-team | gordon-ramsay
-self_critique = true
-```
-
-### Architecture
-The onboarding pipeline:
-1. **Detect** (rule-based): Scan for pyproject.toml, package.json, etc.
-2. **Interview** (LLM adaptive): 10-15 BRUTAL-method questions
-3. **Generate**: AGENTS.md + README.md + wiki/ seeds
-4. **Process**: Scribe ingests wiki seeds, curate generates VOICE.md
-
-## Role-Based CLI Architecture
-
-### Planner Produces Specs, Builder Implements Specs
-
-| Role | Default Chat | Subcommands |
-|------|-------------|-------------|
-| **watcher** | "What would you like to observe?" | `status`, `locks`, `events`, `dashboard`, `cleanup`, `unlock`, `monitor`, `ledger show`, `ledger list`, `ready` |
-| **builder** | "Which specs shall I work on?" | `run`, `status`, `cancel`, `logs`, `resume`, `queue`, `pause`, `release` |
-| **scribe** | "What do you want to know?" | `fetch`, `ask`, `curate`, `drafts` |
-| **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
-| **council** | "What shall we discuss?" | `debate`, `list`, `show` |
-| **doctor** | "What seems to be the problem?" | `diagnose`, `prescribe` |
-| **greeter** | "How can I help?" | General triage, routes to all roles |
-
-### Spec-Driven Build Loop
-
-The builder implements specs autonomously via the Ralph Wiggum methodology.
-
-```bash
-# Planning — decides what, produces specs
-village planner design <goal>          # LLM pipeline → produces spec in specs/
-village planner inspect                # Review all specs (read-only)
-village planner inspect --fix          # Review + amend specs with Inspect Notes
-village planner inspect <spec-id>      # Review one spec
-village planner refine <spec-id>       # Iterate on a spec
-
-# Building — implements specs via autonomous loop
-village builder run                    # Loop through specs
-village builder run -p 4               # Parallel mode, 4 worktrees
-village builder run -n 20              # Max 20 iterations
-village builder run -m zai/glm-5-turbo # Override agent model
-village builder run --dry-run          # Preview without executing
-village builder status                 # Show spec completion progress
-village builder cancel                 # Halt the loop
-village builder resume --build         # Resume a stopped build loop
-village builder resume --task <id>     # Resume a paused task
-village builder queue                  # Queue and execute ready tasks
-village builder pause                  # Pause an in-progress task
-village builder release                # Ship a release
-village builder logs                   # View iteration logs
-```
-
-### Village Watcher — Observability & Maintenance
-
-```bash
-village watcher status                # General overview
-village watcher status --system       # System health (workers, locks, orphans)
-village watcher status --task <id>    # Task state and history
-village watcher status --wiki         # Wiki statistics
-village watcher locks                 # List all locks
-village watcher events                # Show recent events
-village watcher dashboard             # Real-time dashboard
-village watcher cleanup               # Remove stale locks/worktrees
-village watcher unlock                # Unlock a task
-village watcher monitor               # Watch wiki/ingest/ for new files
-village watcher ledger show [task]    # View audit trail
-village watcher ledger list           # List tasks with audit trails
-village watcher ready                 # Readiness assessment
-```
-
-### Village Doctor — Diagnostics
-
-```bash
-village doctor diagnose               # Run full diagnostics (writes .village/diagnosis.json)
-village doctor prescribe              # Show recommendations from diagnosis
-village doctor prescribe --fix        # Auto-apply fixes
-```
-
-### Village Council — Deliberation
-
-```bash
-village council debate "topic"                    # Start a new debate
-village council debate --from <id>                # Continue a past debate
-village council debate --from <id> --rematch      # Re-run from scratch
-```
-
-### Spec Format
-
-Specs: numbered markdown in `specs/` with `Status: incomplete` → `Status: COMPLETE`
-- Use `<promise>DONE</promise>` when criteria met
-- Priority by filename order (001, 002, ...)
-- **Inspect Notes**: Appended by `planner inspect --fix`, treated as hard constraints
-
-### Top-Level Commands
-```bash
-village new <name>                # Create project with adaptive interview
-village up                        # Initialize village (includes onboarding)
-village down                      # Stop village runtime
-village goals                     # Show goal hierarchy
-village tasks                     # Task store management
-village greeter                   # Interactive Q&A (aliases: welcome, chat, help)
-```
-
-## Key Integration Points
-
-### tmux
-- Pane IDs are authoritative (`%12`, `%13`)
-- Use `tmux list-panes` to enumerate workers
-- Use `tmux has-session` to check session existence
-- Auto-name windows: `<agent>-<num>-<task-id>`
-
-### Git Worktrees
-- Worktrees in `.worktrees/`
-- Named by task ID (`.worktrees/bd-a3f8/`)
-- Always `git worktree prune` after deletion
-
-### Village Tasks
-- Use `village tasks ready` to query ready tasks
-- Task IDs generated by Village's ID system
-- Treat Village task store as source of truth for readiness
-
-### OpenCode
-- Run as subprocess in tmux pane
-- Inject contract via stdin or file
-- Worker = one tmux pane + one OpenCode instance
-
-### Transport Abstraction
-- **CLI transport**: Default stdin/stdout interaction
-- **Telegram transport**: Bot API with long polling, DMs only
-- **PromptResolver**: Intercepts `click.prompt()` and routes through active transport
-- **Dispatcher**: Routes commands to handlers (slash commands for Telegram, natural language fallback)
-- **Future**: ACP transport, stdio transport
-
-## Constraints
-
-- **No daemon** - CLI commands only
-- **No database** - file-based state only
-- **No cloud** - local-only
-- **No remote workers** - single machine
-- **Text-based everything** - JSON, key=value, INI
-- **Safe by default** - plan/dry-run before mutation
-- **Truth over intention** - probe actual state
 
 ## Landing the Plane (Session Completion)
 
@@ -419,84 +127,17 @@ village greeter                   # Interactive Q&A (aliases: welcome, chat, hel
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 
-<!-- BEGIN TASK STORE INTEGRATION -->
-## Issue Tracking
+## Task Tracking
 
-**NOTE**: Village uses two separate task tracking systems:
-- **Village task store** (`.village/tasks.jsonl`) - for projects created by Village
-- **bd (Beads)** - for Village's own development (this repo)
-
-### Village Task Store
-
-For projects created by Village, use the built-in task store:
+Village uses the built-in task store for issue tracking. See [Task Management](README.md#task-management) for CLI commands.
 
 > **IMPORTANT**: This project uses the built-in **Village task store** for ALL issue tracking in Village-created projects. Do NOT use markdown TODOs, task lists, or external trackers.
 
-### Architecture
+**Statuses**: `open` (ready), `draft` (needs definition), `in_progress` (claimed), `done` (pending release), `closed` (released), `deferred` (blocked)
 
-The task store is a pluggable system with a JSONL file-based backend:
+**Types**: `bug`, `feature`, `task` (tests/docs/refactor), `epic` (large feature with subtasks), `chore` (maintenance)
 
-```
-village/
-├── tasks/
-│   ├── models.py      # Task, TaskStatus, TaskType, TaskCreate, TaskUpdate
-│   ├── store.py      # TaskStore abstract interface
-│   ├── file_store.py # JSONL implementation
-│   └── ids.py        # Task ID generation
-.village/
-└── tasks.jsonl      # Task persistence (one JSON per line)
-```
-
-### Task Statuses
-
-- `open` - Ready to work, not yet claimed
-- `draft` - Work not started, more definition needed
-- `in_progress` - Currently being worked on
-- `done` - Work completed, pending release
-- `closed` - Released/versioned
-- `deferred` - Blocked or postponed
-
-### Task Types
-
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
-
-### Priorities
-
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### CLI Commands
-
-```bash
-village tasks list                    # List all tasks
-village tasks list --status open     # Filter by status
-village tasks list --type bug       # Filter by type
-village tasks ready                # Show tasks ready to work on
-village tasks get <id>             # Get task details
-village tasks create "title" -t bug # Create new task
-village tasks update <id> --status in_progress  # Claim/update
-village tasks close <id> --reason "Completed"  # Close task
-village tasks label <id> add bump:patch    # Add version label
-```
-
-### Dependencies
-
-Tasks support dependency relationships:
-
-- `blocks` / `blocked_by` - Blocker relationships
-- `discovered-from` - Found while working on parent task
-
-```bash
-village tasks create "Subtask" --depends-on <parent-id>
-village tasks depends <id> show
-```
+**Priorities**: 0 (critical), 1 (high), 2 (medium/default), 3 (low), 4 (backlog)
 
 ### Workflow for AI Agents
 
@@ -511,15 +152,13 @@ village tasks depends <id> show
 
 - ✅ Use `village tasks` for ALL issue tracking
 - ✅ Always use `--json` for programmatic output
-- ✅ Link discovered work with `--depends-on` 
+- ✅ Link discovered work with `--depends-on`
 - ✅ Check `village tasks ready` before asking "what should I work on?"
 - ❌ Do NOT create markdown TODO lists
 - ❌ Do NOT use external issue trackers
 - ❌ Do NOT duplicate tracking systems
 
-For more details, see `village tasks --help`.
-
-### Village Development (Beads)
+## Village Development (Beads)
 
 For Village's own development (this repo), use **bd (Beads)** instead:
 
@@ -532,7 +171,6 @@ bd onboard
 ```
 
 **Quick Start:**
-
 ```bash
 bd ready                    # Show ready tasks
 bd create "Title" -t bug      # Create new task
@@ -540,130 +178,22 @@ bd update <id> --claim      # Claim a task
 bd close <id> --reason "Done"  # Complete work
 ```
 
-**Auto-Sync:**
-Beads syncs automatically - no manual push/pull needed.
-
-### Important Rules
-
+**Important Rules:**
 - ✅ Use bd for ALL task tracking in Village development
 - ✅ Link discovered work with `discovered-from` dependencies
 - ✅ Check `bd ready` before asking "what should I work on?"
 - ❌ Do NOT use village tasks for this repo
 
-<!-- END TASK STORE INTEGRATION -->
-
 ## Changelog Management
 
-**All notable changes are documented in CHANGELOG.md following [Keep a Changelog](https://keepachangelog.com/).**
-
-### Categorization
-
-Changes are automatically categorized during `village release` based on task metadata:
-
-- **Added**: New features (`feature` tasks)
-- **Changed**: Enhancements, refactors (`task`/`chore` tasks)
-- **Fixed**: Bug fixes (`bug` tasks)
-- **Breaking**: Breaking changes (tasks with `bump:major` label)
-
-### During Development
+See [Release Automation](README.md#release-automation) for the release process.
 
 When completing a task:
-
-1. **Apply bump label**: `village tasks label <task-id> add bump:<type>`
-   - `major` for breaking changes
-   - `minor` for new features
-   - `patch` for bug fixes
-   - `none` for docs/tests/internal work
+1. **Apply bump label**: `village tasks label <task-id> add bump:<type>` (major/minor/patch/none)
 2. **Ensure task title is clear and user-facing** (will appear in changelog)
    - ✅ "Add retry logic to queue processing"
    - ✅ "Fix deadlock in lock acquisition"
    - ❌ "Refactor _internal_helper function"
 3. **Close task**: `village tasks close <task-id> --reason "Completed"`
 
-### During Release
-
-`village release` automatically:
-
-1. Queries Beads for task types
-2. Groups closed tasks by changelog category
-3. Updates CHANGELOG.md with new version section
-4. Creates git tag
-
-**No manual changelog editing required.**
-
-### Example Changelog Entry
-
-```markdown
-## [1.2.0] - 2026-03-11
-
-### Breaking
-- Remove deprecated `--old-flag` CLI option (`bd-a3f8`)
-
-### Added
-- Automatic task decomposition with LLM analysis (`bd-b4c9`)
-- Extensibility framework for custom processors (`bd-d2e7`)
-
-### Fixed
-- Beads CLI compatibility with missing `--status` flag (`bd-c1d6`)
-
-### Changed
-- Improved error messages for lock conflicts (`bd-e5f2`)
-```
-
-### Edge Cases
-
-- **Missing task type**: Defaults to "Changed" category
-- **Beads unavailable**: Gracefully falls back to generic categorization
-- **Empty categories**: Skipped in final changelog entry
-- **bump:none tasks**: Excluded from changelog entirely
-
-<skills_system priority="1">
-
-## Available Skills
-
-<!-- SKILLS_TABLE_START -->
-<usage>
-When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
-
-How to use skills:
-- Invoke: `npx openskills read <skill-name>` (run in your shell)
-  - For multiple: `npx openskills read skill-one,skill-two`
-- The skill content will load with detailed instructions on how to complete the task
-- Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
-
-Usage notes:
-- Only use skills listed in <available_skills> below
-- Do not invoke a skill that is already loaded in your context
-- Each skill invocation is stateless
-</usage>
-
-<available_skills>
-
-<skill>
-<name>autofix</name>
-<description>Auto-fix CodeRabbit review comments - get CodeRabbit review comments from GitHub and fix them interactively or in batch</description>
-<location>project</location>
-</skill>
-
-<skill>
-<name>code-review</name>
-<description>AI-powered code review using CodeRabbit. Default code-review skill. Trigger for any explicit review request AND autonomously when the agent thinks a review is needed (code/PR/quality/security).</description>
-<location>project</location>
-</skill>
-
-<skill>
-<name>openacp-tunnel</name>
-<description>Expose local ports to the internet. Use when user wants to share, preview, or access their local dev server remotely. Triggers on phrases like "expose port", "map port", "share my app", "make it public", "open tunnel", "public URL", "share localhost", "preview on phone", "access from outside", "forward port", "ngrok", "cloudflare tunnel", etc.</description>
-<location>global</location>
-</skill>
-
-<skill>
-<name>ralph-wiggum</name>
-<description>Autonomous AI coding with spec-driven development. Implements Geoffrey Huntley's iterative bash loop methodology where agents work through specs one at a time, outputting a completion signal only when acceptance criteria are 100% met.</description>
-<location>global</location>
-</skill>
-
-</available_skills>
-<!-- SKILLS_TABLE_END -->
-
-</skills_system>
+Changes are auto-categorized by task type: feature→Added, bug→Fixed, task/chore→Changed, bump:major→Breaking. bump:none tasks are excluded from the changelog.

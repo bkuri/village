@@ -1,7 +1,7 @@
 """Integration tests for LLMChat session."""
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,11 +19,6 @@ def mock_llm_client():
     client.supports_tools = False
     client.supports_mcp = False
     return client
-
-
-@pytest.fixture
-def mock_beads_client():
-    pytest.skip("beads_client removed - needs rewrite for task store")
 
 
 @pytest.fixture
@@ -158,30 +153,6 @@ class TestFullChatFlowWithLLM:
         assert len(llm_chat.session.refinements) == 0
 
     @pytest.mark.asyncio
-    async def test_confirm_creates_task_in_beads(
-        self, llm_chat, mock_llm_client, mock_beads_client, sample_task_spec_json
-    ):
-        """Test /confirm creates task in Beads."""
-        # Create task
-        mock_llm_client.call.return_value = sample_task_spec_json
-        await llm_chat.handle_message("Fix login bug")
-
-        # Set Beads client
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.create_task.return_value = "bd-x9y8"
-
-        # Confirm
-        response = await llm_chat.handle_slash_command("/confirm")
-
-        assert "✓ Task created: bd-x9y8" in response
-        mock_beads_client.create_task.assert_called_once()
-
-        # Verify spec was passed correctly
-        call_args = mock_beads_client.create_task.call_args[0][0]
-        assert isinstance(call_args, TaskSpec)
-        assert call_args.title == "Fix login authentication bug"
-
-    @pytest.mark.asyncio
     async def test_discard_clears_current_task(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test /discard clears current task."""
         # Create task
@@ -196,117 +167,26 @@ class TestFullChatFlowWithLLM:
         assert llm_chat.session.current_iteration == 0
         assert len(llm_chat.session.refinements) == 0
 
-    @pytest.mark.asyncio
-    async def test_full_workflow(
-        self,
-        llm_chat,
-        mock_llm_client,
-        mock_beads_client,
-        sample_task_spec_json,
-        refined_task_spec_json,
-    ):
-        """Test complete workflow: create → refine → undo → refine → confirm."""
-        # Create
-        mock_llm_client.call.return_value = sample_task_spec_json
-        create_response = await llm_chat.handle_message("Fix login bug")
-        assert "Fix login authentication bug" in create_response
-
-        # Refine
-        mock_llm_client.call.return_value = refined_task_spec_json
-        refine_response = await llm_chat.handle_message("Add settings to blocks")
-        assert "Refineme" in refine_response or "Refinement" in refine_response
-
-        # Undo
-        undo_response = await llm_chat.handle_slash_command("/undo")
-        assert "Reverted" in undo_response
-
-        # Refine again
-        mock_llm_client.call.return_value = refined_task_spec_json
-        refine2_response = await llm_chat.handle_message("Add settings to blocks")
-        assert "Refineme" in refine2_response or "Refinement" in refine2_response
-        # Confirm
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.create_task.return_value = "bd-a1b2"
-        confirm_response = await llm_chat.handle_slash_command("/confirm")
-        assert "✓ Task created: bd-a1b2" in confirm_response
-
 
 class TestSlashCommands:
     """Test all slash commands."""
 
     @pytest.mark.asyncio
-    async def test_tasks_command_lists_open_tasks(self, llm_chat, mock_beads_client):
-        """Test /tasks lists open tasks."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.search_tasks.return_value = [
-            {"id": "bd-a1b2", "title": "Fix bug", "status": "open"},
-            {"id": "bd-c3d4", "title": "Add feature", "status": "open"},
-        ]
-
-        response = await llm_chat.handle_slash_command("/tasks")
-
-        assert "📋 OPEN TASKS" in response
-        assert "bd-a1b2 - Fix bug" in response
-        assert "bd-c3d4 - Add feature" in response
-
-    @pytest.mark.asyncio
-    async def test_tasks_command_no_beads_client(self, llm_chat):
+    async def test_tasks_command_no_store(self, llm_chat):
         """Test /tasks without task store configured."""
         response = await llm_chat.handle_slash_command("/tasks")
         assert "Failed to list tasks" in response
 
     @pytest.mark.asyncio
-    async def test_tasks_command_no_tasks_found(self, llm_chat, mock_beads_client):
-        """Test /tasks with no tasks found."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.search_tasks.return_value = []
-
-        response = await llm_chat.handle_slash_command("/tasks")
-        assert "No open tasks found" in response
-
-    @pytest.mark.asyncio
-    async def test_task_command_shows_details(self, llm_chat, mock_beads_client):
-        """Test /task <id> shows task details."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.get_dependencies.return_value = {
-            "blocks": ["bd-x1y2"],
-            "blocked_by": ["bd-a3b4"],
-        }
-
-        response = await llm_chat.handle_slash_command("/task bd-c5d6")
-
-        assert "📋 TASK: bd-c5d6" in response
-        assert "DEPENDENCIES" in response
-        assert "blocks: bd-x1y2" in response
-        assert "blocked_by: bd-a3b4" in response
-
-    @pytest.mark.asyncio
-    async def test_task_command_no_args(self, llm_chat, mock_beads_client):
-        """Test /task without task ID argument."""
-        await llm_chat.set_beads_client(mock_beads_client)
+    async def test_task_command_no_args(self, llm_chat):
         response = await llm_chat.handle_slash_command("/task")
         assert "Usage: /task <task-id>" in response
 
     @pytest.mark.asyncio
-    async def test_task_command_no_beads_client(self, llm_chat):
+    async def test_task_command_no_store(self, llm_chat):
         """Test /task without task store configured."""
         response = await llm_chat.handle_slash_command("/task bd-a1b2")
         assert "Failed to get dependencies" in response
-
-    @pytest.mark.asyncio
-    async def test_ready_command_lists_ready_tasks(self, llm_chat, mock_beads_client):
-        """Test /ready lists ready tasks."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.search_tasks.return_value = [
-            {"id": "bd-x1y2", "title": "Ready task 1", "status": "ready"},
-            {"id": "bd-a3b4", "title": "Ready task 2", "status": "ready"},
-        ]
-
-        response = await llm_chat.handle_slash_command("/ready")
-
-        assert "✅ READY TASKS" in response
-        assert "bd-x1y2 - Ready task 1" in response
-        assert "bd-a3b4 - Ready task 2" in response
 
     @pytest.mark.asyncio
     async def test_status_command_with_active_task(self, llm_chat, mock_llm_client, sample_task_spec_json):
@@ -439,7 +319,7 @@ class TestErrorHandling:
         assert "at original task" in response
 
     @pytest.mark.asyncio
-    async def test_confirm_without_beads_client(self, llm_chat, mock_llm_client, sample_task_spec_json):
+    async def test_confirm_without_store(self, llm_chat, mock_llm_client, sample_task_spec_json):
         """Test /confirm without task store configured."""
         mock_llm_client.call.return_value = sample_task_spec_json
         await llm_chat.handle_message("Fix login bug")
@@ -448,50 +328,15 @@ class TestErrorHandling:
         assert "Failed to create task" in response
 
     @pytest.mark.asyncio
-    async def test_confirm_without_task(self, llm_chat, mock_beads_client):
-        """Test /confirm when no task is active."""
-        await llm_chat.set_beads_client(mock_beads_client)
+    async def test_confirm_without_task(self, llm_chat):
         response = await llm_chat.handle_slash_command("/confirm")
         assert "No current task to confirm" in response
-
-    @pytest.mark.asyncio
-    async def test_confirm_beads_error(self, llm_chat, mock_llm_client, mock_beads_client, sample_task_spec_json):
-        """Test /confirm when Beads client raises an error."""
-        mock_llm_client.call.return_value = sample_task_spec_json
-        await llm_chat.handle_message("Fix login bug")
-
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.create_task.side_effect = Exception("Task store unavailable")
-
-        response = await llm_chat.handle_slash_command("/confirm")
-        assert "❌ Failed to create task" in response
-        assert "Beads service unavailable" in response
 
     @pytest.mark.asyncio
     async def test_discard_without_task(self, llm_chat):
         """Test /discard when no task is active."""
         response = await llm_chat.handle_slash_command("/discard")
         assert "No current task or breakdown to discard" in response
-
-    @pytest.mark.asyncio
-    async def test_tasks_beads_error(self, llm_chat, mock_beads_client):
-        """Test /tasks when Beads client raises an error."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.search_tasks.side_effect = Exception("Connection failed")
-
-        response = await llm_chat.handle_slash_command("/tasks")
-        assert "❌ Failed to list tasks" in response
-        assert "Connection failed" in response
-
-    @pytest.mark.asyncio
-    async def test_task_beads_error(self, llm_chat, mock_beads_client):
-        """Test /task when Beads client raises an error."""
-        await llm_chat.set_beads_client(mock_beads_client)
-        mock_beads_client.get_dependencies.side_effect = Exception("Task not found")
-
-        response = await llm_chat.handle_slash_command("/task bd-a1b2")
-        assert "❌ Failed to get dependencies" in response
-        assert "Task not found" in response
 
     @pytest.mark.asyncio
     async def test_refine_invalid_json(self, llm_chat, mock_llm_client, sample_task_spec_json):
@@ -1233,52 +1078,6 @@ class TestTaskDecomposition:
         assert "/discard" in error_response
 
     @pytest.mark.asyncio
-    async def test_confirm_with_invalid_dependencies(self, llm_chat, mock_beads_client, sample_breakdown):
-        """Test /confirm with invalid dependency indices."""
-        # Set Beads client
-        await llm_chat.set_beads_client(mock_beads_client)
-
-        # Modify breakdown to have invalid dependencies
-        invalid_breakdown = TaskBreakdown(
-            items=[
-                TaskBreakdownItem(
-                    title="Task 1",
-                    description="First task",
-                    estimated_effort="1 day",
-                    success_criteria=[],
-                    blockers=[],
-                    dependencies=[],
-                    tags=[],
-                ),
-                TaskBreakdownItem(
-                    title="Task 2",
-                    description="Second task with invalid dependency",
-                    estimated_effort="1 day",
-                    success_criteria=[],
-                    blockers=[],
-                    dependencies=[5],  # Invalid: index 5 doesn't exist
-                    tags=[],
-                ),
-            ],
-            summary="Invalid breakdown",
-            created_at="2026-01-28T00:00:00",
-        )
-
-        llm_chat.session.current_breakdown = invalid_breakdown
-
-        # Try to confirm
-        response = await llm_chat.handle_slash_command("/confirm")
-
-        # Verify error about invalid dependencies
-        assert "invalid dependencies" in response.lower() or "invalid" in response.lower()
-
-        # Verify no tasks were created
-        mock_beads_client.create_task.assert_not_called()
-
-        # Verify breakdown is still in session
-        assert llm_chat.session.current_breakdown is not None
-
-    @pytest.mark.asyncio
     async def test_refine_breakdown_with_invalid_json(self, llm_chat, mock_llm_client, sample_breakdown):
         """Test /refine (alias for /edit) with invalid JSON response from LLM."""
         # Set up breakdown
@@ -1296,33 +1095,3 @@ class TestTaskDecomposition:
 
         # Verify original breakdown is preserved
         assert llm_chat.session.current_breakdown == sample_breakdown
-
-    @pytest.mark.asyncio
-    async def test_confirm_breakdown_with_beads_error(self, llm_chat, mock_beads_client, sample_breakdown):
-        """Test /confirm when Beads create_task fails mid-way."""
-        # Set Beads client
-        await llm_chat.set_beads_client(mock_beads_client)
-
-        # Set up breakdown
-        llm_chat.session.current_breakdown = sample_breakdown
-
-        # Mock Beads to fail on second task
-        mock_beads_client.create_task = AsyncMock(
-            side_effect=[
-                "bd-task1",  # First task succeeds
-                Exception("Task store unavailable"),  # Second task fails
-            ]
-        )
-
-        # Try to confirm
-        response = await llm_chat.handle_slash_command("/confirm")
-
-        # Verify error message with context
-        assert "Failed to create task" in response
-        assert "Stopped at task 2/3" in response
-
-        # Verify first task was created
-        assert mock_beads_client.create_task.call_count == 2
-
-        # Verify breakdown is still in session (can retry)
-        assert llm_chat.session.current_breakdown is not None

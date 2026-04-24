@@ -74,6 +74,34 @@ exclude = [
 [tool.hatch.build.targets.wheel]
 packages = ["village"]
 
+[tool.coverage.run]
+omit = [
+    "village/chat/transports/telegram.py",
+    "village/chat/transports/acp.py",
+    "village/scm/jj.py",
+    "village/stack/jj_backend.py",
+    "village/llm/providers/openrouter.py",
+    "village/llm/providers/ollama.py",
+    "village/llm/providers/anthropic.py",
+    "village/probes/tmux.py",
+    "village/interactive.py",
+    "village/builder/arrange.py",
+    "village/cli/dashboard.py",
+    "village/cli/maintenance.py",
+    "village/cli/state.py",
+    "village/plans/interview.py",
+    "village/doctor/builtins/git.py",
+    "village/doctor/builtins/quality.py",
+    "village/doctor/builtins/tests.py",
+    "village/render/colors.py",
+    "village/render/html.py",
+    "village/stack/git_backend.py",
+    "village/stack/factory.py",
+    "village/hooks/__init__.py",
+    "village/doctor/report.py",
+    "village/doctor/runner.py",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",

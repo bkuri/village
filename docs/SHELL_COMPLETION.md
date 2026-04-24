@@ -24,7 +24,7 @@ source ~/.bashrc
 ```bash
 village <TAB>              # Complete commands
 village status <TAB>         # Complete status options
-village resume <TAB>         # Complete task IDs (if beads available)
+village resume <TAB>         # Complete task IDs (if native task store available)
 village queue <TAB>         # Complete queue options
 ```
 
@@ -50,7 +50,7 @@ source ~/.zshrc
 ```zsh
 village <TAB>              # Complete commands
 village status <TAB>         # Complete status options
-village resume <TAB>         # Complete task IDs (if beads available)
+village resume <TAB>         # Complete task IDs (if native task store available)
 village queue <TAB>         # Complete queue options
 ```
 
@@ -71,7 +71,7 @@ Village completion uses multiple sources:
 
 1. **Commands**: `up`, `down`, `status`, `resume`, `queue`, `ready`, `cleanup`, `unlock`, `locks`
 2. **Options**: `--verbose`, `--json`, `--workers`, `--orphans`, `--agent`, `--detached`, `--html`, `--dry-run`, `--apply`, `--force`, `--n`, `--short`, `--locks`
-3. **Task IDs**: Retrieved from `bd ready` (if beads available)
+3. **Task IDs**: Retrieved from `village tasks ready` (if village tasks available)
 4. **Agent Names**: Retrieved from `.village/config` agent definitions
 
 ## Troubleshooting
@@ -109,23 +109,23 @@ Both should be `bash_source` or `zsh_source`.
 
 **Symptom**: `village resume <TAB>` doesn't complete task IDs.
 
-**Solution**: Task ID completion requires Beads (`bd` command) to be available and initialized.
+**Solution**: Task ID completion works automatically when `village tasks` is available.
 
 ```bash
-# Check if beads is available
-bd --version
+# Check if village CLI is available
+village --version
 
-# Check if beads is initialized
-ls .beads/
+# Check if tasks are initialized
+ls .village/tasks.jsonl
 ```
 
-If beads is not available, use explicit task IDs instead of completion.
+If village tasks is not available, use explicit task IDs instead of completion.
 
 ## Customizing Completion
 
 Click's completion system supports dynamic completion via functions. Village can be extended to provide:
 
-- Custom task ID sources (not just Beads)
+- Custom task ID sources (not just village tasks)
 - Agent name completion from `.village/config`
 - Completion for custom contract files
 

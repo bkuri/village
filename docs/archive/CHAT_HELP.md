@@ -4,9 +4,9 @@
 These commands work in both knowledge-share and task-create modes:
 
 - `/help [topic]` — show help (topics: commands, tasks, context, files, policy, workflow)
-- `/tasks` — list Beads tasks
+- `/tasks` — list village tasks
 - `/task <id>` — show task details
-- `/ready` — show ready tasks (Beads)
+- `/ready` — show ready tasks
 - `/status` — show Village status summary
 - `/queue` — alias for /ready
 - `/lock` — show active locks
@@ -52,7 +52,7 @@ $ village chat
 - `open-questions.md` — Outstanding questions
 
 ### Workflow 2: Task Creation (Single Task)
-Define a single task for execution in Beads.
+Define a single task for execution in village tasks.
 
 ```bash
 $ village chat --create
@@ -72,7 +72,7 @@ $ village chat --create
 > /exit
 ```
 
-**Output**: Beads task created with ID `bd-a1b2c3`
+**Output**: Village task created with ID `village-xxxx`
 
 ### Workflow 3: Task Creation (Batch)
 Define multiple related tasks at once.
@@ -92,7 +92,7 @@ $ village chat --create
 > /exit
 ```
 
-**Output**: 3 Beads tasks created in a single batch
+**Output**: 3 village tasks created in a single batch
 
 ### Workflow 4: Review and Refine Tasks
 Review all drafts, edit as needed, then submit.
@@ -144,7 +144,7 @@ $ village chat --create
 > /exit
 ```
 
-**Note**: Reset deletes created Beads tasks but preserves all drafts for resubmission.
+**Note**: Reset deletes created village tasks but preserves all drafts for resubmission.
 
 ### Workflow 7: Automatic Task Decomposition
 When tasks are complex, Village automatically offers to break them down using the **ST → AoT Light** strategy (Sequential Thinking + Atom of Thoughts).
@@ -176,17 +176,17 @@ $ village chat --create
 > └────────────────────────────────────────────────────┘
 > 
 > Actions:
->   /confirm   Create all subtasks in Beads
+>   /confirm   Create all subtasks in village tasks
 >   /edit      Refine entire breakdown
 >   /discard   Cancel this breakdown
 >
 > /confirm
 > ✓ Created 5 subtasks:
->   bd-a1b2: Setup OAuth2 provider integration
->   bd-c3d4: Implement MFA with TOTP
->   bd-e5f6: Add session management with Redis
->   bd-g7h8: Create authentication middleware
->   bd-i9j0: Write integration tests
+>   village-a1b2: Setup OAuth2 provider integration
+>   village-c3d4: Implement MFA with TOTP
+>   village-e5f6: Add session management with Redis
+>   village-g7h8: Create authentication middleware
+>   village-i9j0: Write integration tests
 > /exit
 ```
 
@@ -207,7 +207,7 @@ $ village chat
 
 > /tasks
 > /ready
-> What is the priority of bd-xxxxxx?
+> What is the priority of village-xxxxxx?
 > /create "Fix authentication issue"
 > [Q&A...]
 > /drafts
@@ -254,7 +254,7 @@ For automation and scripting:
 | 3002 | RESET_FAILED | Reset operation failed |
 | 4001 | MODE_CONFLICT | Command not available in current mode |
 | 5001 | INVALID_STATE | Session state corrupted |
-| 5002 | OPERATION_FAILED | Critical error (e.g., Beads not found) |
+| 5002 | OPERATION_FAILED | Critical error (e.g., tasks unavailable) |
 
 ## Examples
 

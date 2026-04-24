@@ -11,7 +11,7 @@
 Village is evolving from a **task decomposition tool** into a **platform for domain-specific AI applications**. This PRD defines the extensibility hooks that allow specialized domains (trading, research, planning, etc.) to customize Village's behavior without tight coupling.
 
 ### **Core Principle**
-- **Village provides the infrastructure**: chat loop, sequential thinking, MCP tool invocation, beads integration
+- **Village provides the infrastructure**: chat loop, sequential thinking, MCP tool invocation, task hooks
 - **Domains provide the logic**: how to process messages, invoke tools, refine queries, manage state
 
 ### **Design Philosophy**
@@ -361,43 +361,43 @@ class TradingChatContext(ChatContext):
 
 ---
 
-### **2.5 Beads Integration** (`BeadsIntegrator`)
+### **2.5 Task Integration** (`TaskHooks`)
 
-**Purpose**: Customize how domain creates/updates beads.
+**Purpose**: Customize how domain creates/updates tasks.
 
 **Use Cases**:
-- Trading: Create beads for tasks, link to knowledge store
-- Research: Create research project beads
+- Trading: Create tasks for trading workflows, link to knowledge store
+- Research: Create research project tasks
 - Planning: Integrate with planning workflows
 
 **Abstract Class**:
 ```python
-class BeadsIntegrator(ABC):
-    """Hook for beads integration."""
+class TaskHooks(ABC):
+    """Hook for task integration."""
     
-    async def should_create_bead(
+    async def should_create_task_hook(
         self,
         session_context: Dict[str, Any]
     ) -> bool:
-        """Decide if bead should be created."""
-        return False  # Default: don't create bead
+        """Decide if task hook should fire."""
+        return False  # Default: don't create
     
-    async def create_bead(
+    async def create_task_hook(
         self,
         title: str,
         description: str,
         session_context: Dict[str, Any]
     ) -> str:
-        """Create bead and return ID."""
+        """Create task and return ID."""
         pass
     
-    async def update_bead(
+    async def update_task(
         self,
-        bead_id: str,
+        task_id: str,
         status: str,
         session_context: Dict[str, Any]
     ) -> None:
-        """Update bead status."""
+        """Update task status."""
         pass
 ```
 
@@ -476,7 +476,7 @@ class ExtensionRegistry:
     _tool_invokers: List[ToolInvoker] = []
     _thinking_refiners: List[ThinkingRefiner] = []
     _chat_contexts: List[ChatContext] = []
-    _beads_integrators: List[BeadsIntegrator] = []
+    _task_hooks: List[TaskHooks] = []
     _server_discoveries: List[ServerDiscovery] = []
     _llm_adapters: List[LLMProviderAdapter] = []
     
@@ -510,7 +510,7 @@ def bootstrap_trading_extensions():
     ExtensionRegistry.register_tool_invoker(TradingToolInvoker())
     ExtensionRegistry.register_thinking_refiner(TradingThinkingRefiner())
     ExtensionRegistry.register_chat_context(TradingChatContext())
-    ExtensionRegistry.register_beads_integrator(TradingBeadsIntegrator())
+    ExtensionRegistry.register_task_hooks(TradingTaskHooks())
     ExtensionRegistry.register_server_discovery(TradingServerDiscovery())
 ```
 
@@ -574,7 +574,7 @@ sequential_thinking = true
 - Default ToolInvoker (MCPUseClient wrapper)
 - Default ThinkingRefiner (pass-through)
 - Default ChatContext (in-memory only)
-- Default BeadsIntegrator (no-op)
+- Default TaskHooks (no-op)
 - Default ServerDiscovery (static config)
 - Default LLMProviderAdapter (use config)
 
@@ -658,7 +658,7 @@ A: Type hints + docstrings. Domains responsible for correct implementation. Test
 A: ExtensionRegistry supports it. All extensions called in order. Domains responsible for not conflicting.
 
 **Q: How to share state between extensions?**
-A: Via context dict passed through call chain. Or domain-specific storage (knowledge store, beads, etc.).
+A: Via context dict passed through call chain. Or domain-specific storage (knowledge store, native task store, etc.).
 
 **Q: Version compatibility?**
 A: Hook ABCs are stable contracts. Minor changes backward compatible. Major changes = new hook version.

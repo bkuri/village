@@ -8,7 +8,7 @@ Complete API reference for all extensibility extension points, including abstrac
 2. [ToolInvoker](#toolinvoker) - MCP tool invocation customization
 3. [ThinkingRefiner](#thinkingrefiner) - Domain-specific query refinement
 4. [ChatContext](#chatcontext) - Session state management
-5. [BeadsIntegrator](#beadsintegrator) - Beads task management
+5. [TaskHooks](#taskhooks) - Task management hooks
 6. [ServerDiscovery](#serverdiscovery) - Dynamic MCP server discovery
 7. [LLMProviderAdapter](#llmprovideradapter) - LLM provider configuration
 8. [ExtensionRegistry](#extensionregistry) - Extension management
@@ -669,7 +669,7 @@ from village.extensibility.context import SessionContext
 context = SessionContext(
     session_id="session-123",
     user_data={
-        "recent_tasks": ["bd-a1b2", "bd-c3d4"],
+        "recent_tasks": ["task-1", "task-2"],
         "strategy_path": "/strategies/btc_momentum"
     },
     metadata={"created_at": "2026-01-28T10:00:00Z"}
@@ -765,34 +765,34 @@ await context_mgr.save_context(context)
 
 ---
 
-## BeadsIntegrator
+## TaskHooks
 
-Abstract base class for beads task management customization. Allows domains to create and manage beads tasks with domain-specific metadata, links, and hierarchy.
+Abstract base class for task management customization. Allows domains to create and manage tasks with domain-specific metadata, links, and hierarchy.
 
 ### Abstract Class
 
 ```python
 from abc import ABC, abstractmethod
 
-class BeadsIntegrator(ABC):
-    """Base class for beads task management customization.
+class TaskHooks(ABC):
+    """Base class for task management customization.
 
-    Allows domains to create and manage beads tasks with domain-specific
+    Allows domains to create and manage tasks with domain-specific
     metadata, links, and hierarchy.
     """
 ```
 
 ### Methods
 
-#### `should_create_bead(context: dict[str, Any]) -> bool`
+#### `should_create_task_hook(context: dict[str, Any]) -> bool`
 
-Determine if bead should be created.
+Determine if task hook should fire.
 
 **Parameters:**
 - `context` (dict[str, Any]): Context dictionary with task info
 
 **Returns:**
-- bool: True if bead should be created
+- bool: True if task hook should fire
 
 **Raises:**
 - None
@@ -800,20 +800,20 @@ Determine if bead should be created.
 **Usage:**
 
 ```python
-async def should_create_bead(self, context: dict[str, Any]) -> bool:
-    # Only create beads for backtest tasks
+async def should_create_task_hook(self, context: dict[str, Any]) -> bool:
+    # Only fire for backtest tasks
     return context.get("task_type") == "backtest"
 ```
 
-#### `create_bead_spec(context: dict[str, Any]) -> BeadSpec`
+#### `create_hook_spec(context: dict[str, Any]) -> TaskHookSpec`
 
-Create bead specification from context.
+Create task hook specification from context.
 
 **Parameters:**
 - `context` (dict[str, Any]): Context dictionary with task info
 
 **Returns:**
-- BeadSpec: BeadSpec for bead creation
+- TaskHookSpec: TaskHookSpec for task creation
 
 **Raises:**
 - None
@@ -821,8 +821,8 @@ Create bead specification from context.
 **Usage:**
 
 ```python
-async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
-    return BeadSpec(
+async def create_hook_spec(self, context: dict[str, Any]) -> TaskHookSpec:
+    return TaskHookSpec(
         title=context["title"],
         description=context["description"],
         issue_type="task",
@@ -835,12 +835,12 @@ async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
     )
 ```
 
-#### `on_bead_created(bead: BeadCreated, context: dict[str, Any]) -> None`
+#### `on_task_created(created: TaskCreated, context: dict[str, Any]) -> None`
 
-Handle bead creation. Can link bead to domain objects, update metadata, etc.
+Handle task creation. Can link task to domain objects, update metadata, etc.
 
 **Parameters:**
-- `bead` (BeadCreated): Created bead
+- `created` (TaskCreated): Created task
 - `context` (dict[str, Any]): Original context
 
 **Returns:**
@@ -852,19 +852,19 @@ Handle bead creation. Can link bead to domain objects, update metadata, etc.
 **Usage:**
 
 ```python
-async def on_bead_created(self, bead: BeadCreated, context: dict[str, Any]) -> None:
-    # Update task with bead ID
+async def on_task_created(self, created: TaskCreated, context: dict[str, Any]) -> None:
+    # Update task with linked ID
     task = self.get_task(context["task_id"])
-    task.bead_id = bead.bead_id
+    task.linked_id = created.task_id
     task.save()
 ```
 
-#### `on_bead_updated(bead_id: str, updates: dict[str, Any]) -> None`
+#### `on_task_updated(task_id: str, updates: dict[str, Any]) -> None`
 
-Handle bead update.
+Handle task update.
 
 **Parameters:**
-- `bead_id` (str): ID of updated bead
+- `task_id` (str): ID of updated task
 - `updates` (dict[str, Any]): Dictionary of updates
 
 **Returns:**
@@ -876,19 +876,19 @@ Handle bead update.
 **Usage:**
 
 ```python
-async def on_bead_updated(self, bead_id: str, updates: dict[str, Any]) -> None:
+async def on_task_updated(self, task_id: str, updates: dict[str, Any]) -> None:
     # Sync updates to linked task
     if "status" in updates:
-        task = self.get_task_by_bead_id(bead_id)
+        task = self.get_task_by_id(task_id)
         task.status = updates["status"]
         task.save()
 ```
 
 ### Dataclasses
 
-#### `BeadSpec`
+#### `TaskHookSpec`
 
-Beads task specification.
+Task hook specification.
 
 **Fields:**
 
@@ -899,23 +899,23 @@ Beads task specification.
 | `issue_type` | str | - | Issue type: bug, feature, task, epic, chore |
 | `priority` | int | - | Priority: 0-4 (0=lowest, 4=highest) |
 | `tags` | list[str] \| None | [] | Optional tags |
-| `parent_id` | Optional[str] | None | Optional parent bead ID |
+| `parent_id` | Optional[str] | None | Optional parent task ID |
 | `deps` | list[str] \| None | [] | Optional dependency IDs |
 | `metadata` | dict[str, Any] \| None | {} | Optional metadata |
 
 **Usage:**
 
 ```python
-from village.extensibility.beads_integrators import BeadSpec
+from village.extensibility.task_hooks import TaskHookSpec
 
-spec = BeadSpec(
+spec = TaskHookSpec(
     title="Backtest BTC momentum strategy",
     description="Run backtest on BTC momentum strategy for 2025",
     issue_type="task",
     priority=2,
     tags=["backtest", "btc", "momentum"],
-    parent_id="bd-parent-123",
-    deps=["bd-dep-1", "bd-dep-2"],
+    parent_id="parent-123",
+    deps=["dep-1", "dep-2"],
     metadata={
         "strategy_path": "/strategies/btc_momentum",
         "risk_style": "aggressive",
@@ -924,27 +924,27 @@ spec = BeadSpec(
 )
 ```
 
-#### `BeadCreated`
+#### `TaskCreated`
 
-Result of bead creation.
+Result of task creation.
 
 **Fields:**
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `bead_id` | str | - | Created bead ID |
-| `parent_id` | Optional[str] | None | Parent bead ID (if any) |
+| `task_id` | str | - | Created task ID |
+| `parent_id` | Optional[str] | None | Parent task ID (if any) |
 | `created_at` | str | - | Creation timestamp (ISO 8601) |
 | `metadata` | dict[str, Any] \| None | {} | Optional metadata |
 
 **Usage:**
 
 ```python
-from village.extensibility.beads_integrators import BeadCreated
+from village.extensibility.task_hooks import TaskCreated
 
-bead = BeadCreated(
-    bead_id="bd-abc123",
-    parent_id="bd-parent-123",
+task = TaskCreated(
+    task_id="task-abc123",
+    parent_id="parent-123",
     created_at="2026-01-28T10:30:00Z",
     metadata={"source": "village"}
 )
@@ -952,32 +952,32 @@ bead = BeadCreated(
 
 ### Default Implementation
 
-**Class:** `DefaultBeadsIntegrator`
+**Class:** `DefaultTaskHooks`
 
-Provides no-op beads integration for backward compatibility.
+Provides no-op task hooks for backward compatibility.
 
 **Behavior:**
-- `should_create_bead()`: Always returns False
-- `create_bead_spec()`: Returns minimal spec
-- `on_bead_created()`: Does nothing
-- `on_bead_updated()`: Does nothing
+- `should_create_task_hook()`: Always returns False
+- `create_hook_spec()`: Returns minimal spec
+- `on_task_created()`: Does nothing
+- `on_task_updated()`: Does nothing
 
 ### Complete Usage Example
 
 ```python
-from village.extensibility import BeadsIntegrator
-from village.extensibility.beads_integrators import BeadSpec, BeadCreated
+from village.extensibility import TaskHooks
+from village.extensibility.task_hooks import TaskHookSpec, TaskCreated
 
-class TradingBeadsIntegrator(BeadsIntegrator):
-    """Trading-specific beads integrator."""
+class TradingTaskHooks(TaskHooks):
+    """Trading-specific task hooks."""
 
-    async def should_create_bead(self, context: dict[str, Any]) -> bool:
-        # Create beads for backtest and optimization tasks
+    async def should_create_task_hook(self, context: dict[str, Any]) -> bool:
+        # Create hooks for backtest and optimization tasks
         task_types = ["backtest", "optimization", "analysis"]
         return context.get("task_type") in task_types
 
-    async def create_bead_spec(self, context: dict[str, Any]) -> BeadSpec:
-        """Create bead spec with trading-specific metadata."""
+    async def create_hook_spec(self, context: dict[str, Any]) -> TaskHookSpec:
+        """Create hook spec with trading-specific metadata."""
         task_type = context["task_type"]
 
         # Determine priority based on task type
@@ -987,7 +987,7 @@ class TradingBeadsIntegrator(BeadsIntegrator):
         # Create tags
         tags = [task_type, context.get("asset_class", "crypto").lower()]
 
-        return BeadSpec(
+        return TaskHookSpec(
             title=f"{task_type.capitalize()} {context.get('strategy_name', 'strategy')}",
             description=context.get("description", ""),
             issue_type="task",
@@ -1002,17 +1002,17 @@ class TradingBeadsIntegrator(BeadsIntegrator):
             }
         )
 
-    async def on_bead_created(self, bead: BeadCreated, context: dict[str, Any]) -> None:
-        """Link bead to trading task."""
-        # Update task with bead ID
+    async def on_task_created(self, created: TaskCreated, context: dict[str, Any]) -> None:
+        """Link task to trading task."""
+        # Update task with linked ID
         task_id = context.get("task_id")
         if task_id:
-            self.update_task_bead_id(task_id, bead.bead_id)
-            print(f"Linked task {task_id} to bead {bead.bead_id}")
+            self.update_task_linked_id(task_id, created.task_id)
+            print(f"Linked task {task_id} to {created.task_id}")
 
-    async def on_bead_updated(self, bead_id: str, updates: dict[str, Any]) -> None:
-        """Sync bead updates to trading task."""
-        task = self.get_task_by_bead_id(bead_id)
+    async def on_task_updated(self, task_id: str, updates: dict[str, Any]) -> None:
+        """Sync task updates to trading task."""
+        task = self.get_task_by_id(task_id)
         if task:
             if "status" in updates:
                 task.status = updates["status"]
@@ -1023,10 +1023,10 @@ class TradingBeadsIntegrator(BeadsIntegrator):
 # Register with registry
 from village.extensibility import ExtensionRegistry
 registry = ExtensionRegistry()
-registry.register_beads_integrator(TradingBeadsIntegrator())
+registry.register_task_hooks(TradingTaskHooks())
 
 # Use when creating tasks
-integrator = registry.get_beads_integrator()
+hooks = registry.get_task_hooks()
 context = {
     "task_type": "backtest",
     "strategy_name": "BTC Momentum",
@@ -1037,16 +1037,16 @@ context = {
     "task_id": "task-123"
 }
 
-if await integrator.should_create_bead(context):
-    spec = await integrator.create_bead_spec(context)
-    # Create bead in Beads system
-    bead_id = self.beads_client.create(spec)
-    bead = BeadCreated(
-        bead_id=bead_id,
+if await hooks.should_create_task_hook(context):
+    spec = await hooks.create_hook_spec(context)
+    # Create task in native task store
+    task_id = self.tasks_client.create(spec)
+    task = TaskCreated(
+        task_id=task_id,
         parent_id=None,
         created_at="2026-01-28T10:30:00Z"
     )
-    await integrator.on_bead_created(bead, context)
+    await hooks.on_task_created(task, context)
 ```
 
 ---
@@ -1649,12 +1649,12 @@ class MyContext(ChatContext):
 registry.register_chat_context(MyContext())
 ```
 
-#### `register_beads_integrator(integrator: BeadsIntegrator) -> None`
+#### `register_task_hooks(hooks: TaskHooks) -> None`
 
-Register beads integrator.
+Register task hooks.
 
 **Parameters:**
-- `integrator` (BeadsIntegrator): BeadsIntegrator implementation
+- `hooks` (TaskHooks): TaskHooks implementation
 
 **Returns:**
 - None
@@ -1662,13 +1662,13 @@ Register beads integrator.
 **Usage:**
 
 ```python
-from village.extensibility.beads_integrators import BeadsIntegrator
+from village.extensibility.task_hooks import TaskHooks
 
-class MyIntegrator(BeadsIntegrator):
-    async def should_create_bead(self, context: dict) -> bool:
+class MyHooks(TaskHooks):
+    async def should_create_task_hook(self, context: dict) -> bool:
         return False
 
-registry.register_beads_integrator(MyIntegrator())
+registry.register_task_hooks(MyHooks())
 ```
 
 #### `register_server_discovery(discovery: ServerDiscovery) -> None`
@@ -1773,19 +1773,19 @@ context_mgr = registry.get_chat_context()
 context = await context_mgr.load_context("session-123")
 ```
 
-#### `get_beads_integrator() -> BeadsIntegrator`
+#### `get_task_hooks() -> TaskHooks`
 
-Get registered beads integrator.
+Get registered task hooks.
 
 **Returns:**
-- BeadsIntegrator: Registered BeadsIntegrator implementation
+- TaskHooks: Registered TaskHooks implementation
 
 **Usage:**
 
 ```python
-integrator = registry.get_beads_integrator()
-if await integrator.should_create_bead(context):
-    spec = await integrator.create_bead_spec(context)
+hooks = registry.get_task_hooks()
+if await hooks.should_create_task_hook(context):
+    spec = await hooks.create_hook_spec(context)
 ```
 
 #### `get_server_discovery() -> ServerDiscovery`
@@ -1862,7 +1862,7 @@ from village.extensibility import (
     ToolInvoker,
     ThinkingRefiner,
     ChatContext,
-    BeadsIntegrator,
+    TaskHooks,
     ServerDiscovery,
     LLMProviderAdapter
 )
@@ -1911,7 +1911,7 @@ print(f"Registered extensions: {names}")
 #     'tool_invoker': 'CachingToolInvoker',
 #     'thinking_refiner': 'DefaultThinkingRefiner',
 #     'chat_context': 'DefaultChatContext',
-#     'beads_integrator': 'DefaultBeadsIntegrator',
+#     'task_hooks': 'DefaultTaskHooks',
 #     'server_discovery': 'DefaultServerDiscovery',
 #     'llm_adapter': 'DefaultLLMProviderAdapter'
 # }
@@ -1935,7 +1935,7 @@ print(f"After reset: {names}")
 | ToolInvoker | Tool invocation hooks | should_invoke(), transform_args(), on_success(), on_error() | DefaultToolInvoker |
 | ThinkingRefiner | Query refinement | should_refine(), refine_query() | DefaultThinkingRefiner |
 | ChatContext | Session state management | load_context(), save_context(), enrich_context() | DefaultChatContext |
-| BeadsIntegrator | Beads task management | should_create_bead(), create_bead_spec(), on_bead_created(), on_bead_updated() | DefaultBeadsIntegrator |
+| TaskHooks | Task management hooks | should_create_task_hook(), create_hook_spec(), on_task_created(), on_task_updated() | DefaultTaskHooks |
 | ServerDiscovery | MCP server discovery | discover_servers(), filter_servers(), should_load_server() | DefaultServerDiscovery |
 | LLMProviderAdapter | LLM configuration | adapt_config(), should_retry(), get_retry_delay() | DefaultLLMProviderAdapter |
 
@@ -1948,8 +1948,8 @@ print(f"After reset: {names}")
 | ToolResult | tool_invokers | Tool invocation result |
 | QueryRefinement | thinking_refiners | Refined query with steps |
 | SessionContext | context | Session context data |
-| BeadSpec | beads_integrators | Beads task specification |
-| BeadCreated | beads_integrators | Bead creation result |
+| TaskHookSpec | task_hooks | Task hook specification |
+| TaskCreated | task_hooks | Task creation result |
 | MCPServer | server_discovery | MCP server specification |
 | LLMProviderConfig | llm_adapters | LLM provider configuration |
 
@@ -1966,7 +1966,7 @@ from village.extensibility.processors import ChatProcessor
 from village.extensibility.tool_invokers import ToolInvoker
 from village.extensibility.thinking_refiners import ThinkingRefiner
 from village.extensibility.context import ChatContext
-from village.extensibility.beads_integrators import BeadsIntegrator
+from village.extensibility.task_hooks import TaskHooks
 from village.extensibility.server_discovery import ServerDiscovery
 from village.extensibility.llm_adapters import LLMProviderAdapter
 
@@ -1975,7 +1975,7 @@ from village.extensibility.processors import DefaultChatProcessor
 from village.extensibility.tool_invokers import DefaultToolInvoker
 from village.extensibility.thinking_refiners import DefaultThinkingRefiner
 from village.extensibility.context import DefaultChatContext
-from village.extensibility.beads_integrators import DefaultBeadsIntegrator
+from village.extensibility.task_hooks import DefaultTaskHooks
 from village.extensibility.server_discovery import DefaultServerDiscovery
 from village.extensibility.llm_adapters import DefaultLLMProviderAdapter
 
@@ -1984,7 +1984,7 @@ from village.extensibility.processors import ProcessingResult
 from village.extensibility.tool_invokers import ToolInvocation, ToolResult
 from village.extensibility.thinking_refiners import QueryRefinement
 from village.extensibility.context import SessionContext
-from village.extensibility.beads_integrators import BeadSpec, BeadCreated
+from village.extensibility.task_hooks import TaskHookSpec, TaskCreated
 from village.extensibility.server_discovery import MCPServer
 from village.extensibility.llm_adapters import LLMProviderConfig
 ```

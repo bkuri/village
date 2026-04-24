@@ -355,7 +355,7 @@ def execute_scaffold(
         store.initialize()
         created.append("tasks init")
         logger.debug("Task store initialized")
-    except Exception as e:
+    except (OSError, ImportError) as e:
         logger.debug(f"Task store init skipped: {e}")
 
     # 7. git hooks
@@ -364,7 +364,7 @@ def execute_scaffold(
 
         install_hooks(project_dir, dry_run=False)
         created.append("git hooks")
-    except Exception as e:
+    except (OSError, ImportError) as e:
         logger.debug(f"Git hook install skipped: {e}")
 
     # 8. tmux session + dashboard

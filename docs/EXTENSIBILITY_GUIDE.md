@@ -24,7 +24,7 @@ The framework consists of **7 extension points**, each responsible for a specifi
 2. **ToolInvoker** — Customize MCP tool invocation
 3. **ThinkingRefiner** — Domain-specific query refinement
 4. **ChatContext** — Session state management
-5. **BeadsIntegrator** — Custom task metadata management
+5. **TaskHooks** — Custom task creation/update hooks
 6. **ServerDiscovery** — Dynamic MCP server discovery
 7. **LLMProviderAdapter** — LLM provider customization
 
@@ -179,7 +179,7 @@ Use this matrix to decide which extension point to implement:
 | Cache tool results, add audit logging, transform arguments | **ToolInvoker** |
 | Break down complex queries, add domain-specific analysis steps | **ThinkingRefiner** |
 | Persist session state, load historical data, enrich with context | **ChatContext** |
-| Create tasks with custom metadata, integrate with domain workflows | **BeadsIntegrator** |
+| Create tasks with custom metadata, integrate with domain workflows | **TaskHooks** |
 | Dynamically discover/load MCP servers based on availability | **ServerDiscovery** |
 | Customize LLM models, routing, retry logic, timeouts | **LLMProviderAdapter** |
 
@@ -334,9 +334,9 @@ class MyContext(ChatContext):
 
 ---
 
-#### 5. BeadsIntegrator
+#### 5. TaskHooks
 
-**Purpose**: Create and manage Beads tasks with custom metadata and domain-specific attributes.
+**Purpose**: Create and manage tasks with custom metadata and domain-specific attributes.
 
 **Use cases:**
 - Create tasks with custom fields (risk style, strategy path, methodology)
@@ -346,24 +346,24 @@ class MyContext(ChatContext):
 
 **When to implement:**
 - You need to create tasks with domain-specific metadata
-- You need to integrate Beads with your domain's workflow
+- You need to integrate village tasks with your domain's workflow
 - You need to link tasks to domain objects
 
 **Signature:**
 ```python
-from village.extensibility.beads_integrators import (
-    BeadsIntegrator,
-    BeadSpec,
-    BeadCreated,
+from village.extensibility.task_hooks import (
+    TaskHooks,
+    TaskHookSpec,
+    TaskCreated,
 )
 
-class MyIntegrator(BeadsIntegrator):
-    async def should_create_bead(self, context: dict) -> bool:
-        # Return True if bead should be created
+class MyHooks(TaskHooks):
+    async def should_create_task_hook(self, context: dict) -> bool:
+        # Return True if hook should fire
         return True
 
-    async def create_bead_spec(self, context: dict) -> BeadSpec:
-        return BeadSpec(
+    async def create_hook_spec(self, context: dict) -> TaskHookSpec:
+        return TaskHookSpec(
             title=context["title"],
             description=context["description"],
             issue_type="task",
@@ -372,12 +372,12 @@ class MyIntegrator(BeadsIntegrator):
             metadata={"custom_field": "value"}
         )
 
-    async def on_bead_created(self, bead: BeadCreated, context: dict) -> None:
-        # Handle bead creation
+    async def on_task_created(self, created: TaskCreated, context: dict) -> None:
+        # Handle task creation
         pass
 
-    async def on_bead_updated(self, bead_id: str, updates: dict) -> None:
-        # Handle bead updates
+    async def on_task_updated(self, task_id: str, updates: dict) -> None:
+        # Handle task updates
         pass
 ```
 
@@ -759,31 +759,31 @@ class TradingChatContext(ChatContext):
 
 ---
 
-### Tutorial 5: Custom Task Metadata with BeadsIntegrator
+### Tutorial 5: Custom Task Metadata with TaskHooks
 
 **Goal**: Create trading tasks with strategy and risk style metadata
 
-Create `trading_extensions/beads_integrators.py`:
+Create `trading_extensions/task_hooks.py`:
 
 ```python
-"""Trading Beads integrator."""
+"""Trading task hooks."""
 
-from village.extensibility.beads_integrators import (
-    BeadsIntegrator,
-    BeadSpec,
-    BeadCreated,
+from village.extensibility.task_hooks import (
+    TaskHooks,
+    TaskHookSpec,
+    TaskCreated,
 )
 
 
-class TradingBeadsIntegrator(BeadsIntegrator):
+class TradingTaskHooks(TaskHooks):
     """Create trading tasks with strategy and risk metadata."""
 
-    async def should_create_bead(self, context: dict) -> bool:
-        """Create bead for all trading tasks."""
+    async def should_create_task_hook(self, context: dict) -> bool:
+        """Create hook for all trading tasks."""
         return context.get("task_type") == "trading"
 
-    async def create_bead_spec(self, context: dict) -> BeadSpec:
-        """Create bead with trading metadata."""
+    async def create_hook_spec(self, context: dict) -> TaskHookSpec:
+        """Create hook with trading metadata."""
         title = context.get("title", "Trading Task")
         description = context.get("description", "")
 
@@ -808,7 +808,7 @@ class TradingBeadsIntegrator(BeadsIntegrator):
             "timeframe": context.get("timeframe", "1h"),
         }
 
-        return BeadSpec(
+        return TaskHookSpec(
             title=title,
             description=description,
             issue_type="task",
@@ -817,14 +817,14 @@ class TradingBeadsIntegrator(BeadsIntegrator):
             metadata=metadata,
         )
 
-    async def on_bead_created(self, bead: BeadCreated, context: dict) -> None:
-        """Handle bead creation."""
-        risk_style = bead.metadata.get("risk_style", "unknown")
-        print(f"[BEADS] Created trading task {bead.bead_id} (risk: {risk_style})")
+    async def on_task_created(self, created: TaskCreated, context: dict) -> None:
+        """Handle task creation."""
+        risk_style = created.metadata.get("risk_style", "unknown")
+        print(f"[TASKS] Created trading task {created.task_id} (risk: {risk_style})")
 
-    async def on_bead_updated(self, bead_id: str, updates: dict) -> None:
-        """Handle bead updates."""
-        print(f"[BEADS] Updated task {bead.id}: {updates}")
+    async def on_task_updated(self, task_id: str, updates: dict) -> None:
+        """Handle task updates."""
+        print(f"[TASKS] Updated task {task_id}: {updates}")
 ```
 
 ---
@@ -981,7 +981,7 @@ from trading_extensions.processors import TradingChatProcessor
 from trading_extensions.tool_invokers import TradingToolInvoker
 from trading_extensions.thinking_refiners import TradingThinkingRefiner
 from trading_extensions.context import TradingChatContext
-from trading_extensions.beads_integrators import TradingBeadsIntegrator
+from trading_extensions.task_hooks import TradingTaskHooks
 from trading_extensions.server_discovery import TradingServerDiscovery
 from trading_extensions.llm_adapters import TradingLLMAdapter
 
@@ -995,7 +995,7 @@ def bootstrap_trading_extensions() -> ExtensionRegistry:
     registry.register_tool_invoker(TradingToolInvoker())
     registry.register_thinking_refiner(TradingThinkingRefiner())
     registry.register_chat_context(TradingChatContext())
-    registry.register_beads_integrator(TradingBeadsIntegrator())
+    registry.register_task_hooks(TradingTaskHooks())
     registry.register_server_discovery(TradingServerDiscovery())
     registry.register_llm_adapter(TradingLLMAdapter())
 
@@ -1025,7 +1025,7 @@ processor_module = trading_extensions.processors.TradingChatProcessor
 tool_invoker_module = trading_extensions.tool_invokers.TradingToolInvoker
 thinking_refiner_module = trading_extensions.thinking_refiners.TradingThinkingRefiner
 chat_context_module = trading_extensions.context.TradingChatContext
-beads_integrator_module = trading_extensions.beads_integrators.TradingBeadsIntegrator
+task_hooks_module = trading_extensions.task_hooks.TradingTaskHooks
 server_discovery_module = trading_extensions.server_discovery.TradingServerDiscovery
 llm_adapter_module = trading_extensions.llm_adapters.TradingLLMAdapter
 ```
@@ -1043,7 +1043,7 @@ export VILLAGE_EXTENSION_PROCESSOR=trading_extensions.processors.TradingChatProc
 export VILLAGE_EXTENSION_TOOL_INVOKER=trading_extensions.tool_invokers.TradingToolInvoker
 export VILLAGE_EXTENSION_THINKING_REFINER=trading_extensions.thinking_refiners.TradingThinkingRefiner
 export VILLAGE_EXTENSION_CHAT_CONTEXT=trading_extensions.context.TradingChatContext
-export VILLAGE_EXTENSION_BEADS_INTEGRATOR=trading_extensions.beads_integrators.TradingBeadsIntegrator
+export VILLAGE_EXTENSION_TASK_HOOKS=trading_extensions.task_hooks.TradingTaskHooks
 export VILLAGE_EXTENSION_SERVER_DISCOVERY=trading_extensions.server_discovery.TradingServerDiscovery
 export VILLAGE_EXTENSION_LLM_ADAPTER=trading_extensions.llm_adapters.TradingLLMAdapter
 ```
@@ -1131,7 +1131,7 @@ class MyProcessor(ChatProcessor):
 
 **Use appropriate log levels**:
 - `DEBUG`: Detailed flow information
-- `INFO`: Important events (extension loaded, bead created)
+- `INFO`: Important events (extension loaded, task created)
 - `WARNING`: Recoverable issues (cache miss, missing data)
 - `ERROR`: Failures that affect functionality
 
@@ -1258,7 +1258,7 @@ examples/research/
     ├── tool_invokers.py       # ResearchToolInvoker
     ├── thinking_refiners.py   # ResearchThinkingRefiner
     ├── context.py             # ResearchChatContext
-    └── beads_integrators.py   # ResearchBeadsIntegrator
+    └── task_hooks.py           # ResearchTaskHooks
 ```
 
 **Key features**:
@@ -1276,7 +1276,7 @@ from examples.research.chat import (
     ResearchToolInvoker,
     ResearchThinkingRefiner,
     ResearchChatContext,
-    ResearchBeadsIntegrator,
+    ResearchTaskHooks,
 )
 
 
@@ -1288,7 +1288,7 @@ def bootstrap_research_extensions() -> ExtensionRegistry:
     registry.register_tool_invoker(ResearchToolInvoker())
     registry.register_thinking_refiner(ResearchThinkingRefiner())
     registry.register_chat_context(ResearchChatContext())
-    registry.register_beads_integrator(ResearchBeadsIntegrator())
+    registry.register_task_hooks(ResearchTaskHooks())
 
     return registry
 ```
@@ -1305,7 +1305,7 @@ from trading_extensions.processors import TradingChatProcessor
 from trading_extensions.tool_invokers import TradingToolInvoker
 from trading_extensions.thinking_refiners import TradingThinkingRefiner
 from trading_extensions.context import TradingChatContext
-from trading_extensions.beads_integrators import TradingBeadsIntegrator
+from trading_extensions.task_hooks import TradingTaskHooks
 from trading_extensions.server_discovery import TradingServerDiscovery
 from trading_extensions.llm_adapters import TradingLLMAdapter
 
@@ -1326,8 +1326,8 @@ def bootstrap_trading_domain() -> ExtensionRegistry:
     # Context: persist sessions, enrich with market data
     registry.register_chat_context(TradingChatContext(sessions_dir="~/.village/sessions"))
 
-    # Beads: create tasks with strategy and risk metadata
-    registry.register_beads_integrator(TradingBeadsIntegrator())
+    # village tasks: create tasks with strategy and risk metadata
+    registry.register_task_hooks(TradingTaskHooks())
 
     # Server discovery: load Jesse only if strategies exist
     registry.register_server_discovery(TradingServerDiscovery(strategies_dir="~/.village/strategies"))
@@ -1406,7 +1406,7 @@ Categorize changes into:
 - Tool invocation → `ToolInvoker`
 - Query logic → `ThinkingRefiner`
 - State management → `ChatContext`
-- Task/metadata → `BeadsIntegrator`
+- Task/metadata → `TaskHooks`
 - Server config → `ServerDiscovery`
 - LLM config → `LLMProviderAdapter`
 
@@ -1415,7 +1415,7 @@ Categorize changes into:
 Create separate modules for each category:
 ```bash
 mkdir my_extensions/
-touch my_extensions/{processors,tool_invokers,thinking_refiners,context,beads_integrators,server_discovery,llm_adapters}.py
+touch my_extensions/{processors,tool_invokers,thinking_refiners,context,task_hooks,server_discovery,llm_adapters}.py
 ```
 
 **Step 3: Implement Extensions**

@@ -8,43 +8,45 @@ from village.chat.transports.cli import CLITransport
 
 
 @pytest.mark.asyncio
-async def test_start_prints_welcome_banner() -> None:
+async def test_start_prints_welcome_banner(capsys) -> None:
     transport = CLITransport()
-    with patch("village.chat.transports.cli.click.echo") as mock_echo:
-        await transport.start()
-        mock_echo.assert_called_once_with("Village Greeter — How can I help? /exit to quit.\n")
+    await transport.start()
+    captured = capsys.readouterr()
+    assert "Village Greeter" in captured.out
+    assert "/exit to quit" in captured.out
 
 
 @pytest.mark.asyncio
-async def test_stop_prints_exit_message() -> None:
+async def test_stop_prints_exit_message(capsys) -> None:
     transport = CLITransport()
-    with patch("village.chat.transports.cli.click.echo") as mock_echo:
-        await transport.stop()
-        mock_echo.assert_called_once_with("\nExiting...")
+    await transport.stop()
+    captured = capsys.readouterr()
+    assert "Exiting..." in captured.out
 
 
 @pytest.mark.asyncio
-async def test_send_outputs_message() -> None:
+async def test_send_outputs_message(capsys) -> None:
     transport = CLITransport()
-    with patch("village.chat.transports.cli.click.echo") as mock_echo:
-        await transport.send("Hello, world!")
-        mock_echo.assert_called_once_with("\nHello, world!\n")
+    await transport.send("Hello, world!")
+    captured = capsys.readouterr()
+    assert "Hello, world!" in captured.out
 
 
 @pytest.mark.asyncio
-async def test_send_empty_message() -> None:
+async def test_send_empty_message(capsys) -> None:
     transport = CLITransport()
-    with patch("village.chat.transports.cli.click.echo") as mock_echo:
-        await transport.send("")
-        mock_echo.assert_called_once_with("\n\n")
+    await transport.send("")
+    captured = capsys.readouterr()
+    assert captured.out == "\n\n\n"
 
 
 @pytest.mark.asyncio
-async def test_send_multiline_message() -> None:
+async def test_send_multiline_message(capsys) -> None:
     transport = CLITransport()
-    with patch("village.chat.transports.cli.click.echo") as mock_echo:
-        await transport.send("line one\nline two")
-        mock_echo.assert_called_once_with("\nline one\nline two\n")
+    await transport.send("line one\nline two")
+    captured = capsys.readouterr()
+    assert "line one" in captured.out
+    assert "line two" in captured.out
 
 
 @pytest.mark.asyncio
@@ -69,36 +71,30 @@ def test_name_returns_cli() -> None:
 
 
 @pytest.mark.asyncio
-async def test_route_calls_run_role_chat_with_context() -> None:
+async def test_route_calls_run_role_chat_with_context(capsys) -> None:
     transport = CLITransport()
-    with (
-        patch("village.chat.transports.cli.click.echo") as mock_echo,
-        patch("village.roles.run_role_chat") as mock_run,
-    ):
+    with patch("village.roles.run_role_chat") as mock_run:
         await transport.route("builder", context="build the auth module")
-        mock_echo.assert_called_once_with("\n  ── Routing to builder ──────────")
-        mock_run.assert_called_once_with("builder", context={"context": "build the auth module"})
+    captured = capsys.readouterr()
+    assert "Routing to builder" in captured.out
+    mock_run.assert_called_once_with("builder", context={"context": "build the auth module"})
 
 
 @pytest.mark.asyncio
-async def test_route_calls_run_role_chat_without_context() -> None:
+async def test_route_calls_run_role_chat_without_context(capsys) -> None:
     transport = CLITransport()
-    with (
-        patch("village.chat.transports.cli.click.echo") as mock_echo,
-        patch("village.roles.run_role_chat") as mock_run,
-    ):
+    with patch("village.roles.run_role_chat") as mock_run:
         await transport.route("planner", context=None)
-        mock_echo.assert_called_once_with("\n  ── Routing to planner ──────────")
-        mock_run.assert_called_once_with("planner", context=None)
+    captured = capsys.readouterr()
+    assert "Routing to planner" in captured.out
+    mock_run.assert_called_once_with("planner", context=None)
 
 
 @pytest.mark.asyncio
-async def test_route_with_empty_context() -> None:
+async def test_route_with_empty_context(capsys) -> None:
     transport = CLITransport()
-    with (
-        patch("village.chat.transports.cli.click.echo") as mock_echo,
-        patch("village.roles.run_role_chat") as mock_run,
-    ):
+    with patch("village.roles.run_role_chat") as mock_run:
         await transport.route("scribe", context="")
-        mock_echo.assert_called_once_with("\n  ── Routing to scribe ──────────")
-        mock_run.assert_called_once_with("scribe", context=None)
+    captured = capsys.readouterr()
+    assert "Routing to scribe" in captured.out
+    mock_run.assert_called_once_with("scribe", context=None)

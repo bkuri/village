@@ -1,4 +1,6 @@
-# Village v2 PRD — Workspace-Native Parallelism
+# DRAFT — Village v2 PRD — Workspace-Native Parallelism
+
+> **DRAFT** — This is a proposed future version. See [../ROADMAP.md](../ROADMAP.md) for the current roadmap.
 
 ## Purpose
 
@@ -44,7 +46,7 @@ Detects and repairs inconsistencies between:
 - tmux panes
 - lock files
 - workspaces
-- beads tasks
+- village tasks
 
 Outputs planned actions before execution.
 

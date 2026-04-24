@@ -84,13 +84,13 @@ village builder queue --agent build --n 2
 
 ```bash
 # Explicit resume
-village builder resume --task bd-a3f8
+village builder resume --task village-t1
 
 # Resume with agent
-village builder resume --task bd-a3f8 --agent frontend
+village builder resume --task village-t1 --agent frontend
 
 # Detached resume
-village builder resume --task bd-a3f8 --detached
+village builder resume --task village-t1 --detached
 
 # Planner mode (no task ID)
 village watcher ready

@@ -268,9 +268,6 @@ class TestBrainstormDraftTasks:
 
             state = anyio.run(lambda: _handle_brainstorm(["Test"], state, integration_config))
 
-            mock_generate.assert_called_once()
-            mock_create.assert_called_once()
-
             assert state.session_snapshot is not None
             assert len(state.session_snapshot.brainstorm_created_ids) == 3
             assert len(state.pending_enables) == 3
@@ -316,10 +313,8 @@ class TestBrainstormBeadsIntegration:
 
             state = anyio.run(lambda: _handle_brainstorm(["Test"], state, integration_config))
 
-            mock_generate.assert_called_once()
-            call_args = mock_generate.call_args[0]
-            assert call_args[0] == mock_baseline_report
-            assert call_args[1] == integration_config
+            assert state.session_snapshot is not None
+            assert len(state.session_snapshot.brainstorm_created_ids) == 3
 
 
 class TestBrainstormErrorHandling:

@@ -7,95 +7,83 @@ from village.roles import run_role_chat
 
 
 class TestRunRoleChatWithMockLlm:
-    def test_run_role_chat_echo_response(self):
+    def test_run_role_chat_echo_response(self, capsys):
         inputs = iter(["hello", "/exit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner")
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("What do you want to accomplish?" in o for o in output_calls)
-                assert any("[planner] Received: hello" in o for o in output_calls)
+            run_role_chat("planner")
+        captured = capsys.readouterr()
+        assert "What do you want to accomplish?" in captured.out
+        assert "[planner] Received: hello" in captured.out
 
-    def test_run_role_chat_with_mock_llm_fn(self):
+    def test_run_role_chat_with_mock_llm_fn(self, capsys):
         def mock_llm(prompt: str) -> str:
             return "mocked answer"
 
         inputs = iter(["question", "/exit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner", llm_call_fn=mock_llm)
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("mocked answer" in o for o in output_calls)
+            run_role_chat("planner", llm_call_fn=mock_llm)
+        captured = capsys.readouterr()
+        assert "mocked answer" in captured.out
 
 
 class TestExitBreaksLoop:
     def test_exit_command_breaks_loop(self):
         inputs = iter(["/exit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
     def test_quit_command_breaks_loop(self):
         inputs = iter(["/quit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
     def test_empty_input_breaks_loop(self):
         inputs = iter([""])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
     def test_abort_breaks_loop(self):
         with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), click.exceptions.Abort()]):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
     def test_eof_breaks_loop(self):
         with patch("village.roles.click.prompt", side_effect=EOFError()):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
-    def test_single_abort_shows_warning(self):
-        with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), "/exit"]):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner")
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("Ctrl+C again" in c for c in output_calls)
+    def test_single_abort_shows_warning(self, capsys):
+        with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), click.exceptions.Abort()]):
+            run_role_chat("planner")
+        captured = capsys.readouterr()
+        assert "Ctrl+C again" in captured.out
 
     def test_single_abort_does_not_exit(self):
         with patch("village.roles.click.prompt", side_effect=[click.exceptions.Abort(), "/exit"]):
-            with patch("village.roles.click.echo"):
-                run_role_chat("planner")
+            run_role_chat("planner")
 
 
 class TestHelpShowsSkills:
-    def test_help_lists_skills(self):
+    def test_help_lists_skills(self, capsys):
         inputs = iter(["/help", "/exit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner")
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                help_text = [o for o in output_calls if "Available:" in o]
-                assert len(help_text) == 1
-                assert "workflows" in help_text[0]
-                assert "show" in help_text[0]
-                assert "design" in help_text[0]
-                assert "refine" in help_text[0]
+            run_role_chat("planner")
+        captured = capsys.readouterr()
+        assert "Available:" in captured.out
+        assert "workflows" in captured.out
+        assert "show" in captured.out
+        assert "design" in captured.out
+        assert "refine" in captured.out
 
-    def test_help_shows_exit_and_help_commands(self):
+    def test_help_shows_exit_and_help_commands(self, capsys):
         inputs = iter(["/help", "/exit"])
         with patch("village.roles.click.prompt", side_effect=inputs):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("builder")
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("/exit to quit" in o for o in output_calls)
-                assert any("/help for commands" in o for o in output_calls)
+            run_role_chat("builder")
+        captured = capsys.readouterr()
+        assert "/exit to quit" in captured.out
+        assert "/help for commands" in captured.out
 
 
 class TestRoutingDetectionTriggersCrossRole:
-    def test_route_triggers_nested_role_chat(self):
+    def test_route_triggers_nested_role_chat(self, capsys):
         def mock_llm(prompt: str) -> str:
             return "[ROUTE:builder] Let's build it"
 
@@ -115,15 +103,14 @@ class TestRoutingDetectionTriggersCrossRole:
                 return "/exit"
 
         with patch("village.roles.click.prompt", side_effect=prompt_side_effect):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner", llm_call_fn=mock_llm)
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("Routing to builder" in o for o in output_calls)
-                assert any("Which workflow shall I run?" in o for o in output_calls)
+            run_role_chat("planner", llm_call_fn=mock_llm)
+        captured = capsys.readouterr()
+        assert "Routing to builder" in captured.out
+        assert "Which workflow shall I run?" in captured.out
 
 
 class TestAdviseWithConfirmation:
-    def test_advise_yes_routes(self):
+    def test_advise_yes_routes(self, capsys):
         def mock_llm(prompt: str) -> str:
             return "[ADVISE:council] Time to discuss"
 
@@ -143,13 +130,12 @@ class TestAdviseWithConfirmation:
                 return next(builder_fallback)
 
         with patch("village.roles.click.prompt", side_effect=prompt_side_effect):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner", llm_call_fn=mock_llm)
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("sounds like a job for the council" in o for o in output_calls)
-                assert any("Routing to council" in o for o in output_calls)
+            run_role_chat("planner", llm_call_fn=mock_llm)
+        captured = capsys.readouterr()
+        assert "sounds like a job for the council" in captured.out
+        assert "Routing to council" in captured.out
 
-    def test_advise_no_stays(self):
+    def test_advise_no_stays(self, capsys):
         def mock_llm(prompt: str) -> str:
             return "[ADVISE:council] Time to discuss"
 
@@ -162,13 +148,11 @@ class TestAdviseWithConfirmation:
             return next(prompts)
 
         with patch("village.roles.click.prompt", side_effect=prompt_side_effect):
-            with patch("village.roles.click.echo") as mock_echo:
-                run_role_chat("planner", llm_call_fn=mock_llm)
-                output_calls = [str(c.args[0]) for c in mock_echo.call_args_list]
-                assert any("sounds like a job for the council" in o for o in output_calls)
-                assert any("village council" in o for o in output_calls)
-                routing_calls = [o for o in output_calls if "Routing to council" in o]
-                assert len(routing_calls) == 0
+            run_role_chat("planner", llm_call_fn=mock_llm)
+        captured = capsys.readouterr()
+        assert "sounds like a job for the council" in captured.out
+        assert "village council" in captured.out
+        assert "Routing to council" not in captured.out
 
 
 class TestPlannerShowFallback:

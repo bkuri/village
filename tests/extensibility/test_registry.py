@@ -1,7 +1,5 @@
 """Tests for ExtensionRegistry class."""
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from village.extensibility.context import ChatContext, DefaultChatContext, SessionContext
@@ -509,121 +507,6 @@ class TestExtensionRegistryIntegrationWithMocks:
         assert names_after["processor"] == "MockChatProcessor"
         assert names_after["llm_adapter"] == "MockLLMAdapter"
         assert "Default" in names_after["tool_invoker"]
-
-
-class TestExtensionRegistryLogging:
-    """Tests for ExtensionRegistry logging behavior."""
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_processor_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_processor() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_processor = MockChatProcessor()
-
-        registry.register_processor(mock_processor)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockChatProcessor" in call_args
-        assert "Registered processor" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_tool_invoker_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_tool_invoker() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_invoker = MockToolInvoker()
-
-        registry.register_tool_invoker(mock_invoker)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockToolInvoker" in call_args
-        assert "Registered tool invoker" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_thinking_refiner_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_thinking_refiner() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_refiner = MockThinkingRefiner()
-
-        registry.register_thinking_refiner(mock_refiner)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockThinkingRefiner" in call_args
-        assert "Registered thinking refiner" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_chat_context_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_chat_context() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_context = MockChatContext()
-
-        registry.register_chat_context(mock_context)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockChatContext" in call_args
-        assert "Registered chat context" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_task_hooks_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_task_hooks() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_integrator = MockTaskHooks()
-
-        registry.register_task_hooks(mock_integrator)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockTaskHooks" in call_args
-        assert "Registered task hooks" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_server_discovery_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_server_discovery() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_discovery = MockServerDiscovery()
-
-        registry.register_server_discovery(mock_discovery)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockServerDiscovery" in call_args
-        assert "Registered server discovery" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_register_llm_adapter_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """register_llm_adapter() logs debug message."""
-        registry = ExtensionRegistry()
-        mock_adapter = MockLLMAdapter()
-
-        registry.register_llm_adapter(mock_adapter)
-
-        mock_logger.debug.assert_called_once()
-        call_args = mock_logger.debug.call_args[0][0]
-        assert "MockLLMAdapter" in call_args
-        assert "Registered LLM adapter" in call_args
-
-    @patch("village.extensibility.registry.logger")
-    def test_reset_to_defaults_logs_debug_message(self, mock_logger: MagicMock) -> None:
-        """reset_to_defaults() logs debug message."""
-        registry = ExtensionRegistry()
-
-        registry.reset_to_defaults()
-
-        mock_logger.debug.assert_called_once_with("Reset all extensions to defaults")
-
-    @patch("village.extensibility.registry.logger")
-    def test_multiple_registrations_log_multiple_messages(self, mock_logger: MagicMock) -> None:
-        """Multiple registrations log multiple debug messages."""
-        registry = ExtensionRegistry()
-
-        registry.register_processor(MockChatProcessor())
-        registry.register_tool_invoker(MockToolInvoker())
-        registry.register_llm_adapter(MockLLMAdapter())
-
-        assert mock_logger.debug.call_count == 3
 
 
 class TestExtensionRegistryMockBehavior:

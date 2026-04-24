@@ -41,7 +41,7 @@ Review the code changes in this worktree for:
 
 ## Instructions
 
-1. Start by reading the task description in `bd show {task_id}`
+1. Start by reading the task description in `village tasks show {task_id}`
 2. Review all modified files: `git diff HEAD~1`
 3. Add inline comments for issues found
 4. Use conservative suggestions (prefer safe fixes over refactors)
@@ -63,7 +63,7 @@ After reviewing, create a review summary in the task log.
 village queue --agent review --n 1
 
 # Or resume a specific task with the review agent
-village resume bd-a3f8 --agent review
+village resume village-t1 --agent review
 ```
 
 ## Verification

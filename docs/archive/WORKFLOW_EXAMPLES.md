@@ -45,7 +45,7 @@ $ village chat --create
 > /exit
 ```
 
-**Output**: 2 Beads tasks created (bd-xxxxxx, bd-yyyyyy)
+**Output**: 2 village tasks created (village-xxxxxx, village-yyyyyy)
 
 **Result**: User story broken into two implementable tasks: one for user-facing feature, one for admin configuration.
 
@@ -73,7 +73,7 @@ $ village chat --create
 > /exit
 ```
 
-**Output**: 1 investigation task in Beads
+**Output**: 1 investigation task in village tasks
 
 **Result**: Structured investigation task with clear success criteria and estimate.
 
@@ -150,7 +150,7 @@ $ village chat --create
 > /exit
 ```
 
-**Output**: 3 related Beads tasks created
+**Output**: 3 related village tasks created
 
 **Result**: Logging feature broken into three implementable chunks.
 
@@ -165,7 +165,7 @@ $ village chat
 
 > What is the test coverage policy?
 > What are the current test failures?
-> /task bd-xxxxxx
+> /task village-xxxxxx
 
 # See the task details
 > What are the dependencies for this task?
@@ -198,7 +198,7 @@ $ village chat --create
 # Oops, submitted with wrong title
 > /reset
 
-Output: Deleting 1 task: bd-a1b2c3
+Output: Deleting 1 task: village-a1b2c3
 Output: Preserving 1 draft: df-a1b2c3
 
 > /edit df-a1b2c3
@@ -212,7 +212,7 @@ Output: Preserving 1 draft: df-a1b2c3
 
 **Output**: Wrong task deleted, draft preserved and resubmitted
 
-**Result**: No wasted tasks in Beads, correct task created.
+**Result**: No wasted tasks in village tasks, correct task created.
 
 ---
 
@@ -269,8 +269,8 @@ $ village chat
 > /tasks
 > /ready
 
-# See task bd-xxxxxx needs clarification
-> /task bd-xxxxxx
+# See task village-xxxxxx needs clarification
+> /task village-xxxxxx
 
 # Understand the task context
 > /create "Fix authentication issue"

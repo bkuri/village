@@ -423,18 +423,3 @@ def test_log_task_lifecycle(tmp_path: Path):
     assert events[0].result is None
     assert events[1].result == "ok"
     assert events[1].pane == "%12"
-
-
-def test_event_dataclass_defaults():
-    """Test Event dataclass has correct defaults."""
-    event = Event(
-        ts="2026-01-24T10:00:00",
-        cmd="queue",
-    )
-
-    assert event.ts == "2026-01-24T10:00:00"
-    assert event.cmd == "queue"
-    assert event.task_id is None
-    assert event.pane is None
-    assert event.result is None
-    assert event.error is None

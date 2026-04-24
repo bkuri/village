@@ -54,7 +54,8 @@ def mock_get_config(mock_config: Config) -> Generator[None, None, None]:
         with patch("village.status.get_config", return_value=mock_config):
             with patch("village.queue.get_config", return_value=mock_config):
                 with patch("village.cleanup.get_config", return_value=mock_config):
-                    yield
+                    with patch("village.state_machine.get_config", return_value=mock_config):
+                        yield
 
 
 class TestOnboardingE2E:
@@ -756,3 +757,228 @@ class TestFullUserJourneyE2E:
                     )
 
         assert result.success is True
+
+
+class TestFullTaskLifecycleE2E:
+    """Test 1: Full task lifecycle through state machine."""
+
+    def test_lifecycle_queued_to_completed(self, mock_config: Config, mock_get_config: None) -> None:
+        """Initialize to QUEUED, transition through CLAIMED -> IN_PROGRESS -> COMPLETED.
+
+        Verify state files written correctly at each step,
+        state_history has 4 entries, events.log has 4 state_transition events.
+        """
+        from village.state_machine import TaskState, TaskStateMachine
+
+        task_id = "bd-a3f8"
+        sm = TaskStateMachine(mock_config)
+
+        init_result = sm.initialize_state(task_id, TaskState.QUEUED)
+        assert init_result.success is True
+        assert sm.get_state(task_id) == TaskState.QUEUED
+
+        claim_result = sm.transition(task_id, TaskState.CLAIMED, context={"pane_id": "%12"})
+        assert claim_result.success is True
+        assert sm.get_state(task_id) == TaskState.CLAIMED
+
+        progress_result = sm.transition(task_id, TaskState.IN_PROGRESS, context={"window": "worker-1-bd-a3f8"})
+        assert progress_result.success is True
+        assert sm.get_state(task_id) == TaskState.IN_PROGRESS
+
+        complete_result = sm.transition(task_id, TaskState.COMPLETED)
+        assert complete_result.success is True
+        assert sm.get_state(task_id) == TaskState.COMPLETED
+
+        history = sm.get_state_history(task_id)
+        assert len(history) == 4
+
+        assert history[0].from_state is None
+        assert history[0].to_state == TaskState.QUEUED
+        assert history[1].from_state == TaskState.QUEUED
+        assert history[1].to_state == TaskState.CLAIMED
+        assert history[2].from_state == TaskState.CLAIMED
+        assert history[2].to_state == TaskState.IN_PROGRESS
+        assert history[3].from_state == TaskState.IN_PROGRESS
+        assert history[3].to_state == TaskState.COMPLETED
+
+        lock_file = mock_config.locks_dir / f"{task_id}.lock"
+        assert lock_file.exists()
+        content = lock_file.read_text(encoding="utf-8")
+        assert "state=completed" in content
+
+        events = read_events(mock_config.village_dir)
+        transition_events = [e for e in events if e.cmd == "state_transition"]
+        assert len(transition_events) == 4
+
+
+class TestConcurrentTaskIsolationE2E:
+    """Test 2: Concurrent task isolation via collect_workers + arbitrate_locks."""
+
+    def test_three_tasks_isolated_no_overlap(self, mock_config: Config, mock_get_config: None) -> None:
+        """Create 3 tasks with worktrees and locks, verify isolation.
+
+        All 3 detected by collect_workers, no overlap, no duplicate task_ids.
+        arbitrate_locks correctly blocks tasks that already have active locks.
+        """
+        task_ids = ["bd-a3f8", "bd-b7d2", "bd-c4e1"]
+        pane_ids = ["%12", "%13", "%14"]
+
+        for task_id, pane_id in zip(task_ids, pane_ids):
+            worktree_path = mock_config.worktrees_dir / task_id
+            worktree_path.mkdir(parents=True, exist_ok=True)
+            lock = Lock(
+                task_id=task_id,
+                pane_id=pane_id,
+                window=f"worker-{pane_ids.index(pane_id) + 1}-{task_id}",
+                agent="build",
+                claimed_at=datetime.now(timezone.utc),
+            )
+            write_lock(lock)
+
+        with patch("village.locks.panes") as mock_panes:
+            mock_panes.return_value = set(pane_ids)
+            workers = collect_workers("village")
+
+        assert len(workers) == 3
+        worker_task_ids = [w.task_id for w in workers]
+        assert sorted(worker_task_ids) == sorted(task_ids)
+        assert len(set(worker_task_ids)) == 3
+
+        for worker in workers:
+            assert worker.status == "ACTIVE"
+
+        tasks = [QueueTask(task_id=tid, agent="build") for tid in task_ids]
+
+        with patch("village.status.collect_workers") as mock_workers:
+            mock_workers.return_value = workers
+            plan = arbitrate_locks(tasks, "village", 5, mock_config, force=True)
+
+        assert len(plan.available_tasks) == 0
+        assert len(plan.blocked_tasks) == 3
+        assert all(t.skip_reason == "active_lock" for t in plan.blocked_tasks)
+        blocked_ids = sorted(t.task_id for t in plan.blocked_tasks)
+        assert blocked_ids == sorted(task_ids)
+
+
+class TestCrashRecoveryEndToEndE2E:
+    """Test 3: Crash recovery — stale lock detected and cleaned up."""
+
+    def test_stale_lock_detected_and_cleaned(self, mock_config: Config, mock_get_config: None) -> None:
+        """Create lock pointing to dead pane, verify STALE detection and cleanup.
+
+        Lock file removed after plan_cleanup + execute_cleanup,
+        event logged with cmd=cleanup.
+        """
+        from village.cleanup import execute_cleanup, plan_cleanup
+
+        task_id = "bd-a3f8"
+        lock = Lock(
+            task_id=task_id,
+            pane_id="%99",
+            window="worker-1-bd-a3f8",
+            agent="build",
+            claimed_at=datetime.now(timezone.utc),
+        )
+        write_lock(lock)
+
+        lock_file = mock_config.locks_dir / f"{task_id}.lock"
+        assert lock_file.exists()
+
+        with patch("village.probes.tmux.panes") as mock_panes:
+            mock_panes.return_value = set()
+            workers = collect_workers("village")
+
+        assert len(workers) == 1
+        assert workers[0].status == "STALE"
+        assert workers[0].task_id == task_id
+
+        with patch("village.probes.tmux.panes") as mock_panes:
+            mock_panes.return_value = set()
+            with patch("village.probes.tmux.refresh_panes"):
+                plan = plan_cleanup("village")
+
+        assert len(plan.stale_locks) == 1
+        assert plan.stale_locks[0].task_id == task_id
+
+        execute_cleanup(plan, mock_config)
+
+        assert not lock_file.exists()
+
+        events = read_events(mock_config.village_dir)
+        cleanup_events = [e for e in events if e.cmd == "cleanup"]
+        assert len(cleanup_events) == 1
+        assert cleanup_events[0].task_id == task_id
+        assert cleanup_events[0].result == "ok"
+
+
+class TestRollbackOnFailureE2E:
+    """Test 4: Rollback on failure — worktree preserved, state FAILED."""
+
+    def test_window_creation_failure_triggers_rollback(self, mock_config: Config, mock_get_config: None) -> None:
+        """Simulate failure by mocking _create_resume_window to return empty string.
+
+        Verify execute_resume returns success=False, worktree still exists,
+        state machine shows FAILED, events.log has error event.
+        """
+        from village.state_machine import TaskState, TaskStateMachine
+
+        task_id = "bd-a3f8"
+        worktree_path = mock_config.worktrees_dir / task_id
+        worktree_path.mkdir(parents=True, exist_ok=True)
+        (worktree_path / "test.txt").write_text("important data", encoding="utf-8")
+
+        sm = TaskStateMachine(mock_config)
+        sm.initialize_state(task_id, TaskState.CLAIMED, context={"pane_id": "%12"})
+
+        with patch("village.resume._create_resume_window", return_value=""):
+            with patch("village.resume._inject_contract"):
+                result = execute_resume(
+                    task_id,
+                    "build",
+                    detached=False,
+                    dry_run=False,
+                    config=mock_config,
+                )
+
+        assert result.success is False
+        assert worktree_path.exists()
+        assert (worktree_path / "test.txt").read_text(encoding="utf-8") == "important data"
+
+        assert sm.get_state(task_id) == TaskState.FAILED
+
+        events = read_events(mock_config.village_dir)
+        error_events = [e for e in events if e.result == "error"]
+        assert len(error_events) >= 1
+        assert any(e.task_id == task_id for e in error_events)
+
+
+class TestQueueDedupPreventsDoubleExecutionE2E:
+    """Test 5: Queue dedup prevents double-execution."""
+
+    def test_recent_event_blocks_task_force_bypasses(self, mock_config: Config, mock_get_config: None) -> None:
+        """Write recent event for bd-a3f8, verify blocked, then force bypasses."""
+        recent_ts = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        event = Event(
+            ts=recent_ts,
+            cmd="queue",
+            task_id="bd-a3f8",
+            result="ok",
+        )
+        append_event(event, mock_config.village_dir)
+
+        tasks = [QueueTask(task_id="bd-a3f8", agent="build")]
+
+        with patch("village.status.collect_workers") as mock_workers:
+            mock_workers.return_value = []
+            plan = arbitrate_locks(tasks, "village", 5, mock_config)
+
+        assert len(plan.blocked_tasks) == 1
+        assert plan.blocked_tasks[0].skip_reason == "recently_executed"
+        assert len(plan.available_tasks) == 0
+
+        with patch("village.status.collect_workers") as mock_workers:
+            mock_workers.return_value = []
+            plan_forced = arbitrate_locks(tasks, "village", 5, mock_config, force=True)
+
+        assert len(plan_forced.available_tasks) == 1
+        assert len(plan_forced.blocked_tasks) == 0
