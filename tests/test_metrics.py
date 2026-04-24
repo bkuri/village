@@ -309,8 +309,6 @@ def test_metrics_collector_prometheus_server_lifecycle():
     config = get_config()
     collector = MetricsCollector(config, "village")
 
-    import threading
-
     collector.start_prometheus_server(host="127.0.0.1", port=0)
     assert collector._prometheus_server is not None
     assert collector._prometheus_thread.is_alive()
