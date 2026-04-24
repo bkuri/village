@@ -309,23 +309,45 @@ def _build_registry() -> dict[str, CommandEntry]:
     for name, cmd in click_cmds.items():
         if name not in registry:
 
-            async def _make_handler(
-                transport: AsyncTransport,
-                args: str,
-                ctx: dict[str, Any],
-                _name: str = name,
-                _cmd: click.Command = cmd,
-            ) -> str:
-                arg_list = args.split() if args.strip() else []
-                return await _invoke_click_command(_name, _cmd, arg_list, ctx)
+            if name in interactive_cmds:
 
-            desc = cmd.help.split("\n")[0] if cmd.help else name
-            registry[name] = CommandEntry(
-                name=name,
-                description=desc.strip(),
-                handler=_make_handler,
-                interactive=name in interactive_cmds,
-            )
+                async def _make_interactive_handler(
+                    transport: AsyncTransport,
+                    args: str,
+                    ctx: dict[str, Any],
+                    _name: str = name,
+                    _cmd: click.Command = cmd,
+                ) -> str:
+                    ctx["_cmd_name"] = _name
+                    ctx["_click_cmd"] = _cmd
+                    return await _spawn_click_handler(transport, args, ctx)
+
+                desc = cmd.help.split("\n")[0] if cmd.help else name
+                registry[name] = CommandEntry(
+                    name=name,
+                    description=desc.strip(),
+                    handler=_make_interactive_handler,
+                    interactive=True,
+                )
+            else:
+
+                async def _make_handler(
+                    transport: AsyncTransport,
+                    args: str,
+                    ctx: dict[str, Any],
+                    _name: str = name,
+                    _cmd: click.Command = cmd,
+                ) -> str:
+                    arg_list = args.split() if args.strip() else []
+                    return await _invoke_click_command(_name, _cmd, arg_list, ctx)
+
+                desc = cmd.help.split("\n")[0] if cmd.help else name
+                registry[name] = CommandEntry(
+                    name=name,
+                    description=desc.strip(),
+                    handler=_make_handler,
+                    interactive=False,
+                )
 
     return registry
 
@@ -356,6 +378,37 @@ def parse_command(message: str) -> tuple[str | None, list[str]]:
         cmd = cmd[1:]
     args = parts[1:] if len(parts) > 1 else []
     return cmd, args
+
+
+async def _spawn_click_handler(transport: AsyncTransport, args: str, ctx: dict[str, Any]) -> str:
+    """Handler for interactive click commands that sets up a PromptBridge."""
+    import asyncio
+
+    cmd_name = ctx["_cmd_name"]
+    click_cmd = ctx["_click_cmd"]
+    arg_list = args.split() if args.strip() else []
+
+    config = ctx.get("config")
+    cwd = str(config.git_root) if config and hasattr(config, "git_root") else None
+
+    pending = spawn_command(cmd_name, click_cmd, arg_list, cwd=cwd)
+
+    def _bridge_poll() -> str | None:
+        if pending.bridge.has_pending_prompt:
+            return pending.bridge.get_prompt_text()
+        return None
+
+    ctx["_pending_command"] = pending
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, pending.future.result)
+
+    if pending.progress:
+        progress_text = pending.progress.drain_progress()
+        if progress_text and not result.endswith(progress_text.strip()):
+            result = result + "\n" + progress_text.strip() if result else progress_text.strip()
+
+    return result
 
 
 async def dispatch(

@@ -362,7 +362,6 @@ class TestConfirmSummary:
         answers = {"What does this project do?": "A tool"}
         transcript = [("What does this project do?", "A tool")]
         monkeypatch.setattr("click.confirm", lambda *a, **kw: True)
-        monkeypatch.setattr("click.echo", lambda *a, **kw: None)
         result = engine._confirm_summary(answers, transcript)
         assert result.answers == answers
         assert "A tool" in result.project_summary
@@ -372,17 +371,17 @@ class TestConfirmSummary:
         answers = {"What does this project do?": "A tool"}
         transcript = [("What does this project do?", "A tool")]
         monkeypatch.setattr("click.confirm", lambda *a, **kw: False)
-        monkeypatch.setattr("click.echo", lambda *a, **kw: None)
         result = engine._confirm_summary(answers, transcript)
         assert result.answers == {}
 
-    def test_empty_answers_shows_no_details(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_empty_answers_shows_no_details(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         engine = _make_engine()
-        echoed: list[str] = []
         monkeypatch.setattr("click.confirm", lambda *a, **kw: True)
-        monkeypatch.setattr("click.echo", lambda msg="", **kw: echoed.append(msg) if msg else None)
         result = engine._confirm_summary({}, [])
-        assert any("No details" in line for line in echoed if isinstance(line, str))
+        captured = capsys.readouterr()
+        assert "No details" in captured.out
         assert result.answers == {}
 
     def test_keyboard_interrupt_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -394,7 +393,6 @@ class TestConfirmSummary:
             raise KeyboardInterrupt()
 
         monkeypatch.setattr("click.confirm", raise_abort)
-        monkeypatch.setattr("click.echo", lambda *a, **kw: None)
         result = engine._confirm_summary(answers, transcript)
         assert result.answers == {}
 

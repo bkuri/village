@@ -420,6 +420,8 @@ class InterviewEngine:
         )
 
     def _get_llm_client(self) -> "LLMClient | None":
+        import os
+
         try:
             from village.config import LLMConfig, get_global_config
             from village.llm.factory import get_llm_client as _get_llm_client
@@ -431,10 +433,24 @@ class InterviewEngine:
                 raise ValueError(f"Invalid interview_model format (expected provider/model): {interview_model}")
 
             provider, model = interview_model.split("/", 1)
+
+            env_provider = os.getenv("VILLAGE_LLM_PROVIDER")
+            if env_provider:
+                provider = env_provider
+
+            provider_key_envs = {
+                "venice": "VENICE_API_KEY",
+                "zai": "ZAI_API_KEY",
+                "anthropic": "ANTHROPIC_API_KEY",
+            }
+            api_key_env = provider_key_envs.get(provider, global_cfg.llm.api_key_env)
+            if not os.getenv(api_key_env):
+                api_key_env = global_cfg.llm.api_key_env
+
             global_cfg.llm = LLMConfig(
                 provider=provider,
                 model=model,
-                api_key_env=global_cfg.llm.api_key_env,
+                api_key_env=api_key_env,
                 timeout=global_cfg.llm.timeout,
                 max_tokens=global_cfg.llm.max_tokens,
             )
