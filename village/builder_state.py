@@ -194,3 +194,109 @@ def generate_run_id() -> str:
     import uuid
 
     return f"run-{uuid.uuid4().hex[:8]}"
+
+
+class BuildRunStatus(str, Enum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    STOPPED = "stopped"
+
+
+@dataclass
+class BuildRunManifest:
+    run_id: str
+    status: BuildRunStatus
+    specs_dir: str
+    iteration_count: int = 0
+    completed_specs: list[str] = field(default_factory=list)
+    total_specs: int = 0
+    started_at: str = ""
+    completed_at: str = ""
+
+
+class BuildRunState:
+    def __init__(self, builds_dir: Path) -> None:
+        self.builds_dir = builds_dir
+
+    def _run_dir(self, run_id: str) -> Path:
+        return self.builds_dir / run_id
+
+    def _manifest_path(self, run_id: str) -> Path:
+        return self._run_dir(run_id) / "manifest.json"
+
+    def create_run(self, run_id: str, specs_dir: str, total_specs: int = 0) -> BuildRunManifest:
+        manifest = BuildRunManifest(
+            run_id=run_id,
+            status=BuildRunStatus.RUNNING,
+            specs_dir=specs_dir,
+            total_specs=total_specs,
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+        self.builds_dir.mkdir(parents=True, exist_ok=True)
+        self._write_manifest(manifest)
+        return manifest
+
+    def update_run(
+        self,
+        run_id: str,
+        iteration_count: int | None = None,
+        completed_specs: list[str] | None = None,
+        status: BuildRunStatus | None = None,
+    ) -> BuildRunManifest | None:
+        manifest = self.get_run(run_id)
+        if manifest is None:
+            return None
+        if iteration_count is not None:
+            manifest.iteration_count = iteration_count
+        if completed_specs is not None:
+            manifest.completed_specs = list(completed_specs)
+        if status is not None:
+            manifest.status = status
+            if status in (BuildRunStatus.COMPLETED, BuildRunStatus.STOPPED):
+                manifest.completed_at = datetime.now(timezone.utc).isoformat()
+        self._write_manifest(manifest)
+        return manifest
+
+    def get_run(self, run_id: str) -> BuildRunManifest | None:
+        path = self._manifest_path(run_id)
+        if not path.exists():
+            return None
+        try:
+            data = read_json(path)
+        except (json.JSONDecodeError, KeyError):
+            return None
+        return BuildRunManifest(
+            run_id=data["run_id"],
+            status=BuildRunStatus(data["status"]),
+            specs_dir=data["specs_dir"],
+            iteration_count=data.get("iteration_count", 0),
+            completed_specs=data.get("completed_specs", []),
+            total_specs=data.get("total_specs", 0),
+            started_at=data.get("started_at", ""),
+            completed_at=data.get("completed_at", ""),
+        )
+
+    def find_latest_run(self) -> BuildRunManifest | None:
+        if not self.builds_dir.exists():
+            return None
+        run_dirs = sorted(self.builds_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+        for run_dir in run_dirs:
+            if not run_dir.is_dir():
+                continue
+            manifest = self.get_run(run_dir.name)
+            if manifest is not None:
+                return manifest
+        return None
+
+    def _write_manifest(self, manifest: BuildRunManifest) -> None:
+        data = {
+            "run_id": manifest.run_id,
+            "status": manifest.status.value,
+            "specs_dir": manifest.specs_dir,
+            "iteration_count": manifest.iteration_count,
+            "completed_specs": manifest.completed_specs,
+            "total_specs": manifest.total_specs,
+            "started_at": manifest.started_at,
+            "completed_at": manifest.completed_at,
+        }
+        write_json(self._manifest_path(manifest.run_id), data)

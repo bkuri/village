@@ -1,5 +1,7 @@
 """Test spec-driven build loop."""
 
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -11,6 +13,8 @@ from village.loop import (
     LoopIteration,
     LoopResult,
     SpecInfo,
+    _execute_spec,
+    _run_parallel_batch,
     check_and_trigger_wave,
     check_landing_trigger,
     check_spec_completion,
@@ -503,3 +507,312 @@ class TestRunLoop:
             result = run_loop(specs_dir=specs_dir)
         assert result.total_specs == 1
         assert result.completed_specs == 1
+
+
+class TestExecuteSpec:
+    """Tests for _execute_spec — single-spec execution."""
+
+    def test_dry_run_returns_success(self, tmp_path: Path) -> None:
+        """_execute_spec with dry_run=True returns a successful LoopIteration."""
+        spec_path = tmp_path / "specs" / "001-todo.md"
+        spec_path.parent.mkdir()
+        spec_path.write_text("## Status: incomplete\n")
+        spec = SpecInfo(path=spec_path, name="001-todo.md", is_complete=False)
+        config = _make_config(tmp_path)
+
+        result = _execute_spec(
+            spec=spec,
+            iteration_num=1,
+            agent="worker",
+            model=None,
+            config=config,
+            session_name="test-session",
+            dry_run=True,
+        )
+
+        assert result.success is True
+        assert result.spec_name == "001-todo.md"
+        assert result.iteration == 1
+        assert result.error == ""
+
+    def test_worktree_exists_runs_full_chain(self, tmp_path: Path) -> None:
+        """_execute_spec with dry_run=False skips worktree creation when path exists."""
+        spec_path = tmp_path / "specs" / "001-todo.md"
+        spec_path.parent.mkdir()
+        spec_path.write_text("## Status: incomplete\n")
+        spec = SpecInfo(path=spec_path, name="001-todo.md", is_complete=False)
+        config = _make_config(tmp_path)
+
+        # Pre-create the worktree directory so create_worktree is skipped
+        worktree_path = config.worktrees_dir / "001-todo"
+        worktree_path.mkdir(parents=True)
+
+        with (
+            patch("village.loop._create_resume_window", return_value="%42"),
+            patch("village.loop.write_lock"),
+            patch("village.loop.generate_spec_contract", return_value="mock-contract"),
+            patch("village.loop._inject_contract"),
+            patch(
+                "village.loop.monitor_pane",
+                return_value=(True, "output\n<promise>DONE</promise>\n"),
+            ),
+            patch("village.loop.check_spec_completion", return_value=True),
+        ):
+            result = _execute_spec(
+                spec=spec,
+                iteration_num=1,
+                agent="worker",
+                model=None,
+                config=config,
+                session_name="test-session",
+                dry_run=False,
+            )
+
+        assert result.success is True
+        assert result.pane_id == "%42"
+        assert result.promise_detected is True
+        assert result.verified_complete is True
+        assert result.error == ""
+
+    def test_worktree_creation_failure_returns_error(self, tmp_path: Path) -> None:
+        """_execute_spec returns failure when create_worktree raises."""
+        spec_path = tmp_path / "specs" / "001-todo.md"
+        spec_path.parent.mkdir()
+        spec_path.write_text("## Status: incomplete\n")
+        spec = SpecInfo(path=spec_path, name="001-todo.md", is_complete=False)
+        config = _make_config(tmp_path)
+
+        with patch(
+            "village.loop.create_worktree",
+            side_effect=RuntimeError("worktree failed"),
+        ):
+            result = _execute_spec(
+                spec=spec,
+                iteration_num=1,
+                agent="worker",
+                model=None,
+                config=config,
+                session_name="test-session",
+                dry_run=False,
+            )
+
+        assert result.success is False
+        assert "worktree failed" in result.error
+
+
+class TestParallelBatch:
+    """Tests for _run_parallel_batch — batch parallel execution."""
+
+    def test_dry_run_processes_all_specs(self, tmp_path: Path) -> None:
+        """_run_parallel_batch with dry_run=True returns a result for every spec."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+
+        specs = find_incomplete_specs(specs_dir)
+        config = _make_config(tmp_path)
+
+        results = _run_parallel_batch(
+            specs=specs,
+            base_iteration=1,
+            agent="worker",
+            model=None,
+            config=config,
+            parallel=2,
+            dry_run=True,
+        )
+
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        spec_names = {r.spec_name for r in results}
+        assert spec_names == {"001-todo.md", "002-todo.md"}
+
+    def test_handles_errors_gracefully(self, tmp_path: Path) -> None:
+        """_run_parallel_batch captures exceptions from individual specs without crashing."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+
+        specs = find_incomplete_specs(specs_dir)
+        config = _make_config(tmp_path)
+
+        success_result = LoopIteration(
+            iteration=1,
+            spec_name="001-todo.md",
+            success=True,
+            promise_detected=False,
+            verified_complete=False,
+            started_at=datetime.now(timezone.utc),
+            finished_at=datetime.now(timezone.utc),
+        )
+
+        def _mock_execute(
+            spec: SpecInfo,
+            iteration_num: int,
+            agent: str,
+            model: str | None,
+            config: Config,
+            session_name: str,
+            dry_run: bool = False,
+        ) -> LoopIteration:
+            if spec.name == "001-todo.md":
+                return success_result
+            raise RuntimeError("agent crashed")
+
+        with patch("village.loop._execute_spec", side_effect=_mock_execute):
+            results = _run_parallel_batch(
+                specs=specs,
+                base_iteration=1,
+                agent="worker",
+                model=None,
+                config=config,
+                parallel=2,
+                dry_run=False,
+            )
+
+        assert len(results) == 2
+        # One result should be successful, the other should have an error
+        successes = [r for r in results if r.success]
+        failures = [r for r in results if not r.success]
+        assert len(successes) == 1
+        assert len(failures) == 1
+        assert "agent crashed" in failures[0].error
+
+    def test_respects_parallel_limit(self, tmp_path: Path) -> None:
+        """_run_parallel_batch does not exceed the parallel worker count."""
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        for i in range(4):
+            (specs_dir / f"{i + 1:03d}-todo.md").write_text("## Status: incomplete\n")
+
+        specs = find_incomplete_specs(specs_dir)
+        config = _make_config(tmp_path)
+
+        # Track concurrent executions
+        max_concurrent = 0
+        current_concurrent = 0
+        lock = threading.Lock()
+
+        def _mock_execute(
+            spec: SpecInfo,
+            iteration_num: int,
+            agent: str,
+            model: str | None,
+            config: Config,
+            session_name: str,
+            dry_run: bool = False,
+        ) -> LoopIteration:
+            nonlocal max_concurrent, current_concurrent
+            with lock:
+                current_concurrent += 1
+                if current_concurrent > max_concurrent:
+                    max_concurrent = current_concurrent
+            time.sleep(0.05)  # Brief hold to let threads overlap
+            with lock:
+                current_concurrent -= 1
+            return LoopIteration(
+                iteration=iteration_num,
+                spec_name=spec.name,
+                success=True,
+                promise_detected=False,
+                verified_complete=False,
+                started_at=datetime.now(timezone.utc),
+                finished_at=datetime.now(timezone.utc),
+            )
+
+        with patch("village.loop._execute_spec", side_effect=_mock_execute):
+            results = _run_parallel_batch(
+                specs=specs,
+                base_iteration=1,
+                agent="worker",
+                model=None,
+                config=config,
+                parallel=2,
+                dry_run=True,
+            )
+
+        assert len(results) == 4
+        assert max_concurrent <= 2
+
+
+class TestRunLoopParallel:
+    """Tests for run_loop with parallel > 1."""
+
+    def test_parallel_dry_run_processes_multiple_specs(self, tmp_path: Path) -> None:
+        """run_loop with parallel=2 and dry_run=True processes specs in parallel batches."""
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+
+        result = run_loop(
+            specs_dir=specs_dir,
+            max_iterations=1,
+            dry_run=True,
+            parallel=2,
+            config=config,
+        )
+
+        assert result.total_specs == 2
+        assert result.iterations == 2
+        assert len(result.details) == 2
+        assert all(d.success for d in result.details)
+        spec_names = {d.spec_name for d in result.details}
+        assert spec_names == {"001-todo.md", "002-todo.md"}
+
+    def test_parallel_dry_run_batches_limited_by_parallel(self, tmp_path: Path) -> None:
+        """run_loop with parallel=2 and 3 specs processes one batch of 2 when max_iterations=2."""
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "003-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+
+        result = run_loop(
+            specs_dir=specs_dir,
+            max_iterations=2,
+            dry_run=True,
+            parallel=2,
+            config=config,
+        )
+
+        assert result.total_specs == 3
+        # With parallel=2 and max_iterations=2, exactly one batch of 2 runs
+        assert result.iterations == 2
+        assert len(result.details) == 2
+        spec_names = {d.spec_name for d in result.details}
+        assert spec_names == {"001-todo.md", "002-todo.md"}
+
+    def test_sequential_preserved_with_parallel_one(self, tmp_path: Path) -> None:
+        """run_loop with parallel=1 (default) processes specs one at a time."""
+        from village.loop import run_loop
+
+        specs_dir = tmp_path / "specs"
+        specs_dir.mkdir()
+        (specs_dir / "001-todo.md").write_text("## Status: incomplete\n")
+        (specs_dir / "002-todo.md").write_text("## Status: incomplete\n")
+        config = _make_config(tmp_path)
+
+        result = run_loop(
+            specs_dir=specs_dir,
+            max_iterations=2,
+            dry_run=True,
+            parallel=1,
+            config=config,
+        )
+
+        assert result.total_specs == 2
+        assert result.iterations == 2
+        assert len(result.details) == 2
+        assert all(d.success for d in result.details)
+        # Sequential mode should assign iteration 1 then 2
+        assert result.details[0].iteration == 1
+        assert result.details[1].iteration == 2
