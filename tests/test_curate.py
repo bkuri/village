@@ -40,7 +40,12 @@ class TestFindOrphans:
 
         assert orphans == []
 
-    def test_all_orphans_in_empty_graph(self, tmp_path: Path) -> None:
+    def test_disconnected_graph_returns_no_orphans(self, tmp_path: Path) -> None:
+        """When no entries have related metadata, the graph is disconnected.
+
+        Orphan detection is meaningless in a disconnected graph — return
+        an empty list instead of flagging every entry.
+        """
         store = MemoryStore(tmp_path / "wiki")
         store.put(title="Solo 1", text="s1", entry_id="solo-1")
         store.put(title="Solo 2", text="s2", entry_id="solo-2")
@@ -48,7 +53,17 @@ class TestFindOrphans:
         curator = Curator(store, tmp_path / "wiki", tmp_path)
         orphans = curator.find_orphans()
 
-        assert set(orphans) == {"solo-1", "solo-2"}
+        assert orphans == []
+
+    def test_single_entry_returns_no_orphans(self, tmp_path: Path) -> None:
+        """A wiki with a single entry should never report it as an orphan."""
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="Only", text="solo", entry_id="only-1")
+
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        orphans = curator.find_orphans()
+
+        assert orphans == []
 
     def test_related_as_list(self, tmp_path: Path) -> None:
         store = MemoryStore(tmp_path / "wiki")
@@ -258,7 +273,7 @@ class TestCurate:
 
         assert isinstance(result, CurateResult)
         assert result.total_entries == 2
-        assert "orph-1" in result.orphans
+        assert result.orphans == []  # disconnected graph → no orphans
         assert len(result.stale_entries) == 1
         assert result.voice_updated is True
         assert result.broken_links == []
@@ -472,6 +487,8 @@ class TestCurateFix:
         store = MemoryStore(tmp_path / "wiki")
         wiki_path = tmp_path / "wiki"
 
+        store.put(title="Hub", text="links to linked", entry_id="hub", metadata={"related": "linked"})
+        store.put(title="Linked", text="connected", entry_id="linked")
         store.put(title="Orphan A", text="alone", entry_id="orph-a")
         store.put(title="Orphan B", text="also alone", entry_id="orph-b")
 
@@ -479,7 +496,8 @@ class TestCurateFix:
         result = curator.curate(fix=True, check_urls=False)
 
         assert len(result.curate_log) == 1
-        assert "archived 2 orphan(s)" in result.curate_log[0]
+        assert "archived 3 orphan(s)" in result.curate_log[0]
+        assert "hub" in result.curate_log[0]  # hub is unreferenced
         assert "orph-a" in result.curate_log[0]
         assert "orph-b" in result.curate_log[0]
 
@@ -487,6 +505,8 @@ class TestCurateFix:
         store = MemoryStore(tmp_path / "wiki")
         wiki_path = tmp_path / "wiki"
 
+        store.put(title="Hub", text="links to linked", entry_id="hub", metadata={"related": "linked"})
+        store.put(title="Linked", text="connected", entry_id="linked")
         store.put(title="Orphan", text="alone", entry_id="orph-1")
 
         curator = Curator(store, wiki_path, tmp_path)

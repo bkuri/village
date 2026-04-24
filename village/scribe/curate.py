@@ -55,7 +55,14 @@ class Curator:
         self.project_root = project_root or wiki_path.parent
 
     def find_orphans(self) -> list[str]:
-        """Find entries with no inbound references from other entries."""
+        """Find entries with no inbound references from other entries.
+
+        An entry is only considered an orphan if the wiki graph has at least
+        some connections. In a fully disconnected graph (no ``related`` metadata
+        anywhere), every entry would be an orphan — which is noisy and
+        misleading. We skip orphan detection in that case and return an empty
+        list.
+        """
         entries = self.store.all_entries()
         referenced_ids: set[str] = set()
 
@@ -65,6 +72,10 @@ class Curator:
                 related = [related]
             for rid in related:
                 referenced_ids.add(rid)
+
+        # No connections in the graph — orphan detection is meaningless.
+        if not referenced_ids:
+            return []
 
         orphans = []
         for entry in entries:

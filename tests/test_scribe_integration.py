@@ -86,17 +86,21 @@ class TestQueryFlow:
 
 
 class TestCurateFlow:
-    def test_curate_finds_orphans_and_generates_voice(self, tmp_path: Path) -> None:
+    def test_curate_connected_graph_finds_orphans(self, tmp_path: Path) -> None:
         wiki_path = tmp_path / "wiki"
         project_root = tmp_path
         store = ScribeStore(wiki_path)
 
+        store.store.put(title="Hub", text="links to linked", entry_id="hub", metadata={"related": "linked"})
+        store.store.put(title="Linked Page", text="connected", entry_id="linked")
         store.store.put(title="Lonely Page", text="No one links here", tags=["solo"], entry_id="orphan")
 
         curator = Curator(store.store, wiki_path, project_root)
         result = curator.curate(check_urls=False)
 
         assert "orphan" in result.orphans
+        assert "hub" in result.orphans  # hub is not referenced by anyone
+        assert "linked" not in result.orphans
         assert result.voice_updated is True
         assert (project_root / "VOICE.md").exists()
 
