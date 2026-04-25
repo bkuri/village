@@ -33,11 +33,53 @@ class StaleEntry:
 
 
 @dataclass
+class DiscoveredFile:
+    """A project file found during auto-discovery that is not yet in the wiki."""
+
+    path: Path
+    title: str
+
+
+# Files to scan for at project root (basename → whether to require existence).
+CONVENTIONAL_ROOT_FILES: tuple[str, ...] = (
+    "README.md",
+    "CHANGELOG.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "LICENSE.md",
+)
+
+# Directories under the project root to scan recursively for .md files.
+CONVENTIONAL_DIRS: tuple[str, ...] = ("docs",)
+
+# Path prefixes (relative to project root) that are always excluded from discovery.
+DEFAULT_EXCLUDE_PREFIXES: tuple[str, ...] = (
+    ".git/",
+    ".village/",
+    ".worktrees/",
+    "wiki/",
+    "node_modules/",
+    ".venv/",
+    "venv/",
+    "__pycache__/",
+    ".beads/",
+    # Draft/WIP content inside docs.
+    "docs/drafts/",
+    "docs/wip/",
+    "docs/original/",
+)
+
+
+@dataclass
 class CurateResult:
     broken_links: list[BrokenLink] = field(default_factory=list)
     orphans: list[str] = field(default_factory=list)
     stale_entries: list[StaleEntry] = field(default_factory=list)
     missing_links: list[dict[str, str | float]] = field(default_factory=list)
+    discovered: list[DiscoveredFile] = field(default_factory=list)
+    discovered_ingested: list[str] = field(default_factory=list)
     voice_updated: bool = False
     goals_updated: bool = False
     total_entries: int = 0
@@ -83,6 +125,62 @@ class Curator:
                 orphans.append(entry.id)
 
         return orphans
+
+    def _is_excluded(self, rel_path: str, extra_excludes: tuple[str, ...] = ()) -> bool:
+        """Check whether a relative path matches any exclusion pattern."""
+        all_excludes = DEFAULT_EXCLUDE_PREFIXES + extra_excludes
+        return any(rel_path.startswith(prefix) or rel_path == prefix.rstrip("/") for prefix in all_excludes)
+
+    def _known_sources(self) -> set[str]:
+        """Collect all source paths currently tracked in the wiki."""
+        sources: set[str] = set()
+        for entry in self.store.all_entries():
+            source = entry.metadata.get("source", "")
+            if isinstance(source, str) and source:
+                sources.add(source)
+        return sources
+
+    def find_undiscovered(self, extra_excludes: tuple[str, ...] = ()) -> list[DiscoveredFile]:
+        """Scan project root for conventional doc files not yet in the wiki.
+
+        Checks root-level files (README.md, CHANGELOG.md, etc.) and
+        recursively scans ``docs/`` for ``*.md`` files. Skips anything
+        already tracked in the wiki (matched by source path) or matching
+        an exclusion pattern.
+
+        Args:
+            extra_excludes: Additional path prefixes to exclude (e.g.
+                from project config).
+        """
+        known = self._known_sources()
+        discovered: list[DiscoveredFile] = []
+
+        # Root-level conventional files.
+        for name in CONVENTIONAL_ROOT_FILES:
+            file_path = self.project_root / name
+            rel = name
+            if not file_path.is_file():
+                continue
+            if self._is_excluded(rel, extra_excludes):
+                continue
+            if f"./{rel}" in known or rel in known:
+                continue
+            discovered.append(DiscoveredFile(path=file_path, title=file_path.stem))
+
+        # Recursive scan of conventional directories.
+        for dir_name in CONVENTIONAL_DIRS:
+            dir_path = self.project_root / dir_name
+            if not dir_path.is_dir():
+                continue
+            for md_file in dir_path.rglob("*.md"):
+                rel = str(md_file.relative_to(self.project_root))
+                if self._is_excluded(rel, extra_excludes):
+                    continue
+                if f"./{rel}" in known or rel in known:
+                    continue
+                discovered.append(DiscoveredFile(path=md_file, title=md_file.stem))
+
+        return discovered
 
     def find_stale(self, max_age_days: int = 90) -> list[StaleEntry]:
         """Find entries older than max_age_days."""
