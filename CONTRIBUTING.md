@@ -27,7 +27,7 @@ Village is intentionally small and opinionated.
 
 Village uses [Keep a Changelog](https://keepachangelog.com/) format.
 
-Changes are automatically documented during release based on:
+Changes are automatically documented during `village builder arrange` based on:
 - Task type (bug → Fixed, feature → Added)
 - Bump label (major → Breaking)
 

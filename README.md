@@ -109,8 +109,8 @@ village builder run                 # Picks up where it left off
 
 ```bash
 village tasks update <id> --status done  # Mark tasks complete
-village builder release --dry-run        # Preview version bump + changelog
-village builder release                  # Apply and tag
+village builder arrange --dry-run        # Preview version bump + changelog
+village builder arrange                  # Apply and tag
 ```
 
 That's it. No daemon. No database. No hidden state.
@@ -128,7 +128,7 @@ You have 10 tasks ready. Here's how the two approaches compare:
 | **Know what's running** | Check each terminal manually | `village watcher status --system` |
 | **Recover from crash** | Guess which tasks were running, re-do work | `village watcher cleanup --apply` picks up where you left off |
 | **Track state** | Post-it notes, spreadsheets, hope | Event log, lock files, state machine |
-| **Release** | Manual version bump, copy-paste changelog | `village builder release` — semver + categorized changelog |
+| **Release** | Manual version bump, copy-paste changelog | `village builder arrange` — semver + categorized changelog |
 | **Scale to N agents** | Open N more terminals, manage N more contexts | `village builder run -p N` |
 
 **The key difference:** Village makes coordination *boring*. Not exciting, not magical — boring. Boring is reliable. Boring is auditable. Boring lets you focus on the code.
@@ -142,7 +142,7 @@ You have 10 tasks ready. Here's how the two approaches compare:
 | Role | Default Chat | Subcommands |
 |------|-------------|-------------|
 | **planner** | "What do you want to accomplish?" | `workflows`, `show`, `design`, `refine`, `inspect` |
-| **builder** | "Which specs shall I work on?" | `run`, `status`, `cancel`, `logs`, `resume`, `queue`, `pause`, `release` |
+| **builder** | "Which specs shall I work on?" | `run`, `status`, `cancel`, `logs`, `resume`, `queue`, `pause`, `arrange` |
 | **watcher** | "What would you like to observe?" | `status`, `locks`, `events`, `dashboard`, `cleanup`, `unlock`, `monitor`, `ledger show`, `ledger list`, `ready` |
 | **scribe** | "What do you want to know?" | `fetch`, `ask`, `curate`, `drafts` |
 | **council** | "What shall we discuss?" | `debate`, `list`, `show` |
@@ -233,7 +233,7 @@ Step types: `prompt`, `critique`, `decompose`, `research`, `synthesize`.
 - **Observability** — Real-time dashboard, event queries, wiki monitoring
 - **Safety guarantees** — Conflict detection, automatic rollback, resource quotas
 - **Doctor framework** — Built-in health checks for git, quality, and tests; extensible with custom analyzers
-- **Release automation** — Semver bumps from task metadata, categorized changelogs, git tags
+- **Release automation** — `village builder arrange`: semver bumps from task metadata, categorized changelogs, git tags
 - **Native task store** — File-based task management with dependencies, search, and atomic operations
 - **File-based memory** — Markdown memory store with find/recent/related search
 - **Extensibility** — 7 extension points for domain customization without forking
@@ -302,7 +302,7 @@ Inspect anytime:
 village doctor diagnose                  # Run health checks
 village scribe curate                    # Maintain knowledge base
 village watcher ledger show bd-xyz       # View audit trail
-village builder release --dry-run        # Preview release
+village builder arrange --dry-run        # Preview release
 ```
 
 ---
@@ -357,7 +357,7 @@ village builder release --dry-run        # Preview release
 | `village builder resume --build` | Resume a stopped build loop |
 | `village builder queue` | Queue and execute ready tasks |
 | `village builder pause` | Pause an in-progress task |
-| `village builder release` | Apply pending version bumps, update changelog, create tag |
+| `village builder arrange` | Apply pending version bumps, update changelog, create tag |
 
 ### Scribe (Knowledge Base)
 
@@ -484,9 +484,8 @@ Run `village doctor diagnose` and verify all pass.
 ## Release Automation
 
 ```bash
-village builder release                  # Apply version bumps + changelog + tag
-village builder release --dry-run        # Preview without making changes
-village builder release --no-tag         # Skip git tag creation
+village builder arrange                  # Apply version bumps + changelog + tag
+village builder arrange --dry-run        # Preview without making changes
 ```
 
 Release process:

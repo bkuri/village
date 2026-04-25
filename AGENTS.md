@@ -108,7 +108,7 @@ uv run pytest --cov=village              # With coverage
    Default mapping from scope: fix→patch, feature→minor, others→none.
    Override with explicit label if actual impact differs.
 
-   **ENFORCEMENT**: `village release` will BLOCK if any closed task has no bump label.
+   **ENFORCEMENT**: `village builder arrange` will BLOCK if any closed task has no bump label.
    Every task — including docs-only changes — MUST have a bump label before release.
    Use `bump:none` for tasks with no version impact. Use `--force` only in emergencies.
 5. **PUSH TO REMOTE** - This is MANDATORY:
@@ -133,7 +133,7 @@ Village uses the built-in task store for issue tracking. See [Task Management](R
 
 > **IMPORTANT**: This project uses the built-in **Village task store** for ALL issue tracking in Village-created projects. Do NOT use markdown TODOs, task lists, or external trackers.
 
-**Statuses**: `open` (ready), `draft` (needs definition), `in_progress` (claimed), `done` (pending release), `closed` (released), `deferred` (blocked)
+**Statuses**: `open` (ready), `draft` (needs definition), `in_progress` (claimed), `done` (pending arrange), `closed` (released), `deferred` (blocked)
 
 **Types**: `bug`, `feature`, `task` (tests/docs/refactor), `epic` (large feature with subtasks), `chore` (maintenance)
 
@@ -186,7 +186,7 @@ bd close <id> --reason "Done"  # Complete work
 
 ## Changelog Management
 
-See [Release Automation](README.md#release-automation) for the release process.
+See [Release Automation](README.md#release-automation) for the release process (`village builder arrange`).
 
 When completing a task:
 1. **Apply bump label**: `village tasks label <task-id> add bump:<type>` (major/minor/patch/none)
