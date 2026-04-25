@@ -308,7 +308,6 @@ def _build_registry() -> dict[str, CommandEntry]:
     interactive_cmds = {"new", "up", "planner", "watcher", "builder", "council", "doctor"}
     for name, cmd in click_cmds.items():
         if name not in registry:
-
             if name in interactive_cmds:
 
                 async def _make_interactive_handler(

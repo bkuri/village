@@ -262,9 +262,10 @@ class TestSeeWithAndWithoutRaw:
 
         store = ScribeStore(tmp_path / "wiki")
 
-        with patch("village.config.get_config") as mock_get_config, patch(
-            "village.llm.factory.get_llm_client"
-        ) as mock_get_llm:
+        with (
+            patch("village.config.get_config") as mock_get_config,
+            patch("village.llm.factory.get_llm_client") as mock_get_llm,
+        ):
             mock_config = MagicMock()
             mock_get_config.return_value = mock_config
             mock_llm = MagicMock()

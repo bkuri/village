@@ -59,7 +59,6 @@ class TestClient:
 
 
 async def main() -> None:
-
     print("=" * 60)
     print("E2E Test: village new via ACP transport")
     print("=" * 60)

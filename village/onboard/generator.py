@@ -195,14 +195,9 @@ class Generator:
 
     @staticmethod
     def _is_excluded(rel_path: str) -> bool:
-        return any(
-            rel_path.startswith(prefix) or rel_path == prefix.rstrip("/")
-            for prefix in DEFAULT_EXCLUDE_PREFIXES
-        )
+        return any(rel_path.startswith(prefix) or rel_path == prefix.rstrip("/") for prefix in DEFAULT_EXCLUDE_PREFIXES)
 
-    def _discover_existing_docs(
-        self, existing_seed_names: set[str]
-    ) -> list[tuple[str, str]]:
+    def _discover_existing_docs(self, existing_seed_names: set[str]) -> list[tuple[str, str]]:
         onboard_generated = {"README.md", "AGENTS.md"}
         seeds: list[tuple[str, str]] = []
 

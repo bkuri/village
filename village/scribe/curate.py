@@ -420,9 +420,7 @@ class Curator:
                 rel_path = str(df.path.relative_to(self.project_root))
                 entry_id = self.store.put(title, text, tags=tags, metadata={"source": f"./{rel_path}"})
                 result.discovered_ingested.append(entry_id)
-            result.curate_log.append(
-                f"CURATE --fix: ingested {len(result.discovered_ingested)} discovered doc(s)"
-            )
+            result.curate_log.append(f"CURATE --fix: ingested {len(result.discovered_ingested)} discovered doc(s)")
 
         if result.curate_log:
             self._append_curate_log(result.curate_log)

@@ -517,9 +517,7 @@ class TestGenerateIncludesDiscoveredDocs:
         assert "CHANGELOG.md" in filenames
         assert "CONTRIBUTING.md" in filenames
 
-    def test_no_duplicate_seeds_when_interview_and_discovered_overlap(
-        self, tmp_path: Path
-    ) -> None:
+    def test_no_duplicate_seeds_when_interview_and_discovered_overlap(self, tmp_path: Path) -> None:
         (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
 
         interview = InterviewResult(
@@ -553,9 +551,7 @@ class TestGenerateIncludesDiscoveredDocs:
         assert (tmp_path / "wiki" / "ingest" / "CHANGELOG.md").exists()
         assert "wiki/ingest/CHANGELOG.md" in created
 
-    def test_readme_and_agents_not_discovered_even_if_present(
-        self, tmp_path: Path
-    ) -> None:
+    def test_readme_and_agents_not_discovered_even_if_present(self, tmp_path: Path) -> None:
         (tmp_path / "README.md").write_text("# Old README", encoding="utf-8")
         (tmp_path / "AGENTS.md").write_text("# Old Agents", encoding="utf-8")
 

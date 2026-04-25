@@ -217,9 +217,7 @@ class MetricsCollector:
 
         server = HTTPServer((host, port), _PrometheusHandler)
         self._prometheus_server: HTTPServer | None = server
-        self._prometheus_thread = threading.Thread(
-            target=server.serve_forever, name="prometheus-server", daemon=True
-        )
+        self._prometheus_thread = threading.Thread(target=server.serve_forever, name="prometheus-server", daemon=True)
         self._prometheus_thread.start()
         logger.info(f"Prometheus server started on {host}:{port}")
 

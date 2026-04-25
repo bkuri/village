@@ -49,6 +49,7 @@ class TestResumeWithRollback:
         "os.environ.get('CI') == 'true'",
         reason="Requires tmux + agent binary (not available on CI)",
     )
+
     def test_resume_failure_with_rollback(self, mock_config: Config, rollback_test_setup) -> None:
         """Test that task failure triggers rollback when enabled."""
         # Create worktree
