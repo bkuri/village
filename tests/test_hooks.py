@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from village.hooks import MANAGED_HOOKS, install_hooks, uninstall_hooks
+from village.hooks import MANAGED_HOOKS, _resolve_hooks_dir, install_hooks, uninstall_hooks
 
 
 class TestManagedHooks:
@@ -240,3 +240,76 @@ class TestIsVillageHook:
         from village.hooks import _is_village_hook
 
         assert _is_village_hook(tmp_path / "nonexistent") is False
+
+
+class TestResolveHooksDir:
+    def test_git_repo(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        hooks_dir = _resolve_hooks_dir(tmp_path)
+        assert hooks_dir == tmp_path / ".git" / "hooks"
+
+    def test_jj_colocated_repo(self, tmp_path: Path) -> None:
+        """jj colocated repos have both .git and .jj — .git takes priority."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / ".jj").mkdir()
+        hooks_dir = _resolve_hooks_dir(tmp_path)
+        assert hooks_dir == tmp_path / ".git" / "hooks"
+
+    def test_jj_native_repo(self, tmp_path: Path) -> None:
+        """jj native repos only have .jj — hooks go to .jj/repo/hooks/."""
+        (tmp_path / ".jj").mkdir()
+        hooks_dir = _resolve_hooks_dir(tmp_path)
+        assert hooks_dir == tmp_path / ".jj" / "repo" / "hooks"
+
+    def test_no_vcs_defaults_to_git(self, tmp_path: Path) -> None:
+        """No .git or .jj — default to .git/hooks for future creation."""
+        hooks_dir = _resolve_hooks_dir(tmp_path)
+        assert hooks_dir == tmp_path / ".git" / "hooks"
+
+
+class TestJJNativeHooks:
+    """Test hook install/uninstall for jj native (non-colocated) repos."""
+
+    def _setup_jj_native(self, tmp_path: Path, sources_dir: Path) -> Path:
+        """Create a fake jj native repo with hook sources."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        (project_root / ".jj" / "repo").mkdir(parents=True)
+
+        for name in MANAGED_HOOKS:
+            src = sources_dir / f"{name}.sh"
+            src.write_text(f"#!/bin/bash\n# Installed by: village up\necho {name}\n", encoding="utf-8")
+
+        return project_root
+
+    def test_install_to_jj_native(self, tmp_path: Path) -> None:
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        project_root = self._setup_jj_native(tmp_path, sources)
+
+        with patch("village.hooks.HOOKS_DIR", sources):
+            result = install_hooks(project_root)
+            assert result is True
+
+        hooks_dir = project_root / ".jj" / "repo" / "hooks"
+        for name in MANAGED_HOOKS:
+            hook = hooks_dir / name
+            assert hook.exists(), f"Hook not installed: {name}"
+            assert hook.stat().st_mode & 0o111 != 0
+
+    def test_uninstall_from_jj_native(self, tmp_path: Path) -> None:
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        project_root = self._setup_jj_native(tmp_path, sources)
+
+        # Install first
+        with patch("village.hooks.HOOKS_DIR", sources):
+            install_hooks(project_root)
+
+        # Then uninstall
+        result = uninstall_hooks(project_root)
+        assert result is True
+
+        hooks_dir = project_root / ".jj" / "repo" / "hooks"
+        for name in MANAGED_HOOKS:
+            assert not (hooks_dir / name).exists()

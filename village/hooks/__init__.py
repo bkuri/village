@@ -1,4 +1,10 @@
-"""Git hook management for Village."""
+"""Git hook management for Village.
+
+Supports both git and jj (Jujutsu) repositories:
+- git: hooks installed to ``.git/hooks/``
+- jj colocated: same as git (shares ``.git/hooks/``)
+- jj native: hooks installed to ``.jj/repo/hooks/``
+"""
 
 import logging
 import shutil
@@ -17,7 +23,7 @@ MANAGED_HOOKS = (
 
 # Marker written at the top of Village-managed hooks so we can identify
 # our own hooks and avoid overwriting user-created hooks.
-VILLAGE_MARKER = "# Installed by: village up"
+VILLAGE_MARKER = "Installed by: village"
 
 
 def _is_village_hook(hook_path: Path) -> bool:
@@ -25,7 +31,7 @@ def _is_village_hook(hook_path: Path) -> bool:
     if not hook_path.exists():
         return False
     content = hook_path.read_text(encoding="utf-8")
-    return "Installed by: village" in content
+    return VILLAGE_MARKER in content
 
 
 def _hook_source(hook_name: str) -> Path:
@@ -33,21 +39,44 @@ def _hook_source(hook_name: str) -> Path:
     return HOOKS_DIR / f"{hook_name}.sh"
 
 
-def install_hooks(git_root: Path, *, dry_run: bool = False) -> bool:
-    """Install Village git hooks into the repository.
+def _resolve_hooks_dir(project_root: Path) -> Path:
+    """Resolve the hooks directory for the project.
+
+    Checks for git first, then jj native, then falls back to git.
+
+    Priority:
+    1. ``.git/hooks/`` — git or jj colocated repos
+    2. ``.jj/repo/hooks/`` — jj native (non-colocated) repos
+    """
+    git_hooks = project_root / ".git" / "hooks"
+    if (project_root / ".git").is_dir():
+        return git_hooks
+
+    jj_hooks = project_root / ".jj" / "repo" / "hooks"
+    if (project_root / ".jj").is_dir():
+        return jj_hooks
+
+    # Default to git — will be created on install.
+    return git_hooks
+
+
+def install_hooks(project_root: Path, *, dry_run: bool = False) -> bool:
+    """Install Village hooks into the repository.
 
     Installs all hooks from MANAGED_HOOKS. Skips hooks that are already
     up to date. Replaces Village-managed hooks that have changed.
     Warns (and skips) if a non-Village hook with the same name exists.
 
+    Works with git, jj colocated, and jj native repos.
+
     Args:
-        git_root: Path to the git repository root.
+        project_root: Path to the project/repository root.
         dry_run: If True, preview without installing.
 
     Returns:
         True if all hooks were installed (or already up to date).
     """
-    hooks_dir = git_root / ".git" / "hooks"
+    hooks_dir = _resolve_hooks_dir(project_root)
     all_ok = True
 
     for hook_name in MANAGED_HOOKS:
@@ -88,20 +117,22 @@ def install_hooks(git_root: Path, *, dry_run: bool = False) -> bool:
     return all_ok
 
 
-def uninstall_hooks(git_root: Path, *, dry_run: bool = False) -> bool:
-    """Remove Village git hooks from the repository.
+def uninstall_hooks(project_root: Path, *, dry_run: bool = False) -> bool:
+    """Remove Village hooks from the repository.
 
     Only removes hooks that were installed by Village (identified by
     the VILLAGE_MARKER). Non-Village hooks are left untouched.
 
+    Works with git, jj colocated, and jj native repos.
+
     Args:
-        git_root: Path to the git repository root.
+        project_root: Path to the project/repository root.
         dry_run: If True, preview without removing.
 
     Returns:
         True if all Village hooks were removed (or didn't exist).
     """
-    hooks_dir = git_root / ".git" / "hooks"
+    hooks_dir = _resolve_hooks_dir(project_root)
     all_ok = True
 
     for hook_name in MANAGED_HOOKS:
