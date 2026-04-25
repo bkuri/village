@@ -368,3 +368,205 @@ class TestGetAnswerSubstring:
         result = gen._get_answer("What does this project do?", "default text")
 
         assert result == "default text"
+
+
+class TestDiscoverExistingDocs:
+    def test_finds_conventional_root_files(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\nAll notable changes.", encoding="utf-8")
+        (tmp_path / "CONTRIBUTING.md").write_text("# Contributing\n\nPlease fork.", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        filenames = [name for name, _ in seeds]
+        assert "CHANGELOG.md" in filenames
+        assert "CONTRIBUTING.md" in filenames
+
+    def test_finds_docs_directory_files(self, tmp_path: Path) -> None:
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "guide.md").write_text("# Guide\n\nHow to use.", encoding="utf-8")
+        (docs_dir / "api.md").write_text("# API\n\nEndpoints.", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        filenames = [name for name, _ in seeds]
+        assert "docs/guide.md" in filenames
+        assert "docs/api.md" in filenames
+
+    def test_skips_readme_and_agents_md(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# My App", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("# Agents Guide", encoding="utf-8")
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        filenames = [name for name, _ in seeds]
+        assert "README.md" not in filenames
+        assert "AGENTS.md" not in filenames
+        assert "CHANGELOG.md" in filenames
+
+    def test_skips_excluded_paths(self, tmp_path: Path) -> None:
+        wiki_dir = tmp_path / "wiki"
+        wiki_dir.mkdir()
+        (wiki_dir / "index.md").write_text("# Wiki Index", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        filenames = [name for name, _ in seeds]
+        assert not any("wiki" in f for f in filenames)
+
+    def test_skips_nonexistent_files(self, tmp_path: Path) -> None:
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        assert len(seeds) == 0
+
+    def test_skips_docs_drafts_and_wip(self, tmp_path: Path) -> None:
+        (tmp_path / "docs" / "drafts").mkdir(parents=True)
+        (tmp_path / "docs" / "wip").mkdir(parents=True)
+        (tmp_path / "docs" / "drafts" / "idea.md").write_text("# Idea", encoding="utf-8")
+        (tmp_path / "docs" / "wip" / "scratch.md").write_text("# Scratch", encoding="utf-8")
+        (tmp_path / "docs" / "guide.md").write_text("# Guide", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        filenames = [name for name, _ in seeds]
+        assert "docs/guide.md" in filenames
+        assert "docs/drafts/idea.md" not in filenames
+        assert "docs/wip/scratch.md" not in filenames
+
+    def test_skips_existing_seed_names(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs({"CHANGELOG.md"})
+
+        filenames = [name for name, _ in seeds]
+        assert "CHANGELOG.md" not in filenames
+
+    def test_returns_content(self, tmp_path: Path) -> None:
+        content = "# Changelog\n\n## 1.0.0\n\nInitial release."
+        (tmp_path / "CHANGELOG.md").write_text(content, encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        seeds = gen._discover_existing_docs(set())
+
+        assert len(seeds) == 1
+        assert seeds[0][1] == content
+
+
+class TestGenerateIncludesDiscoveredDocs:
+    def test_discovered_docs_appear_in_wiki_seeds(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
+        (tmp_path / "CONTRIBUTING.md").write_text("# Contributing", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        result = gen.generate()
+
+        filenames = [name for name, _ in result.wiki_seeds]
+        assert "CHANGELOG.md" in filenames
+        assert "CONTRIBUTING.md" in filenames
+
+    def test_no_duplicate_seeds_when_interview_and_discovered_overlap(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
+
+        interview = InterviewResult(
+            answers={
+                "What does this project do?": "A CLI tool.",
+            }
+        )
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=interview,
+            project_root=tmp_path,
+        )
+        result = gen.generate()
+
+        filenames = [name for name, _ in result.wiki_seeds]
+        assert filenames.count("CHANGELOG.md") == 1
+
+    def test_discovered_docs_written_to_ingest(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## 1.0.0", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        result = gen.generate()
+        created = gen.write_files(result)
+
+        assert (tmp_path / "wiki" / "ingest" / "CHANGELOG.md").exists()
+        assert "wiki/ingest/CHANGELOG.md" in created
+
+    def test_readme_and_agents_not_discovered_even_if_present(
+        self, tmp_path: Path
+    ) -> None:
+        (tmp_path / "README.md").write_text("# Old README", encoding="utf-8")
+        (tmp_path / "AGENTS.md").write_text("# Old Agents", encoding="utf-8")
+
+        gen = Generator(
+            project_info=_make_project_info(),
+            scaffold=_make_python_cli_scaffold(),
+            interview=InterviewResult(),
+            project_root=tmp_path,
+        )
+        result = gen.generate()
+
+        filenames = [name for name, _ in result.wiki_seeds]
+        assert "README.md" not in filenames
+        assert "AGENTS.md" not in filenames

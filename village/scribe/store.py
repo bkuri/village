@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -5,6 +6,10 @@ import httpx
 import trafilatura
 
 from village.memory import MemoryStore
+
+logger = logging.getLogger(__name__)
+
+MAX_DISTILL_SIZE = 2000
 
 STOP_WORDS = frozenset(
     {
@@ -160,17 +165,45 @@ class ScribeStore:
             text = getattr(downloaded, "text", None) or ""
         return title, text
 
-    def _extract_file(self, path: Path) -> tuple[str, str]:
+    def _distill(self, text: str, title: str) -> str:
+        if len(text) <= MAX_DISTILL_SIZE:
+            return text
+
+        try:
+            from village.config import get_config
+            from village.llm.factory import get_llm_client
+
+            config = get_config()
+            llm = get_llm_client(config)
+            prompt = (
+                f"Distill the following document into a concise summary of actionable knowledge. "
+                f"Extract key conventions, patterns, rules, and important facts. "
+                f"Document title: {title}\n\n{text}"
+            )
+            system_prompt = (
+                "You are a knowledge distillation assistant. Produce a concise summary "
+                "that preserves actionable information, conventions, and key patterns. "
+                "Do not include preamble — output only the distilled content."
+            )
+            result = llm.call(prompt, system_prompt=system_prompt, max_tokens=2048, timeout=60)
+            return result.strip()
+        except Exception:
+            logger.warning("LLM distillation failed, falling back to truncation", exc_info=True)
+            return f"{text[:MAX_DISTILL_SIZE]}\n\n[Content truncated — original was {len(text)} chars]"
+
+    def _extract_file(self, path: Path, raw: bool = False) -> tuple[str, str]:
         text = path.read_text(encoding="utf-8")
         title = path.stem
+        if not raw:
+            text = self._distill(text, title)
         return title, text
 
-    def _extract(self, source: str) -> tuple[str, str]:
+    def _extract(self, source: str, raw: bool = False) -> tuple[str, str]:
         if source.startswith("http://") or source.startswith("https://"):
             return self._extract_url(source)
         path = Path(source)
         if path.exists():
-            return self._extract_file(path)
+            return self._extract_file(path, raw=raw)
         raise FileNotFoundError(f"Source not found: {source}")
 
     def _append_log(self, source: str, entry_id: str, title: str) -> None:
@@ -185,10 +218,10 @@ class ScribeStore:
         words = title.lower().split()
         return [w for w in words if w not in STOP_WORDS and len(w) > 1]
 
-    def see(self, source: str) -> IngestResult:
+    def see(self, source: str, raw: bool = False) -> IngestResult:
         self._ensure_dirs()
         try:
-            title, text = self._extract(source)
+            title, text = self._extract(source, raw=raw)
         except Exception as exc:
             return IngestResult(
                 entry_id="",

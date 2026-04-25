@@ -1,6 +1,7 @@
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from village.scribe.store import ScribeStore
+from village.scribe.store import MAX_DISTILL_SIZE, ScribeStore
 
 
 class TestSeeWithMarkdownFile:
@@ -177,3 +178,115 @@ class TestAskSourcesPopulated:
         for source_id in result.sources:
             entry = elder.store.get(source_id)
             assert entry is not None
+
+
+class TestDistillUnderThreshold:
+    def test_returns_text_as_is_when_under_threshold(self, tmp_path: Path) -> None:
+        store = ScribeStore(tmp_path / "wiki")
+        short_text = "Short content"
+        result = store._distill(short_text, "test-doc")
+        assert result == short_text
+
+    def test_returns_text_as_is_at_exact_threshold(self, tmp_path: Path) -> None:
+        store = ScribeStore(tmp_path / "wiki")
+        text = "a" * MAX_DISTILL_SIZE
+        result = store._distill(text, "test-doc")
+        assert result == text
+
+
+class TestDistillWithLLMUnavailable:
+    def test_falls_back_to_truncation(self, tmp_path: Path) -> None:
+        store = ScribeStore(tmp_path / "wiki")
+        long_text = "a" * (MAX_DISTILL_SIZE + 100)
+        result = store._distill(long_text, "test-doc")
+        assert len(result) < len(long_text)
+        assert "Content truncated" in result
+        assert f"original was {len(long_text)} chars" in result
+
+
+class TestDistillWithLLMSuccess:
+    def test_calls_llm_and_returns_distilled_text(self, tmp_path: Path) -> None:
+        store = ScribeStore(tmp_path / "wiki")
+        long_text = "a" * (MAX_DISTILL_SIZE + 100)
+        mock_llm = MagicMock()
+        mock_llm.call.return_value = "Distilled summary of key facts"
+
+        with (
+            patch("village.config.get_config") as mock_get_config,
+            patch("village.llm.factory.get_llm_client", return_value=mock_llm),
+        ):
+            mock_config = MagicMock()
+            mock_get_config.return_value = mock_config
+            result = store._distill(long_text, "test-doc")
+
+        assert result == "Distilled summary of key facts"
+        mock_llm.call.assert_called_once()
+
+
+class TestRawFlag:
+    def test_raw_bypasses_distillation(self, tmp_path: Path) -> None:
+        large_content = "Large File\n" + ("This is filler content. " * 500)
+        md_file = tmp_path / "large.md"
+        md_file.write_text(large_content, encoding="utf-8")
+
+        store = ScribeStore(tmp_path / "wiki")
+
+        with (
+            patch("village.config.get_config") as mock_get_config,
+            patch("village.llm.factory.get_llm_client") as mock_get_llm,
+        ):
+            mock_config = MagicMock()
+            mock_get_config.return_value = mock_config
+            mock_llm = MagicMock()
+            mock_llm.call.return_value = "Distilled summary"
+            mock_get_llm.return_value = mock_llm
+
+            result_raw = store.see(str(md_file), raw=True)
+            result_distilled = store.see(str(md_file), raw=False)
+
+        mock_llm.call.assert_called_once()
+
+        raw_entry = store.store.get(result_raw.entry_id)
+        distilled_entry = store.store.get(result_distilled.entry_id)
+        assert raw_entry is not None
+        assert distilled_entry is not None
+        assert raw_entry.text.strip() == large_content.strip()
+        assert distilled_entry.text == "Distilled summary"
+
+
+class TestSeeWithAndWithoutRaw:
+    def test_see_default_distills_large_files(self, tmp_path: Path) -> None:
+        large_content = "x" * (MAX_DISTILL_SIZE + 50)
+        md_file = tmp_path / "big.md"
+        md_file.write_text(large_content, encoding="utf-8")
+
+        store = ScribeStore(tmp_path / "wiki")
+
+        with patch("village.config.get_config") as mock_get_config, patch(
+            "village.llm.factory.get_llm_client"
+        ) as mock_get_llm:
+            mock_config = MagicMock()
+            mock_get_config.return_value = mock_config
+            mock_llm = MagicMock()
+            mock_llm.call.return_value = "Distilled key insights"
+            mock_get_llm.return_value = mock_llm
+
+            result = store.see(str(md_file))
+
+        assert result.status == "success"
+        entry = store.store.get(result.entry_id)
+        assert entry is not None
+        assert entry.text == "Distilled key insights"
+
+    def test_see_small_file_unchanged(self, tmp_path: Path) -> None:
+        small_content = "Small content"
+        md_file = tmp_path / "small.md"
+        md_file.write_text(small_content, encoding="utf-8")
+
+        store = ScribeStore(tmp_path / "wiki")
+        result = store.see(str(md_file))
+
+        assert result.status == "success"
+        entry = store.store.get(result.entry_id)
+        assert entry is not None
+        assert entry.text == small_content

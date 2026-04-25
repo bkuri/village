@@ -31,13 +31,14 @@ def scribe_group(ctx: click.Context) -> None:
 
 @scribe_group.command()
 @click.argument("source")
+@click.option("--raw", is_flag=True, help="Bypass LLM distillation, store content as-is")
 @click.option("--json", "json_output", is_flag=True, help="Output as JSON")
-def fetch(source: str, json_output: bool) -> None:
+def fetch(source: str, raw: bool, json_output: bool) -> None:
     """Ingest a URL or file into the knowledge base."""
     wiki_path = _find_wiki_path()
     store = ScribeStore(wiki_path)
 
-    result = store.see(source)
+    result = store.see(source, raw=raw)
 
     if json_output:
         click.echo(
@@ -109,6 +110,10 @@ def curate(json_output: bool, fix: bool) -> None:
                     "voice_updated": result.voice_updated,
                     "orphans_archived": result.orphans_archived,
                     "orphans_md_written": result.orphans_md_written,
+                    "discovered": [str(d.path.relative_to(project_root)) for d in result.discovered],
+                    "discovered_count": len(result.discovered),
+                    "discovered_ingested": result.discovered_ingested,
+                    "discovered_ingested_count": len(result.discovered_ingested),
                     "curate_log": result.curate_log,
                 }
             )
@@ -124,6 +129,15 @@ def curate(json_output: bool, fix: bool) -> None:
         if result.broken_links:
             for bl in result.broken_links:
                 click.echo(f"  - {bl.url} ({bl.status_code or 'error'})")
+        if result.discovered:
+            ingested_count = len(result.discovered_ingested)
+            click.echo(f"Discovered: {len(result.discovered)} files ({ingested_count} auto-ingested)")
+            for df in result.discovered:
+                rel = str(df.path.relative_to(project_root))
+                click.echo(f"  - {rel}")
+            if result.discovered_ingested:
+                for eid in result.discovered_ingested:
+                    click.echo(f"  ✓ {eid}")
         click.echo(f"VOICE.md updated: {result.voice_updated}")
         if result.orphans_archived:
             click.echo(f"Orphans archived: {len(result.orphans_archived)}")

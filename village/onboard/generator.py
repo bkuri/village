@@ -4,6 +4,7 @@ from pathlib import Path
 from village.onboard.detector import ProjectInfo
 from village.onboard.models import InterviewResult
 from village.onboard.scaffolds import ScaffoldTemplate
+from village.scribe.curate import CONVENTIONAL_DIRS, CONVENTIONAL_ROOT_FILES, DEFAULT_EXCLUDE_PREFIXES
 
 
 @dataclass
@@ -192,13 +193,58 @@ class Generator:
                 return a
         return default
 
+    @staticmethod
+    def _is_excluded(rel_path: str) -> bool:
+        return any(
+            rel_path.startswith(prefix) or rel_path == prefix.rstrip("/")
+            for prefix in DEFAULT_EXCLUDE_PREFIXES
+        )
+
+    def _discover_existing_docs(
+        self, existing_seed_names: set[str]
+    ) -> list[tuple[str, str]]:
+        onboard_generated = {"README.md", "AGENTS.md"}
+        seeds: list[tuple[str, str]] = []
+
+        for name in CONVENTIONAL_ROOT_FILES:
+            if name in onboard_generated:
+                continue
+            if name in existing_seed_names:
+                continue
+            file_path = self.project_root / name
+            if not file_path.is_file():
+                continue
+            if self._is_excluded(name):
+                continue
+            content = file_path.read_text(encoding="utf-8")
+            seeds.append((name, content))
+
+        for dir_name in CONVENTIONAL_DIRS:
+            dir_path = self.project_root / dir_name
+            if not dir_path.is_dir():
+                continue
+            for md_file in dir_path.rglob("*.md"):
+                rel = str(md_file.relative_to(self.project_root))
+                if self._is_excluded(rel):
+                    continue
+                if rel in existing_seed_names:
+                    continue
+                content = md_file.read_text(encoding="utf-8")
+                seeds.append((rel, content))
+
+        return seeds
+
     def generate(self) -> GenerationResult:
         wiki_path = self.project_root / "wiki"
+        wiki_seeds = self._build_wiki_seeds()
+
+        existing_names = {name for name, _ in wiki_seeds}
+        wiki_seeds.extend(self._discover_existing_docs(existing_names))
 
         return GenerationResult(
             agents_md=self._build_agents_md(),
             readme_md=self._build_readme_md(),
-            wiki_seeds=self._build_wiki_seeds(),
+            wiki_seeds=wiki_seeds,
             wiki_path=wiki_path,
         )
 

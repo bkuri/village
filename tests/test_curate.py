@@ -541,3 +541,100 @@ class TestCurateFix:
 
         entry_file = wiki_path / "entries" / "orph-1.md"
         assert entry_file.exists()
+
+
+class TestCurateDiscovery:
+    def test_curate_populates_discovered(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# Readme", encoding="utf-8")
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "guide.md").write_text("# Guide", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(check_urls=False)
+
+        assert len(result.discovered) == 2
+        discovered_titles = {d.title for d in result.discovered}
+        assert "README" in discovered_titles
+        assert "guide" in discovered_titles
+
+    def test_curate_fix_false_does_not_ingest(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# Readme", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=False, check_urls=False)
+
+        assert len(result.discovered) == 1
+        assert result.discovered_ingested == []
+        assert len(store.all_entries()) == 0
+
+    def test_curate_fix_true_auto_ingests(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# Readme content here", encoding="utf-8")
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        (docs_dir / "architecture.md").write_text("# Architecture", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        assert len(result.discovered) == 2
+        assert len(result.discovered_ingested) == 2
+        assert len(store.all_entries()) == 2
+
+        ingested_titles = {e.title for e in store.all_entries()}
+        assert "README" in ingested_titles
+        assert "architecture" in ingested_titles
+
+    def test_curate_discovery_log_entries(self, tmp_path: Path) -> None:
+        (tmp_path / "CHANGELOG.md").write_text("# Changelog", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=False, check_urls=False)
+
+        assert any("discovered 1 untracked project doc(s)" in log for log in result.curate_log)
+
+    def test_curate_fix_discovery_log_entries(self, tmp_path: Path) -> None:
+        (tmp_path / "AGENTS.md").write_text("# Agents", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        log_text = " ".join(result.curate_log)
+        assert "discovered 1 untracked project doc(s)" in log_text
+        assert "ingested 1 discovered doc(s)" in log_text
+
+    def test_curate_ingested_appears_in_voice(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# Project Readme", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(fix=True, check_urls=False)
+
+        assert result.voice_updated is True
+        voice = (tmp_path / "VOICE.md").read_text(encoding="utf-8")
+        assert "README" in voice
+
+    def test_curate_no_discovery_when_empty(self, tmp_path: Path) -> None:
+        store = MemoryStore(tmp_path / "wiki")
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(check_urls=False)
+
+        assert result.discovered == []
+        assert result.discovered_ingested == []
+
+    def test_curate_skips_already_tracked(self, tmp_path: Path) -> None:
+        (tmp_path / "README.md").write_text("# Readme", encoding="utf-8")
+
+        store = MemoryStore(tmp_path / "wiki")
+        store.put(title="README", text="content", entry_id="r1", metadata={"source": "./README.md"})
+
+        curator = Curator(store, tmp_path / "wiki", tmp_path)
+        result = curator.curate(check_urls=False)
+
+        assert result.discovered == []
+        assert result.discovered_ingested == []

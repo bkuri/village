@@ -13,6 +13,7 @@ import httpx
 
 from village.goals import Goal, parse_goals, write_goals
 from village.memory import MemoryStore
+from village.scribe.store import STOP_WORDS
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,7 @@ class Curator:
     def _append_curate_log(self, actions: list[str]) -> None:
         """Append curation actions to wiki/log.md."""
         log_path = self.wiki_path / "log.md"
+        self.wiki_path.mkdir(parents=True, exist_ok=True)
         if log_path.exists():
             existing = log_path.read_text(encoding="utf-8")
         else:
@@ -391,6 +393,7 @@ class Curator:
         result.total_entries = len(self.store.all_entries())
         result.orphans = self.find_orphans()
         result.stale_entries = self.find_stale(max_age_days)
+        result.discovered = self.find_undiscovered()
 
         if check_urls:
             result.broken_links = self.check_links()
@@ -405,6 +408,23 @@ class Curator:
             result.curate_log.append(
                 f"CURATE --fix: archived {len(archived)} orphan(s) to ORPHANS.md ({', '.join(archived)})"
             )
+
+        if result.discovered:
+            result.curate_log.append(f"CURATE: discovered {len(result.discovered)} untracked project doc(s)")
+
+        if fix and result.discovered:
+            for df in result.discovered:
+                title = df.title
+                text = df.path.read_text(encoding="utf-8")
+                tags = [w for w in title.lower().split() if w not in STOP_WORDS and len(w) > 1]
+                rel_path = str(df.path.relative_to(self.project_root))
+                entry_id = self.store.put(title, text, tags=tags, metadata={"source": f"./{rel_path}"})
+                result.discovered_ingested.append(entry_id)
+            result.curate_log.append(
+                f"CURATE --fix: ingested {len(result.discovered_ingested)} discovered doc(s)"
+            )
+
+        if result.curate_log:
             self._append_curate_log(result.curate_log)
 
         result.voice_updated = self.generate_voice(exclude=exclude_ids)
