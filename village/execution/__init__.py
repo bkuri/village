@@ -10,7 +10,10 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from village.execution.env import EnvironmentSanitizer
 from village.execution.manifest import ApprovalManifest
+from village.execution.paths import PathPolicy
+from village.execution.resources import ResourceGuard, ResourceLimits
 from village.execution.scanner import ContentScanner, ScanViolation
 from village.execution.tiers import ClassifiedAction, Tier, TierClassifier
 from village.execution.validator import CommandValidator, ValidationResult
@@ -35,20 +38,30 @@ class ExecutionResult:
 class ExecutionEngine:
     """Top-level policy enforcement engine.
 
-    Combines the :class:`TierClassifier`, :class:`CommandValidator`, and
-    :class:`ContentScanner` into a single pipeline:
+    Combines the :class:`TierClassifier`, :class:`CommandValidator`,
+    :class:`ContentScanner`, :class:`EnvironmentSanitizer`, and
+    :class:`ResourceGuard` into a single pipeline:
 
     classify → validate → execute → return result
 
     Args:
         rules: Optional :class:`RulesConfig` to load rules from.
+        worktree: Optional worktree root for path-based access control
+            and environment sanitization.
     """
 
-    def __init__(self, rules: RulesConfig | None = None) -> None:
+    def __init__(
+        self,
+        rules: RulesConfig | None = None,
+        worktree: Path | None = None,
+    ) -> None:
         self.rules = rules
         self.classifier = TierClassifier()
-        self.validator = CommandValidator(rules=rules)
+        self.validator = CommandValidator(rules=rules, worktree=worktree)
         self.scanner = ContentScanner(rules=rules)
+        self.env_sanitizer = EnvironmentSanitizer(worktree) if worktree else None
+        self.resource_guard = ResourceGuard()
+        self._worktree = worktree
 
     def execute(
         self,
@@ -159,9 +172,11 @@ class ExecutionEngine:
 
     # ── Internal execution helpers ────────────────────────────────────
 
-    @staticmethod
-    def _execute_bash(worktree: Path, action: ClassifiedAction) -> dict[str, str]:
-        """Execute a bash command via ``subprocess.run``.
+    def _execute_bash(self, worktree: Path, action: ClassifiedAction) -> dict[str, str]:
+        """Execute a bash command via :class:`ResourceGuard`.
+
+        Applies resource limits (CPU, memory, processes, file size) and
+        uses a sanitized environment for defense in depth.
 
         Args:
             worktree: Working directory.
@@ -175,31 +190,29 @@ class ExecutionEngine:
             OSError: If the working directory is invalid.
         """
         command = action.command or ""
-        # Use list form (no shell=True) for security
-        try:
-            import shlex
 
-            tokens = shlex.split(command)
-        except ValueError:
-            tokens = [command]
+        # Build sanitized environment
+        env = self.env_sanitizer.sanitize() if self.env_sanitizer else None
 
-        result = subprocess.run(
-            tokens,
-            capture_output=True,
-            text=True,
+        # Execute via ResourceGuard with resource limits
+        result = self.resource_guard.execute(
+            ["sh", "-c", command],
             cwd=worktree,
-            timeout=300,
+            env=env,
         )
 
-        if result.returncode != 0:
+        stdout = result.stdout.decode(errors="replace") if isinstance(result.stdout, bytes) else (result.stdout or "")
+        stderr = result.stderr.decode(errors="replace") if isinstance(result.stderr, bytes) else (result.stderr or "")
+
+        if result.returncode not in (0, -1):
             raise subprocess.CalledProcessError(
                 result.returncode,
-                tokens,
-                output=result.stdout,
-                stderr=result.stderr,
+                command,
+                output=stdout,
+                stderr=stderr,
             )
 
-        return {"stdout": result.stdout, "stderr": result.stderr}
+        return {"stdout": stdout, "stderr": stderr}
 
     @staticmethod
     def _execute_write(worktree: Path, path: str, content: str) -> dict[str, str]:
@@ -232,8 +245,12 @@ __all__ = [
     "ClassifiedAction",
     "CommandValidator",
     "ContentScanner",
+    "EnvironmentSanitizer",
     "ExecutionEngine",
     "ExecutionResult",
+    "PathPolicy",
+    "ResourceGuard",
+    "ResourceLimits",
     "ScanViolation",
     "Tier",
     "TierClassifier",

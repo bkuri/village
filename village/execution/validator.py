@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from village.execution.manifest import ApprovalManifest
+from village.execution.paths import PathPolicy, is_within_worktree
 from village.execution.tiers import ClassifiedAction, Tier, TierClassifier
 from village.rules.schema import ForbiddenCommandRule, RulesConfig
 
@@ -38,15 +39,24 @@ class CommandValidator:
     4. **Shell metacharacters**: ``$()```, ``````, ``&&``, ``||``, ``;``.
     5. **Pipe-to-shell**: ``| sh``, ``| bash`` patterns.
     6. **Script execution**: scripts must be in manifest.
-    7. **READ_ONLY / SAFE_WRITE**: always allowed.
+    7. **Path policy**: symlink escapes and protected paths.
+    8. **READ_ONLY / SAFE_WRITE**: always allowed.
 
     Args:
         rules: Optional :class:`RulesConfig` providing command rules.
+        worktree: Optional worktree root for path-based access control.
+            If provided, a :class:`PathPolicy` is created to enforce
+            path restrictions.
     """
 
-    def __init__(self, rules: RulesConfig | None = None) -> None:
+    def __init__(
+        self,
+        rules: RulesConfig | None = None,
+        worktree: Path | None = None,
+    ) -> None:
         self.rules = rules
         self._classifier = TierClassifier()
+        self.path_policy = PathPolicy(worktree) if worktree else None
 
     # ── Main validation entry point ───────────────────────────────────
 
@@ -94,6 +104,11 @@ class CommandValidator:
                 reason="DESTRUCTIVE actions require manifest approval",
                 blocked_by="manifest",
             )
+
+        # ── Path policy check ───────────────────────────────────────────
+        path_result = self._check_path_policy(action)
+        if path_result is not None:
+            return path_result
 
         # ── Check command rules ────────────────────────────────────────
         if self.rules and self.rules.command_rules:
@@ -190,6 +205,55 @@ class CommandValidator:
             if executable == rule_base or executable == rule_exe:
                 return True
         return False
+
+    # ── Path policy check ────────────────────────────────────────────
+
+    def _check_path_policy(
+        self,
+        action: ClassifiedAction,
+    ) -> ValidationResult | None:
+        """Check path policy for write/delete actions.
+
+        Returns a blocking :class:`ValidationResult` if the action's target
+        path violates the path policy (symlink escape or protected path),
+        or ``None`` if the policy allows it or is not configured.
+
+        Args:
+            action: The classified action to check.
+        """
+        if not self.path_policy:
+            return None
+
+        # Check write/delete actions with a target path
+        if action.path and action.action_type in ("write", "delete"):
+            allowed, reason = self.path_policy.can_write(Path(action.path))
+            if not allowed:
+                return ValidationResult(
+                    allowed=False,
+                    tier=Tier.DANGEROUS,
+                    reason=reason or f"Path '{action.path}' is not writable",
+                    blocked_by="path",
+                )
+
+        # For bash commands, check if any argument references a path
+        # outside the worktree — warn but don't block external paths
+        if action.command and action.args:
+            for arg in action.args:
+                if arg.startswith("/") or ".." in arg:
+                    try:
+                        p = Path(arg)
+                        if p.is_absolute() or ".." in arg:
+                            # Check if the resolved path is within worktree
+                            if not is_within_worktree(p, self.path_policy.worktree):
+                                logger.debug(
+                                    "Command arg %s resolves outside worktree: %s",
+                                    arg,
+                                    action.command,
+                                )
+                    except Exception:
+                        pass
+
+        return None
 
     # ── Manifest helpers ──────────────────────────────────────────────
 

@@ -36,6 +36,7 @@ class ClassifiedAction:
     args: list[str] | None = field(default_factory=list)
     tier: Tier = Tier.READ_ONLY
     script_path: str | None = None  # if executing a script file
+    path: str | None = None  # target file path (for write/delete actions)
 
 
 # ── Tier classification tables ────────────────────────────────────────
@@ -420,6 +421,7 @@ class TierClassifier:
             command=f"write {path}",
             executable=None,
             tier=Tier.SAFE_WRITE,
+            path=path,
         )
 
     # ── Executable resolution ─────────────────────────────────────────
