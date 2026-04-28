@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from village.config import AgentConfig, Config, get_config
+from village.rules.loader import load_rules
 
 logger = logging.getLogger(__name__)
 
@@ -282,7 +283,16 @@ def generate_contract(
     if not content:
         from village.ppc import generate_ppc_contract
 
-        ppc_prompt, ppc_error = generate_ppc_contract(agent, agent_config, config)
+        # Load rules for guardrail support
+        rules = load_rules(config.village_dir / "rules.yaml")
+        guardrails = rules.guardrails if rules else None
+
+        ppc_prompt, ppc_error = generate_ppc_contract(
+            agent,
+            agent_config,
+            config,
+            guardrails=guardrails,
+        )
         if ppc_prompt:
             content = ppc_prompt
             from village.probes.ppc import detect_ppc
@@ -402,6 +412,20 @@ def generate_spec_contract(
             spec_content=spec_content,
         )
         ppc_profile = "spec"
+
+    # Append guardrail constraints and execution protocol from rules
+    rules = load_rules(config.village_dir / "rules.yaml")
+    if rules and rules.guardrails:
+        guardrail_section = "\n\n## Policy Constraints\n"
+        guardrail_section += "The following rules are enforced by the execution engine:\n\n"
+        for g in rules.guardrails:
+            guardrail_section += f"- {g}\n"
+        content += guardrail_section
+
+    # Append execution protocol instructions
+    from village.execution.protocol import PlanProtocol
+
+    content += "\n" + PlanProtocol.format_contract_section()
 
     goal_section = _build_goal_context(config, spec_path.name, spec_content[:200])
     if goal_section:

@@ -14,6 +14,7 @@ def generate_ppc_contract(
     agent: str,
     agent_config: AgentConfig,
     config: Config,
+    guardrails: list[str] | None = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Generate system prompt using PPC.
@@ -24,6 +25,7 @@ def generate_ppc_contract(
         agent: Agent name
         agent_config: Agent configuration (with PPC fields)
         config: Village config
+        guardrails: Optional list of guardrail module names to pass to PPC
 
     Returns:
         Tuple of (system_prompt, warning) - either (prompt, None) or (None, error_message)
@@ -39,6 +41,8 @@ def generate_ppc_contract(
     cmd = ["ppc", mode]
     for trait in traits:
         cmd.append(f"--{trait}")
+    if guardrails:
+        cmd.extend(["--guardrails", ",".join(guardrails)])
     cmd.extend(["--contract", contract_type])
 
     try:

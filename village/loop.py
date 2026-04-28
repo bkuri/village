@@ -18,9 +18,13 @@ import click
 from village.builder_state import BuildRunState, BuildRunStatus, generate_run_id
 from village.config import Config, get_config
 from village.contracts import generate_spec_contract
+from village.execution.manifest import ManifestStore
+from village.execution.refs import freeze_build_commit
+from village.execution.verify import inject_violation_notes, run_verification
 from village.locks import Lock, write_lock
 from village.probes.tmux import capture_pane, pane_exists
 from village.resume import _create_resume_window, _inject_contract
+from village.rules.loader import load_rules
 from village.worktrees import create_worktree
 
 logger = logging.getLogger(__name__)
@@ -251,6 +255,7 @@ def _execute_spec(
     model: str | None,
     config: Config,
     session_name: str,
+    build_commit: str | None = None,
     dry_run: bool = False,
 ) -> LoopIteration:
     """Execute a single spec in its own worktree/tmux pane.
@@ -279,6 +284,17 @@ def _execute_spec(
         spec_content = spec.path.read_text(encoding="utf-8")
         task_id = spec.path.stem
         window_name = f"builder-{iteration_num}-{task_id}"
+
+        # Tamper-proof config loading from git commit
+        rules = load_rules(
+            path=config.village_dir / "rules.yaml",
+            git_root=config.git_root,
+            commit=build_commit,
+        )
+        manifest_store = ManifestStore(config.git_root / ".village" / "approvals")
+        _manifest = (
+            manifest_store.load_from_git(task_id, build_commit) if build_commit else manifest_store.load(task_id)
+        )
 
         worktree_path = config.worktrees_dir / task_id
         if not worktree_path.exists():
@@ -331,12 +347,29 @@ def _execute_spec(
             iter_result.promise_detected = True
             logger.info(f"[parallel] Promise detected for {spec.name}: {promise}")
 
-            if check_spec_completion(spec.path):
+            # Post-hoc verification gate — run checks before marking complete
+            verification = run_verification(
+                worktree_path,
+                spec.name,
+                rules=rules,
+            )
+            violations = [v for v in verification if not v.passed]
+
+            if violations:
+                # Collect all ScanViolations from all failed checks
+                all_violations: list[Any] = []
+                for v in violations:
+                    all_violations.extend(v.violations)
+                if all_violations:
+                    inject_violation_notes(spec.path, all_violations)
+                logger.warning(f"[parallel] Spec {spec.name} failed verification: {len(violations)} check(s) failed")
+                # Do NOT mark complete — agent will see violations on retry
+            elif check_spec_completion(spec.path):
                 iter_result.verified_complete = True
                 iter_result.success = True
                 logger.info(f"[parallel] Spec {spec.name} marked COMPLETE")
             else:
-                logger.warning(f"[parallel] Promise found but {spec.name} not marked complete")
+                logger.warning(f"[parallel] Promise found but {spec.name} not marked complete after verification")
         else:
             logger.warning(f"[parallel] No completion signal for {spec.name}")
 
@@ -355,6 +388,7 @@ def _run_parallel_batch(
     model: str | None,
     config: Config,
     parallel: int,
+    build_commit: str | None = None,
     dry_run: bool = False,
 ) -> list[LoopIteration]:
     """Execute a batch of specs in parallel using a thread pool.
@@ -377,6 +411,7 @@ def _run_parallel_batch(
                 model,
                 config,
                 session_name,
+                build_commit=build_commit,
                 dry_run=dry_run,
             )
             future_to_spec[future] = (spec, iteration_num)
@@ -423,6 +458,15 @@ def run_loop(
 ) -> LoopResult:
     if config is None:
         config = get_config()
+
+    # Freeze build commit at the very start — all config reads during
+    # this build use this commit hash for tamper-proofing
+    build_commit: str | None = None
+    try:
+        build_commit = freeze_build_commit(config.git_root)
+    except RuntimeError as e:
+        logger.warning("Could not freeze build commit: %s", e)
+        # Non-fatal — continue with disk-based reads
 
     if run_id is None:
         run_id = generate_run_id()
@@ -484,6 +528,7 @@ def run_loop(
                 model=model,
                 config=config,
                 parallel=parallel,
+                build_commit=build_commit,
                 dry_run=dry_run,
             )
 
@@ -586,6 +631,17 @@ def run_loop(
             task_id = spec.path.stem
             window_name = f"builder-{iteration_num}-{task_id}"
 
+            # Tamper-proof config loading from git commit
+            rules = load_rules(
+                path=config.village_dir / "rules.yaml",
+                git_root=config.git_root,
+                commit=build_commit,
+            )
+            manifest_store = ManifestStore(config.git_root / ".village" / "approvals")
+            _manifest = (
+                manifest_store.load_from_git(task_id, build_commit) if build_commit else manifest_store.load(task_id)
+            )
+
             worktree_path = config.worktrees_dir / task_id
             if not worktree_path.exists():
                 try:
@@ -639,7 +695,25 @@ def run_loop(
                 iter_result.promise_detected = True
                 logger.info(f"Promise detected: {promise}")
 
-                if check_spec_completion(spec.path):
+                # Post-hoc verification gate — run checks before marking complete
+                verification = run_verification(
+                    worktree_path,
+                    spec.name,
+                    rules=rules,
+                )
+                violations = [v for v in verification if not v.passed]
+
+                if violations:
+                    # Collect all ScanViolations from all failed checks
+                    all_violations: list[Any] = []
+                    for v in violations:
+                        all_violations.extend(v.violations)
+                    if all_violations:
+                        inject_violation_notes(spec.path, all_violations)
+                    logger.warning(f"Spec {spec.name} failed verification: {len(violations)} check(s) failed")
+                    # Do NOT mark complete — agent will see violations on retry
+                    consecutive_failures += 1
+                elif check_spec_completion(spec.path):
                     iter_result.verified_complete = True
                     iter_result.success = True
                     completed_count += 1
@@ -667,7 +741,7 @@ def run_loop(
                     except Exception as e:
                         logger.error(f"Landing check failed: {e}")
                 else:
-                    logger.warning("Promise found but spec not marked complete")
+                    logger.warning("Promise found but spec not marked complete after verification")
                     consecutive_failures += 1
             else:
                 logger.warning(f"No completion signal for {spec.name}")

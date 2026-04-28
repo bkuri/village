@@ -3,6 +3,7 @@ from pathlib import Path
 
 import yaml
 
+from village.execution.refs import git_show
 from village.rules.schema import (
     FilenameConfig,
     ForbiddenCommandRule,
@@ -92,11 +93,34 @@ def _parse_rules(data: dict[str, object] | None) -> RulesConfig | None:
     )
 
 
-def load_rules(path: Path) -> RulesConfig | None:
-    """Load rules configuration from a YAML file.
+def load_rules(
+    path: Path | None = None,
+    git_root: Path | None = None,
+    commit: str | None = None,
+) -> RulesConfig | None:
+    """Load rules configuration from a YAML file or git commit.
 
-    Returns None if the file does not exist or is invalid.
+    When *commit* and *git_root* are provided, reads the rules from the
+    specified git commit (tamper-proof mode).  Falls back to filesystem
+    if the commit-based read returns nothing.
+
+    Args:
+        path: Path to the rules YAML file (ignored if *commit* is set).
+        git_root: Git repository root directory (required with *commit*).
+        commit: Git commit SHA to read the rules file from.
+
+    Returns:
+        :class:`RulesConfig` or None if the file does not exist or is invalid.
     """
+    # Tamper-proof mode: read from git commit
+    if commit and git_root:
+        content = git_show(git_root, commit, ".village/rules.yaml")
+        if content:
+            return load_rules_from_string(content)
+
+    # Fallback to filesystem
+    if path is None:
+        return None
     if not path.exists():
         return None
 
@@ -121,18 +145,29 @@ def load_rules_from_string(yaml_content: str) -> RulesConfig | None:
         return None
 
 
-def get_rules() -> RulesConfig | None:
+def get_rules(
+    commit: str | None = None,
+    git_root: Path | None = None,
+) -> RulesConfig | None:
     """Load rules from the default .village/rules.yaml path.
 
     Discovers the git root and loads from .village/rules.yaml.
     Returns None if no git root or rules file is found.
-    """
-    try:
-        from village.probes.repo import find_git_root
 
-        git_root = find_git_root()
-    except RuntimeError:
-        return None
+    Args:
+        commit: Optional git commit SHA for tamper-proof reads.
+        git_root: Optional git root path (discovered if not provided).
+
+    Returns:
+        :class:`RulesConfig` or None.
+    """
+    if git_root is None:
+        try:
+            from village.probes.repo import find_git_root
+
+            git_root = find_git_root()
+        except RuntimeError:
+            return None
 
     rules_path = git_root / ".village" / "rules.yaml"
-    return load_rules(rules_path)
+    return load_rules(path=rules_path, git_root=git_root, commit=commit)
