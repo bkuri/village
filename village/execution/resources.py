@@ -37,14 +37,14 @@ class ResourceLimits:
         cpu_seconds: Maximum CPU time in seconds (default 300 / 5 min).
         memory_mb: Maximum address space in MB (default 4096 / 4 GB).
         file_size_mb: Maximum file write size in MB (default 1024 / 1 GB).
-        processes: Maximum number of child processes (default 100).
+        processes: Maximum number of child processes (default None — no limit).
         timeout_seconds: Total wall-clock timeout in seconds (default 3600 / 1 h).
     """
 
     cpu_seconds: int | None = 300
     memory_mb: int | None = 4096
     file_size_mb: int | None = 1024
-    processes: int | None = 100
+    processes: int | None = None
     timeout_seconds: int | None = 3600
 
 

@@ -8,6 +8,7 @@ from village.goals import Goal
 def _make_config(**overrides):
     config = MagicMock()
     config.git_root = overrides.pop("git_root", Path("/repo"))
+    config.village_dir = config.git_root / ".village"
     config.traces_dir = config.git_root / ".village" / "traces"
     config.agents = {}
     config.__dict__.update(overrides)

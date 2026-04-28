@@ -42,10 +42,7 @@ def resolve_safe_path(target: Path, worktree: Path) -> Path:
     real_worktree = worktree.resolve()
 
     if not str(real_target).startswith(str(real_worktree)):
-        raise ValueError(
-            f"Path {target} resolves to {real_target}, "
-            f"which is outside the worktree {real_worktree}"
-        )
+        raise ValueError(f"Path {target} resolves to {real_target}, which is outside the worktree {real_worktree}")
 
     return real_target
 
