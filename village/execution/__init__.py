@@ -3,6 +3,44 @@
 The engine is the policy enforcement layer that sits between AI agents
 and the filesystem.  It classifies actions into security tiers, validates
 them against rules and manifests, and optionally executes them.
+
+Architecture (classify → validate → execute → scan):
+
+    Agent proposes actions → Engine validates → Engine executes → Agent observes results
+
+Modules:
+    engine      ExecutionEngine  — Top-level pipeline combining all components.
+    tiers       TierClassifier   — Classifies bash commands/writes into security
+                                   tiers (READ_ONLY=0, SAFE_WRITE=1, DESTRUCTIVE=2,
+                                   DANGEROUS=3).
+    validator   CommandValidator — Validates classified actions against rules,
+                                   manifests, and shell metacharacter heuristics.
+    scanner     ContentScanner   — Scans file contents for forbidden patterns,
+                                   validates filename casing, enforces TDD rules.
+    commit      CommitEngine     — Sole committer using low-level git plumbing
+                                   for tamper-proof, race-condition-free commits.
+    env         EnvironmentSanitizer — Minimal, predictable execution environment
+                                   with dangerous variables stripped.
+    paths       PathPolicy       — Path-based access control with symlink escape
+                                   detection and protected directory enforcement.
+    resources   ResourceGuard    — OS-level resource enforcement (CPU, memory,
+                                   processes, file size, timeout) via setrlimit.
+    refs        freeze_build_commit, git_show — Config freezing and tamper-proof
+                                   reads from git objects (never filesystem).
+    manifest    ManifestStore, ApprovalManifest — Per-spec approval manifests
+                                   loaded from git for tamper-proofing.
+    verify      run_verification — Post-hoc verification after agent signals
+                                   completion (content, TDD, filename casing).
+    protocol    PlanProtocol     — Agent ↔ engine <plan>/<executed> protocol
+                                   for structured action proposals and results.
+
+Defense layers:
+    1. Contract integration — PPC guardrails in agent system prompt.
+    2. Runtime validation — Execution engine classifies, validates, executes.
+    3. Post-hoc verification — Completion gate (content, TDD, casing).
+    4. Remote CI — Push-time enforcement via CI workflows.
+
+See docs/execution-engine.md for full documentation.
 """
 
 import logging
