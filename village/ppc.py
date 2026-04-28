@@ -1,6 +1,12 @@
-"""PPC contract generation."""
+"""PPC contract generation — hard dependency.
+
+PPC is a required Go binary. This module provides:
+- Early availability check (fail-fast)
+- Contract generation via PPC CLI
+"""
 
 import logging
+import shutil
 
 import click
 
@@ -8,6 +14,18 @@ from village.config import AgentConfig, Config
 from village.probes.tools import SubprocessError, run_command_output_cwd
 
 logger = logging.getLogger(__name__)
+
+PPC_INSTALL_URL = "https://github.com/bkuri/ppc"
+
+
+def require_ppc() -> None:
+    """Check that the PPC binary is available on PATH.
+
+    Raises:
+        click.ClickException: If PPC is not found.
+    """
+    if not shutil.which("ppc"):
+        raise click.ClickException(f"PPC is required but not found on PATH. Install: {PPC_INSTALL_URL}")
 
 
 def generate_ppc_contract(
@@ -17,24 +35,6 @@ def generate_ppc_contract(
     guardrails: list[str] | None = None,
     vars: dict[str, str] | None = None,
 ) -> str:
-    """
-    Generate system prompt using PPC.
-
-    Pure function - no side effects.
-
-    Args:
-        agent: Agent name
-        agent_config: Agent configuration (with PPC fields)
-        config: Village config
-        guardrails: Optional list of guardrail module names to pass to PPC
-        vars: Optional dict of variables to pass to PPC via --var flags
-
-    Returns:
-        System prompt string
-
-    Raises:
-        click.ClickException: If PPC execution fails
-    """
     mode = agent_config.ppc_mode or "explore"
     traits = agent_config.ppc_traits
     contract_type = agent_config.ppc_format or "markdown"
@@ -53,4 +53,4 @@ def generate_ppc_contract(
     try:
         return run_command_output_cwd(cmd, cwd=config.git_root)
     except SubprocessError as e:
-        raise click.ClickException(f"PPC is required but failed: {e}. Install PPC: https://github.com/bkuri/ppc") from e
+        raise click.ClickException(f"PPC execution failed: {e}. Install: {PPC_INSTALL_URL}") from e

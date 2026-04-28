@@ -306,8 +306,6 @@ def _build_config(git_root: Path) -> Config:
                 agents[agent_name].opencode_args = value
             elif field_name == "pi_args":
                 agents[agent_name].pi_args = value
-            elif field_name == "contract":
-                agents[agent_name].contract = value
             elif field_name == "ppc_mode":
                 agents[agent_name].ppc_mode = value.lower() if value else None
             elif field_name == "ppc_traits":

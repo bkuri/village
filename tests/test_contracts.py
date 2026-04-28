@@ -141,33 +141,10 @@ class TestGenerateSpecContract:
         assert envelope.ppc_profile == "spec"
         assert "PPC spec output" in envelope.content
 
-    def test_spec_contract_with_custom_file(self, tmp_path: Path):
-        config = _make_config(git_root=tmp_path)
-
-        contracts_dir = tmp_path / "contracts"
-        contracts_dir.mkdir(parents=True)
-        custom_file = contracts_dir / "build.md"
-        custom_file.write_text("# Custom\n", encoding="utf-8")
-
-        agent_config = MagicMock()
-        agent_config.contract = "contracts/build.md"
-        config.agents = {"build": agent_config}
-
-        spec_path = tmp_path / "specs" / "001-feature.md"
-        spec_content = "# Feature Spec"
-
-        envelope = generate_spec_contract(
-            spec_path, spec_content, "build", tmp_path / "worktrees", "win-1", config=config
-        )
-
-        assert envelope.ppc_profile == "file:contracts/build.md"
-        assert "Custom" in envelope.content
-
-    def test_spec_contract_custom_file_missing(self):
+    def test_spec_contract_missing_file_falls_through_to_ppc(self):
         config = _make_config()
 
         agent_config = MagicMock()
-        agent_config.contract = "contracts/missing.md"
         config.agents = {"build": agent_config}
 
         spec_path = Path("/repo/specs/001-feature.md")
@@ -178,5 +155,4 @@ class TestGenerateSpecContract:
                 spec_path, spec_content, "build", Path("/worktrees"), "win-1", config=config
             )
 
-        assert len(envelope.warnings) == 0
         assert "PPC spec output" in envelope.content

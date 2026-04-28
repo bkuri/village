@@ -11,10 +11,7 @@ from village.contracts import generate_spec_contract
 def _mock_ppc(agent, agent_config, config, guardrails=None, vars=None):
     if vars and "spec_content" in vars:
         name = vars.get("spec_name", "unknown")
-        return (
-            f"## Mock PPC Output\n\n## Spec: {name}\n\n"
-            f"### Spec Content\n\n{vars['spec_content']}\n"
-        )
+        return f"## Mock PPC Output\n\n## Spec: {name}\n\n### Spec Content\n\n{vars['spec_content']}\n"
     return "## Mock PPC Output\n"
 
 
@@ -89,46 +86,6 @@ def test_generate_spec_contract_with_inspect_notes(mock_ppc, tmp_path: Path):
     assert "Inspect Notes" in envelope.content
     assert "Thread Safety" in envelope.content
     assert "Must use locks" in envelope.content
-
-
-def test_generate_spec_contract_with_custom_contract(tmp_path: Path):
-    import subprocess
-
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True)
-
-    contracts_dir = tmp_path / "contracts"
-    contracts_dir.mkdir()
-    custom = contracts_dir / "build.md"
-    custom.write_text("# Custom Build Instructions\n\nFollow these rules.")
-
-    village_dir = tmp_path / ".village"
-    village_dir.mkdir(parents=True, exist_ok=True)
-    config_file = village_dir / "config"
-    config_file.write_text("[agent.worker]\ncontract=contracts/build.md\n")
-
-    specs_dir = tmp_path / "specs"
-    specs_dir.mkdir()
-    spec_path = specs_dir / "003-custom.md"
-    spec_path.write_text("# Custom Spec\n\n## Requirements\n- FR-1: Custom feature\n")
-
-    os.chdir(tmp_path)
-    config = _make_config(tmp_path)
-
-    from village.config import AgentConfig
-
-    config.agents = {"worker": AgentConfig(contract="contracts/build.md")}
-
-    envelope = generate_spec_contract(
-        spec_path=spec_path,
-        spec_content=spec_path.read_text(),
-        agent="worker",
-        worktree_path=tmp_path / ".worktrees" / "003-custom",
-        window_name="builder-1-003-custom",
-        config=config,
-    )
-
-    assert "Custom Build Instructions" in envelope.content
-    assert envelope.ppc_profile == "file:contracts/build.md"
 
 
 @patch("village.ppc.generate_ppc_contract", side_effect=_mock_ppc)

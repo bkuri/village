@@ -110,9 +110,7 @@ def generate_contract(
     """
     Generate contract envelope (pure function).
 
-    Priority:
-    1. Custom contract file from agent config (if exists)
-    2. PPC-generated system prompt (hard dependency)
+    Uses PPC as hard dependency for system prompt generation.
 
     Args:
         task_id: Task ID (e.g., "bd-a3f8")
@@ -128,8 +126,6 @@ def generate_contract(
         config = get_config()
 
     created_at = datetime.now().isoformat()
-    content: str = ""
-    ppc_profile: Optional[str] = None
 
     task_title = ""
     task_description = ""
@@ -150,29 +146,19 @@ def generate_contract(
     # Resolve agent config
     agent_config = config.agents.get(agent, AgentConfig())
 
-    # Try custom contract file first (explicit > implicit)
-    if agent_config.contract:
-        contract_path = config.git_root / agent_config.contract
-        if contract_path.exists():
-            logger.debug(f"Using custom contract: {contract_path}")
-            content = contract_path.read_text(encoding="utf-8")
-            ppc_profile = f"file:{agent_config.contract}"
+    from village.ppc import generate_ppc_contract
 
-    # Use PPC if custom contract not used
-    if not content:
-        from village.ppc import generate_ppc_contract
+    rules = load_rules(config.village_dir / "rules.yaml")
+    guardrails = rules.guardrails if rules else None
 
-        rules = load_rules(config.village_dir / "rules.yaml")
-        guardrails = rules.guardrails if rules else None
-
-        content = generate_ppc_contract(
-            agent,
-            agent_config,
-            config,
-            guardrails=guardrails,
-        )
-        ppc_mode = agent_config.ppc_mode or "explore"
-        ppc_profile = f"ppc:{ppc_mode}"
+    content = generate_ppc_contract(
+        agent,
+        agent_config,
+        config,
+        guardrails=guardrails,
+    )
+    ppc_mode = agent_config.ppc_mode or "explore"
+    ppc_profile = f"ppc:{ppc_mode}"
 
     trace_section = (
         f"\n## Trace Recording\n"
@@ -231,40 +217,27 @@ def generate_spec_contract(
 
     agent_config = config.agents.get(agent, AgentConfig())
 
-    content: str
-    ppc_profile: str
+    from village.ppc import generate_ppc_contract
 
-    use_ppc = True
-    if agent_config.contract:
-        contract_path = config.git_root / agent_config.contract
-        if contract_path.exists():
-            logger.debug(f"Using custom contract: {contract_path}")
-            content = contract_path.read_text(encoding="utf-8")
-            ppc_profile = f"file:{agent_config.contract}"
-            use_ppc = False
+    rules = load_rules(config.village_dir / "rules.yaml")
+    guardrails = rules.guardrails if rules else None
 
-    if use_ppc:
-        from village.ppc import generate_ppc_contract
+    spec_vars = {
+        "spec_name": spec_path.name,
+        "worktree_path": str(worktree_path),
+        "git_root": str(config.git_root),
+        "window_name": window_name,
+        "spec_content": spec_content,
+    }
 
-        rules = load_rules(config.village_dir / "rules.yaml")
-        guardrails = rules.guardrails if rules else None
-
-        spec_vars = {
-            "spec_name": spec_path.name,
-            "worktree_path": str(worktree_path),
-            "git_root": str(config.git_root),
-            "window_name": window_name,
-            "spec_content": spec_content,
-        }
-
-        content = generate_ppc_contract(
-            agent,
-            agent_config,
-            config,
-            guardrails=guardrails,
-            vars=spec_vars,
-        )
-        ppc_profile = "spec"
+    content = generate_ppc_contract(
+        agent,
+        agent_config,
+        config,
+        guardrails=guardrails,
+        vars=spec_vars,
+    )
+    ppc_profile = "spec"
 
     # Append execution_enforcement guardrail
     ee_path = Path(__file__).parent / "guardrails" / "execution_enforcement.md"

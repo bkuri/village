@@ -8,7 +8,6 @@ class AgentConfig:
     """Configuration for a single agent type."""
 
     opencode_args: str = ""
-    contract: Optional[str] = None
     ppc_mode: Optional[str] = None
     ppc_traits: list[str] = field(default_factory=list)
     ppc_format: str = "markdown"

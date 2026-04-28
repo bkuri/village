@@ -1,0 +1,62 @@
+#!/bin/sh
+#
+# bd (beads) pre-commit hook
+#
+# This hook ensures that any pending bd issue changes are flushed to
+# .beads/issues.jsonl before the commit is created, preventing the
+# race condition where daemon auto-flush fires after the commit.
+
+# Check if bd is available
+if ! command -v bd >/dev/null 2>&1; then
+    echo "Warning: bd command not found, skipping pre-commit flush" >&2
+    exit 0
+fi
+
+# Check if we're in a bd workspace
+# For worktrees, .beads is in the main repository root, not the worktree
+BEADS_DIR=""
+if git rev-parse --git-dir >/dev/null 2>&1; then
+    if [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
+        MAIN_REPO_ROOT="$(git rev-parse --git-common-dir)"
+        MAIN_REPO_ROOT="$(dirname "$MAIN_REPO_ROOT")"
+        if [ -d "$MAIN_REPO_ROOT/.beads" ]; then
+            BEADS_DIR="$MAIN_REPO_ROOT/.beads"
+        fi
+    else
+        if [ -d .beads ]; then
+            BEADS_DIR=".beads"
+        fi
+    fi
+fi
+
+if [ -z "$BEADS_DIR" ]; then
+    exit 0
+fi
+
+if ! bd backup >/dev/null 2>&1; then
+    echo "Error: Failed to flush bd changes to JSONL" >&2
+    echo "Run 'bd backup' manually to diagnose" >&2
+    exit 1
+fi
+
+if [ -f "$BEADS_DIR/issues.jsonl" ]; then
+    if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ]; then
+        git add "$BEADS_DIR/issues.jsonl" 2>/dev/null || true
+    fi
+fi
+
+echo "Running ruff check..."
+if ! uv run ruff check . 2>&1; then
+  echo ""
+  echo "Ruff check failed. Fix before committing."
+  exit 1
+fi
+
+echo "Running ruff format check..."
+if ! uv run ruff format --check . 2>&1; then
+  echo ""
+  echo "Ruff format check failed. Run 'uv run ruff format .' and retry."
+  exit 1
+fi
+
+exit 0

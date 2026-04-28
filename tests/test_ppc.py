@@ -1,4 +1,4 @@
-"""Test PPC contract generation."""
+"""Test PPC contract generation and availability check."""
 
 from pathlib import Path
 from unittest.mock import patch
@@ -7,12 +7,22 @@ import click
 import pytest
 
 from village.config import AgentConfig, Config
-from village.ppc import generate_ppc_contract
+from village.ppc import generate_ppc_contract, require_ppc
 from village.probes.tools import SubprocessError
 
 
+def test_require_ppc_found():
+    with patch("village.ppc.shutil.which", return_value="/usr/local/bin/ppc"):
+        require_ppc()
+
+
+def test_require_ppc_not_found():
+    with patch("village.ppc.shutil.which", return_value=None):
+        with pytest.raises(click.ClickException, match="PPC is required"):
+            require_ppc()
+
+
 def test_generate_ppc_contract_success(tmp_path: Path):
-    """Test successful PPC contract generation."""
     agent_config = AgentConfig(
         ppc_mode="build",
         ppc_traits=["conservative", "terse"],
@@ -32,7 +42,6 @@ def test_generate_ppc_contract_success(tmp_path: Path):
 
 
 def test_generate_ppc_contract_execution_error(tmp_path: Path):
-    """Test PPC contract generation when execution fails raises ClickException."""
     agent_config = AgentConfig(ppc_mode="build")
     config = Config(
         git_root=tmp_path,
@@ -41,12 +50,11 @@ def test_generate_ppc_contract_execution_error(tmp_path: Path):
     )
 
     with patch("village.ppc.run_command_output_cwd", side_effect=SubprocessError("Command failed")):
-        with pytest.raises(click.ClickException, match="PPC is required but failed"):
+        with pytest.raises(click.ClickException, match="PPC execution failed"):
             generate_ppc_contract("build", agent_config, config)
 
 
 def test_generate_ppc_contract_default_values(tmp_path: Path):
-    """Test PPC contract generation with default mode."""
     agent_config = AgentConfig(
         ppc_traits=["terse"],
         ppc_format="code",
@@ -65,7 +73,6 @@ def test_generate_ppc_contract_default_values(tmp_path: Path):
 
 
 def test_generate_ppc_contract_no_traits(tmp_path: Path):
-    """Test PPC contract generation without traits."""
     agent_config = AgentConfig(ppc_mode="build", ppc_format="markdown")
     config = Config(
         git_root=tmp_path,
@@ -80,7 +87,6 @@ def test_generate_ppc_contract_no_traits(tmp_path: Path):
 
 
 def test_generate_ppc_contract_with_vars(tmp_path: Path):
-    """Test PPC contract generation with variables passes --var flags and --policies."""
     agent_config = AgentConfig(ppc_mode="build", ppc_format="markdown")
     config = Config(
         git_root=tmp_path,
@@ -109,7 +115,6 @@ def test_generate_ppc_contract_with_vars(tmp_path: Path):
 
 
 def test_generate_ppc_contract_without_vars(tmp_path: Path):
-    """Test PPC contract generation without variables does not add --var or --policies."""
     agent_config = AgentConfig(ppc_mode="build", ppc_format="markdown")
     config = Config(
         git_root=tmp_path,

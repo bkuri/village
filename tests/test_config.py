@@ -192,7 +192,6 @@ DEFAULT_AGENT=build
 
 [agent.build]
 opencode_args=--mode patch --safe
-contract=contracts/build.md
 ppc_mode=build
 ppc_traits=conservative,terse
 ppc_format=markdown
@@ -214,7 +213,6 @@ ppc_format=code
     # Check build agent config
     build_agent = config.agents["build"]
     assert build_agent.opencode_args == "--mode patch --safe"
-    assert build_agent.contract == "contracts/build.md"
     assert build_agent.ppc_mode == "build"
     assert build_agent.ppc_traits == ["conservative", "terse"]
     assert build_agent.ppc_format == "markdown"
@@ -222,7 +220,6 @@ ppc_format=code
     # Check test agent config
     test_agent = config.agents["test"]
     assert test_agent.opencode_args == "--mode patch"
-    assert test_agent.contract is None
     assert test_agent.ppc_mode == "ship"
     assert test_agent.ppc_traits == ["conservative"]
     assert test_agent.ppc_format == "code"
@@ -243,7 +240,6 @@ opencode_args=--mode patch
     config = get_config()
 
     build_agent = config.agents["build"]
-    assert build_agent.contract is None
     assert build_agent.ppc_mode is None
     assert build_agent.ppc_traits == []
     assert build_agent.ppc_format == "markdown"
