@@ -28,6 +28,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Post-hoc verification gate: runs content scan, TDD check, filename casing after `<promise>DONE` before marking spec complete.
 - 8 attack vector regression tests covering git tampering, script injection, metachar smuggling, symlink escape, race conditions, env injection, nested repos, and resource exhaustion.
 - `docs/execution-engine.md` with architecture, tier table, attack vector matrix, and configuration reference.
+- `--json` flag to 15 CLI commands for non-interactive use:
+  `village new`, `up`, `down` (lifecycle),
+  `watcher locks`, `cleanup`, `unlock` (observability),
+  `builder status`, `arrange` (build),
+  `planner workflows`, `show`, `list`, `approve`, `delete` (planning),
+  `scribe drafts` (knowledge base).
+  All return structured JSON when `--json` is passed; text output is unchanged.
 
 ### Changed
 - Build loop freezes `BUILD_COMMIT` at `run_loop()` start. All config reads use `git show BUILD_COMMIT:path`.

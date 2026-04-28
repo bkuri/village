@@ -312,21 +312,21 @@ village builder arrange --dry-run        # Preview release
 
 | Command | Description |
 |---------|-------------|
-| `village up` | Initialize Village runtime (idempotent) |
-| `village down` | Stop Village runtime (kill tmux session) |
-| `village new <name>` | Create project with adaptive onboarding |
+| `village up` | Initialize Village runtime (idempotent, `--json`) |
+| `village down` | Stop Village runtime (kill tmux session, `--json`) |
+| `village new <name>` | Create project with adaptive onboarding (`--json`) |
 
 ### Watcher (Observability)
 
 | Command | Description |
 |---------|-------------|
 | `village watcher status` | Show Village status (`--system`, `--task`, `--wiki`, `--short`, `--json`) |
-| `village watcher locks` | Show all locks |
+| `village watcher locks` | Show all locks (`--json`) |
 | `village watcher events` | Show recent events (`--task`, `--cmd`, `--limit`, `--json`) |
-| `village watcher ready` | Check if Village is ready for work |
+| `village watcher ready` | Check if Village is ready for work (`--json`) |
 | `village watcher dashboard` | Real-time dashboard (`--watch`, `--refresh-interval`) |
-| `village watcher cleanup` | Remove stale locks/worktrees (`--apply`, `--force`) |
-| `village watcher unlock <task-id>` | Remove a lock (`--force`) |
+| `village watcher cleanup` | Remove stale locks/worktrees (`--apply`, `--plan`, `--json`) |
+| `village watcher unlock <task-id>` | Remove a lock (`--force`, `--json`) |
 | `village watcher monitor` | Watch wiki/ingest/ for new files |
 | `village watcher ledger show [task]` | View audit trail for a task (`--json`) |
 | `village watcher ledger list` | List tasks with traces (`--json`) |
@@ -349,23 +349,27 @@ village builder arrange --dry-run        # Preview release
 | `village planner design <goal>` | Design a spec via LLM pipeline |
 | `village planner inspect [spec]` | Review specs for cross-cutting issues (`--fix`) |
 | `village planner refine <spec>` | Iterate on a spec |
-| `village planner workflows` | List available workflow templates |
+| `village planner workflows` | List available workflow templates (`--json`) |
+| `village planner show [name]` | Display workflow steps (`--json`) |
+| `village planner list` | List plans (`--drafts`, `--completed`, `--json`) |
+| `village planner plan <slug>` | Show plan details (`--json`) |
+| `village planner approve <slug>` | Approve a plan (`--json`) |
+| `village planner delete <slug>` | Delete a plan (`--force`, `--json`) |
 | `village builder run` | Run autonomous spec-driven build loop |
-| `village builder status` | Show build loop status |
-| `village builder cancel` | Cancel a running build loop |
+| `village builder status` | Show build loop status (`--json`) |
+| `village builder queue` | Queue and execute ready tasks (`--json`) |
+| `village builder arrange` | Arrange done tasks into stacked PRs (`--dry-run`, `--json`) |
 | `village builder resume --build` | Resume a stopped build loop |
-| `village builder queue` | Queue and execute ready tasks |
 | `village builder pause` | Pause an in-progress task |
-| `village builder arrange` | Apply pending version bumps, update changelog, create tag |
 
 ### Scribe (Knowledge Base)
 
 | Command | Description |
 |---------|-------------|
-| `village scribe fetch <source>` | Ingest a URL or file into wiki |
-| `village scribe ask "question"` | Query the knowledge base |
-| `village scribe curate` | Health check + regenerate VOICE.md |
-| `village scribe drafts` | List or count draft tasks |
+| `village scribe fetch <source>` | Ingest a URL or file into wiki (`--json`) |
+| `village scribe ask "question"` | Query the knowledge base (`--json`) |
+| `village scribe curate` | Health check + regenerate VOICE.md (`--json`) |
+| `village scribe drafts` | List or count draft tasks (`--json`) |
 
 ### Council (Deliberation)
 
