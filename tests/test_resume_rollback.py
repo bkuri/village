@@ -153,13 +153,14 @@ class TestResumeWithRollback:
                     mock_window.return_value = "%12"
                     mock_inject.return_value = None
 
-                    result = execute_resume(
-                        task_id="bd-a3f8",
-                        agent="worker",
-                        detached=True,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id="bd-a3f8",
+                            agent="worker",
+                            detached=True,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
                     assert result.success is True
                     assert not mock_reset.called

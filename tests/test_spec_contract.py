@@ -2,9 +2,20 @@
 
 import os
 from pathlib import Path
+from unittest.mock import patch
 
 from village.config import Config
 from village.contracts import generate_spec_contract
+
+
+def _mock_ppc(agent, agent_config, config, guardrails=None, vars=None):
+    if vars and "spec_content" in vars:
+        name = vars.get("spec_name", "unknown")
+        return (
+            f"## Mock PPC Output\n\n## Spec: {name}\n\n"
+            f"### Spec Content\n\n{vars['spec_content']}\n"
+        )
+    return "## Mock PPC Output\n"
 
 
 def _make_config(git_root: Path) -> Config:
@@ -17,7 +28,8 @@ def _make_config(git_root: Path) -> Config:
     )
 
 
-def test_generate_spec_contract_basic(tmp_path: Path):
+@patch("village.ppc.generate_ppc_contract", side_effect=_mock_ppc)
+def test_generate_spec_contract_basic(mock_ppc, tmp_path: Path):
     import subprocess
 
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
@@ -45,11 +57,11 @@ def test_generate_spec_contract_basic(tmp_path: Path):
     assert "001-test-spec.md" in envelope.content
     assert "Do something" in envelope.content
     assert "Verify it works" in envelope.content
-    assert "<promise>DONE</promise>" in envelope.content
     assert envelope.ppc_profile == "spec"
 
 
-def test_generate_spec_contract_with_inspect_notes(tmp_path: Path):
+@patch("village.ppc.generate_ppc_contract", side_effect=_mock_ppc)
+def test_generate_spec_contract_with_inspect_notes(mock_ppc, tmp_path: Path):
     import subprocess
 
     subprocess.run(["git", "init"], cwd=tmp_path, check=True)
@@ -119,7 +131,8 @@ def test_generate_spec_contract_with_custom_contract(tmp_path: Path):
     assert envelope.ppc_profile == "file:contracts/build.md"
 
 
-def test_generate_spec_contract_to_json(tmp_path: Path):
+@patch("village.ppc.generate_ppc_contract", side_effect=_mock_ppc)
+def test_generate_spec_contract_to_json(mock_ppc, tmp_path: Path):
     import json
     import subprocess
 

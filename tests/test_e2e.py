@@ -83,13 +83,14 @@ class TestOnboardingE2E:
             mock_window.return_value = "%12"
             with patch("village.resume.write_lock"):
                 with patch("village.resume._inject_contract"):
-                    result = execute_resume(
-                        task_id,
-                        "build",
-                        detached=False,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id,
+                            "build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
         assert result.success is True
         assert result.task_id == task_id
@@ -405,13 +406,14 @@ class TestCrashRecoveryE2E:
             mock_window.return_value = "%13"
             with patch("village.resume.write_lock"):
                 with patch("village.resume._inject_contract"):
-                    result = execute_resume(
-                        task_id,
-                        "build",
-                        detached=False,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id,
+                            "build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
         assert result.success is True
         assert result.pane_id == "%13"
@@ -523,13 +525,14 @@ class TestConcurrencyE2E:
             mock_window.return_value = "%12"
             with patch("village.resume.write_lock"):
                 with patch("village.resume._inject_contract"):
-                    result = execute_resume(
-                        task_id,
-                        "build",
-                        detached=False,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id,
+                            "build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
         assert result.success is True
         assert result.pane_id == "%12"
@@ -630,13 +633,14 @@ class TestFullUserJourneyE2E:
             mock_window.return_value = "%12"
             with patch("village.resume.write_lock"):
                 with patch("village.resume._inject_contract"):
-                    result = execute_resume(
-                        task_id,
-                        "build",
-                        detached=False,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id,
+                            "build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
         assert result.success is True
 
@@ -748,13 +752,14 @@ class TestFullUserJourneyE2E:
             mock_window.return_value = "%13"
             with patch("village.resume.write_lock"):
                 with patch("village.resume._inject_contract"):
-                    result = execute_resume(
-                        task_id,
-                        "build",
-                        detached=False,
-                        dry_run=False,
-                        config=mock_config,
-                    )
+                    with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                        result = execute_resume(
+                            task_id,
+                            "build",
+                            detached=False,
+                            dry_run=False,
+                            config=mock_config,
+                        )
 
         assert result.success is True
 

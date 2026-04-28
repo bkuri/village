@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 from village.contracts import _build_goal_context, generate_spec_contract
 from village.goals import Goal
 
+PPC_SPEC_OUTPUT = "# PPC spec output\n\n## Your Mission\n\nImplement the spec."
+
 
 def _make_config(**overrides):
     config = MagicMock()
@@ -129,12 +131,15 @@ class TestGenerateSpecContract:
         spec_path = Path("/repo/specs/001-feature.md")
         spec_content = "# Feature Spec\n\nImplement feature X"
 
-        envelope = generate_spec_contract(spec_path, spec_content, "build", Path("/worktrees"), "win-1", config=config)
+        with patch("village.ppc.generate_ppc_contract", return_value=PPC_SPEC_OUTPUT):
+            envelope = generate_spec_contract(
+                spec_path, spec_content, "build", Path("/worktrees"), "win-1", config=config
+            )
 
         assert envelope.task_id == "001-feature"
         assert envelope.format == "markdown"
         assert envelope.ppc_profile == "spec"
-        assert "Feature Spec" in envelope.content
+        assert "PPC spec output" in envelope.content
 
     def test_spec_contract_with_custom_file(self, tmp_path: Path):
         config = _make_config(git_root=tmp_path)
@@ -168,8 +173,10 @@ class TestGenerateSpecContract:
         spec_path = Path("/repo/specs/001-feature.md")
         spec_content = "# Feature Spec"
 
-        envelope = generate_spec_contract(spec_path, spec_content, "build", Path("/worktrees"), "win-1", config=config)
+        with patch("village.ppc.generate_ppc_contract", return_value=PPC_SPEC_OUTPUT):
+            envelope = generate_spec_contract(
+                spec_path, spec_content, "build", Path("/worktrees"), "win-1", config=config
+            )
 
-        assert len(envelope.warnings) > 0
-        assert "contract_file_not_found" in envelope.warnings[0]
-        assert "Feature Spec" in envelope.content
+        assert len(envelope.warnings) == 0
+        assert "PPC spec output" in envelope.content

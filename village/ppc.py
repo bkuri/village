@@ -1,10 +1,10 @@
 """PPC contract generation."""
 
 import logging
-from typing import Optional
+
+import click
 
 from village.config import AgentConfig, Config
-from village.probes.ppc import detect_ppc
 from village.probes.tools import SubprocessError, run_command_output_cwd
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,8 @@ def generate_ppc_contract(
     agent_config: AgentConfig,
     config: Config,
     guardrails: list[str] | None = None,
-) -> tuple[Optional[str], Optional[str]]:
+    vars: dict[str, str] | None = None,
+) -> str:
     """
     Generate system prompt using PPC.
 
@@ -26,14 +27,14 @@ def generate_ppc_contract(
         agent_config: Agent configuration (with PPC fields)
         config: Village config
         guardrails: Optional list of guardrail module names to pass to PPC
+        vars: Optional dict of variables to pass to PPC via --var flags
 
     Returns:
-        Tuple of (system_prompt, warning) - either (prompt, None) or (None, error_message)
-    """
-    ppc_status = detect_ppc(config)
-    if not ppc_status.available:
-        return None, "ppc_not_available"
+        System prompt string
 
+    Raises:
+        click.ClickException: If PPC execution fails
+    """
     mode = agent_config.ppc_mode or "explore"
     traits = agent_config.ppc_traits
     contract_type = agent_config.ppc_format or "markdown"
@@ -44,9 +45,12 @@ def generate_ppc_contract(
     if guardrails:
         cmd.extend(["--guardrails", ",".join(guardrails)])
     cmd.extend(["--contract", contract_type])
+    if vars:
+        for key, value in vars.items():
+            cmd.extend(["--var", f"{key}={value}"])
+        cmd.extend(["--policies", "spec_context"])
 
     try:
-        result = run_command_output_cwd(cmd, cwd=config.git_root)
-        return result, None
+        return run_command_output_cwd(cmd, cwd=config.git_root)
     except SubprocessError as e:
-        return None, f"ppc_execution_failed: {e}"
+        raise click.ClickException(f"PPC is required but failed: {e}. Install PPC: https://github.com/bkuri/ppc") from e

@@ -3,7 +3,10 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from village.config import AgentConfig, Config, get_config
+import click
+import pytest
+
+from village.config import AgentConfig, Config
 from village.ppc import generate_ppc_contract
 from village.probes.tools import SubprocessError
 
@@ -22,39 +25,14 @@ def test_generate_ppc_contract_success(tmp_path: Path):
         worktrees_dir=tmp_path / ".worktrees",
     )
 
-    # Mock run_command_output_cwd to return success
     with patch("village.ppc.run_command_output_cwd", return_value="# System prompt for build"):
-        with patch(
-            "village.ppc.detect_ppc",
-            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
-        ):
-            prompt, warning = generate_ppc_contract("build", agent_config, config)
+        prompt = generate_ppc_contract("build", agent_config, config)
 
-            assert warning is None
-            assert prompt == "# System prompt for build"
-
-
-def test_generate_ppc_contract_not_available():
-    """Test PPC contract generation when PPC not available."""
-    agent_config = AgentConfig(
-        ppc_mode="build",
-        ppc_traits=["conservative"],
-    )
-
-    config = get_config()
-
-    with patch(
-        "village.ppc.detect_ppc",
-        return_value=type("Status", (), {"available": False, "version": None, "prompts_dir": None}),
-    ):
-        prompt, warning = generate_ppc_contract("build", agent_config, config)
-
-        assert prompt is None
-        assert warning == "ppc_not_available"
+        assert prompt == "# System prompt for build"
 
 
 def test_generate_ppc_contract_execution_error(tmp_path: Path):
-    """Test PPC contract generation when execution fails."""
+    """Test PPC contract generation when execution fails raises ClickException."""
     agent_config = AgentConfig(ppc_mode="build")
     config = Config(
         git_root=tmp_path,
@@ -62,16 +40,9 @@ def test_generate_ppc_contract_execution_error(tmp_path: Path):
         worktrees_dir=tmp_path / ".worktrees",
     )
 
-    # Mock run_command_output_cwd to raise error
     with patch("village.ppc.run_command_output_cwd", side_effect=SubprocessError("Command failed")):
-        with patch(
-            "village.ppc.detect_ppc",
-            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
-        ):
-            prompt, warning = generate_ppc_contract("build", agent_config, config)
-
-            assert prompt is None
-            assert "ppc_execution_failed" in warning
+        with pytest.raises(click.ClickException, match="PPC is required but failed"):
+            generate_ppc_contract("build", agent_config, config)
 
 
 def test_generate_ppc_contract_default_values(tmp_path: Path):
@@ -88,14 +59,9 @@ def test_generate_ppc_contract_default_values(tmp_path: Path):
     )
 
     with patch("village.ppc.run_command_output_cwd", return_value="Default prompt"):
-        with patch(
-            "village.ppc.detect_ppc",
-            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
-        ):
-            prompt, warning = generate_ppc_contract("test", agent_config, config)
+        prompt = generate_ppc_contract("test", agent_config, config)
 
-            assert warning is None
-            assert prompt == "Default prompt"
+        assert prompt == "Default prompt"
 
 
 def test_generate_ppc_contract_no_traits(tmp_path: Path):
@@ -108,11 +74,53 @@ def test_generate_ppc_contract_no_traits(tmp_path: Path):
     )
 
     with patch("village.ppc.run_command_output_cwd", return_value="# Prompt for build"):
-        with patch(
-            "village.ppc.detect_ppc",
-            return_value=type("Status", (), {"available": True, "version": "v0.2.0", "prompts_dir": None}),
-        ):
-            prompt, warning = generate_ppc_contract("build", agent_config, config)
+        prompt = generate_ppc_contract("build", agent_config, config)
 
-            assert warning is None
-            assert prompt == "# Prompt for build"
+        assert prompt == "# Prompt for build"
+
+
+def test_generate_ppc_contract_with_vars(tmp_path: Path):
+    """Test PPC contract generation with variables passes --var flags and --policies."""
+    agent_config = AgentConfig(ppc_mode="build", ppc_format="markdown")
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+
+    spec_vars = {
+        "spec_name": "001-feature.md",
+        "worktree_path": "/worktrees/bd-a3f8",
+        "git_root": str(tmp_path),
+        "window_name": "build-1",
+        "spec_content": "# Feature Spec",
+    }
+
+    with patch("village.ppc.run_command_output_cwd", return_value="# PPC output") as mock_run:
+        prompt = generate_ppc_contract("build", agent_config, config, vars=spec_vars)
+
+        assert prompt == "# PPC output"
+        cmd = mock_run.call_args[0][0]
+        assert "--var" in cmd
+        assert "spec_name=001-feature.md" in cmd
+        assert "worktree_path=/worktrees/bd-a3f8" in cmd
+        assert "--policies" in cmd
+        assert "spec_context" in cmd
+
+
+def test_generate_ppc_contract_without_vars(tmp_path: Path):
+    """Test PPC contract generation without variables does not add --var or --policies."""
+    agent_config = AgentConfig(ppc_mode="build", ppc_format="markdown")
+    config = Config(
+        git_root=tmp_path,
+        village_dir=tmp_path / ".village",
+        worktrees_dir=tmp_path / ".worktrees",
+    )
+
+    with patch("village.ppc.run_command_output_cwd", return_value="# PPC output") as mock_run:
+        prompt = generate_ppc_contract("build", agent_config, config)
+
+        assert prompt == "# PPC output"
+        cmd = mock_run.call_args[0][0]
+        assert "--var" not in cmd
+        assert "--policies" not in cmd

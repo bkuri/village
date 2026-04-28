@@ -655,6 +655,7 @@ class TestParallelBatch:
             model: str | None,
             config: Config,
             session_name: str,
+            build_commit: str | None = None,
             dry_run: bool = False,
         ) -> LoopIteration:
             if spec.name == "001-todo.md":
@@ -702,6 +703,7 @@ class TestParallelBatch:
             model: str | None,
             config: Config,
             session_name: str,
+            build_commit: str | None = None,
             dry_run: bool = False,
         ) -> LoopIteration:
             nonlocal max_concurrent, current_concurrent

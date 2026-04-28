@@ -647,14 +647,15 @@ class TestResumeEventLogging:
                 mock_window.return_value = "%12"
                 with patch("village.resume._inject_contract"):
                     with patch("village.resume.write_lock"):
-                        result = execute_resume(
-                            task_id="bd-a3f8",
-                            agent="build",
-                            detached=False,
-                            dry_run=False,
-                            config=mock_config,
-                        )
-                        assert result.success is True
+                        with patch("village.ppc.generate_ppc_contract", return_value="# mock ppc"):
+                            result = execute_resume(
+                                task_id="bd-a3f8",
+                                agent="build",
+                                detached=False,
+                                dry_run=False,
+                                config=mock_config,
+                            )
+                            assert result.success is True
 
         events = read_events(mock_config.village_dir)
         success_events = [e for e in events if e.result == "ok" and e.cmd == "resume"]
