@@ -1,3 +1,5 @@
+import json
+
 import click
 
 from village.logging import get_logger
@@ -102,7 +104,8 @@ def run_loop(
 
 @builder_group.command("status")
 @click.argument("run_id", required=False)
-def run_status(run_id: str | None) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def run_status(run_id: str | None, json_output: bool) -> None:
     """Show build loop status."""
 
     from village.config import get_config
@@ -112,22 +115,44 @@ def run_status(run_id: str | None) -> None:
     specs_path = config.git_root / "specs"
 
     if not specs_path.is_dir():
+        if json_output:
+            empty = {"error": "No specs directory found", "total": 0, "complete": 0, "incomplete": []}
+            click.echo(json.dumps(empty, indent=2, sort_keys=True))
+            return
         click.echo("No specs directory found.")
         return
 
     specs = find_specs(specs_path)
     if not specs:
+        if json_output:
+            empty = {"error": "No specs found", "total": 0, "complete": 0, "incomplete": []}
+            click.echo(json.dumps(empty, indent=2, sort_keys=True))
+            return
         click.echo("No specs found.")
         return
 
     complete = sum(1 for s in specs if s.is_complete)
-    incomplete = [s for s in specs if not s.is_complete]
+    incomplete_names = [s.name for s in specs if not s.is_complete]
 
-    click.echo(f"Specs: {len(specs)} total, {complete} complete, {len(incomplete)} remaining")
-    if incomplete:
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "total": len(specs),
+                    "complete": complete,
+                    "incomplete": incomplete_names,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
+    click.echo(f"Specs: {len(specs)} total, {complete} complete, {len(incomplete_names)} remaining")
+    if incomplete_names:
         click.echo("\nIncomplete specs:")
-        for s in incomplete:
-            click.echo(f"  - {s.name}")
+        for s in incomplete_names:
+            click.echo(f"  - {s}")
     if complete:
         click.echo(f"\nComplete specs: {complete}")
 
@@ -414,7 +439,15 @@ def pause(task_id: str | None, force: bool, select_mode: bool) -> None:
 @click.option("--dry-run", is_flag=True, help="Preview without creating PRs")
 @click.option("--push/--no-push", default=True, help="Push branches to remote")
 @click.option("--project", "project_filter", default=None, help="Filter by project label")
-def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool, project_filter: str | None) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def arrange(
+    plan: str | None,
+    flat: bool,
+    dry_run: bool,
+    push: bool,
+    project_filter: str | None,
+    json_output: bool,
+) -> None:
     """
     Arrange tasks into stacked PRs based on stack labels.
 
@@ -431,6 +464,10 @@ def arrange(plan: str | None, flat: bool, dry_run: bool, push: bool, project_fil
     from village.builder.arrange import arrange_landing
 
     result = arrange_landing(dry_run=dry_run, project_filter=project_filter)
+
+    if json_output:
+        click.echo(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
 
     if dry_run:
         click.echo("Dry run - would create PRs:")

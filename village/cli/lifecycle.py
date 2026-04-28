@@ -1,5 +1,6 @@
 """Lifecycle commands: new, up, down."""
 
+import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -117,7 +118,16 @@ def _prompt_path_for_git_repo() -> str:
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
 @click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
-def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard: bool, skip_interview: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def new(
+    name: str | None,
+    path: str | None,
+    dry_run: bool,
+    plan: bool,
+    dashboard: bool,
+    skip_interview: bool,
+    json_output: bool,
+) -> None:
     """
     Create a new project with village support.
 
@@ -171,6 +181,18 @@ def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard
     if dry_run or plan:
         parent_dir = Path(path).resolve()
         scaffold_plan = plan_scaffold(project_name, parent_dir)
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        "project_dir": str(scaffold_plan.project_dir),
+                        "steps": scaffold_plan.steps,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
         click.echo(f"Would create project: {scaffold_plan.project_dir}")
         click.echo("\nSteps:")
         for step in scaffold_plan.steps:
@@ -185,6 +207,21 @@ def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard
         onboard=not skip_interview,
         description=description,
     )
+
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "success": result.success,
+                    "project_dir": str(result.project_dir),
+                    "created": result.created,
+                    "error": result.error,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
 
     if result.success:
         click.echo(f"Created project: {result.project_dir}")
@@ -206,7 +243,16 @@ def new(name: str | None, path: str | None, dry_run: bool, plan: bool, dashboard
 @click.option("--dashboard/--no-dashboard", "dashboard", default=True, help="Create dashboard window")
 @click.option("--force", is_flag=True, help="Overwrite existing AGENTS.md/README.md during onboarding")
 @click.option("--skip-interview", is_flag=True, help="Use scaffold defaults without interview")
-def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: bool, skip_interview: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def up(
+    path_opt: str | None,
+    dry_run: bool,
+    plan: bool,
+    dashboard: bool,
+    force: bool,
+    skip_interview: bool,
+    json_output: bool,
+) -> None:
     """
     Initialize village runtime (idempotent).
 
@@ -233,6 +279,23 @@ def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: 
     if dry_run or plan:
         state = collect_runtime_state(config.tmux_session)
         init_plan = plan_initialization(state)
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        "needs_session": init_plan.needs_session,
+                        "needs_directories": init_plan.needs_directories,
+                        "needs_tasks_init": init_plan.needs_tasks_init,
+                        "session_exists": init_plan.session_exists,
+                        "directories_exist": init_plan.directories_exist,
+                        "tasks_initialized": init_plan.tasks_initialized,
+                        "dashboard": dashboard,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
         plan_mode = True
         if not dashboard:
             click.echo("Note: Dashboard creation disabled (--no-dashboard)")
@@ -248,6 +311,10 @@ def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: 
     )
 
     if not success:
+        if json_output:
+            data = {"success": False, "error": "Failed to initialize runtime"}
+            click.echo(json.dumps(data, indent=2, sort_keys=True))
+            return
         raise click.ClickException("Failed to initialize runtime")
 
     event = Event(
@@ -258,6 +325,21 @@ def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: 
         result="ok",
     )
     append_event(event, config.village_dir)
+
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "success": True,
+                    "session": config.tmux_session,
+                    "runtime_initialized": True,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
+
     click.echo("Runtime initialized")
 
     from village.onboard.detector import detect_project
@@ -272,7 +354,8 @@ def up(path_opt: str | None, dry_run: bool, plan: bool, dashboard: bool, force: 
 @lifecycle_group.command("down")
 @click.option("--dry-run", is_flag=True, help="Show what would be killed")
 @click.option("--plan", is_flag=True, help="Alias for --dry-run")
-def down(dry_run: bool, plan: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def down(dry_run: bool, plan: bool, json_output: bool) -> None:
     """
     Stop village runtime.
 
@@ -286,7 +369,21 @@ def down(dry_run: bool, plan: bool) -> None:
     config = get_config()
 
     if dry_run or plan:
-        if session_exists(config.tmux_session):
+        session_active = session_exists(config.tmux_session)
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        "session": config.tmux_session,
+                        "session_active": session_active,
+                        "dry_run": True,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
+        if session_active:
             click.echo(f"Would kill session '{config.tmux_session}'")
         else:
             click.echo("No session to stop")
@@ -304,8 +401,23 @@ def down(dry_run: bool, plan: bool) -> None:
             result="ok",
         )
         append_event(event, config.village_dir)
+        if json_output:
+            click.echo(
+                json.dumps(
+                    {
+                        "success": True,
+                        "session": config.tmux_session,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return
         click.echo(f"Runtime stopped (session '{config.tmux_session}' terminated)")
     else:
+        if json_output:
+            click.echo(json.dumps({"success": False, "error": "Failed to stop runtime"}, indent=2, sort_keys=True))
+            return
         raise click.ClickException("Failed to stop runtime")
 
 

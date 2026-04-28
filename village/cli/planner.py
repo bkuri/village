@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pathlib
 
 import click
@@ -47,10 +48,14 @@ def planner_group(ctx: click.Context) -> None:
 
 
 @planner_group.command("workflows")
-def list_workflows() -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def list_workflows(json_output: bool) -> None:
     """List available workflow templates."""
     loader = _get_loader()
     names = loader.list_workflows()
+    if json_output:
+        click.echo(json.dumps(names, indent=2))
+        return
     if not names:
         click.echo("No workflows found.")
         return
@@ -60,8 +65,9 @@ def list_workflows() -> None:
 
 @planner_group.command("show")
 @click.argument("name", required=False)
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
 @click.pass_context
-def show_workflow(ctx: click.Context, name: str | None) -> None:
+def show_workflow(ctx: click.Context, name: str | None, json_output: bool) -> None:
     """Display workflow steps."""
     loader = _get_loader()
 
@@ -82,7 +88,38 @@ def show_workflow(ctx: click.Context, name: str | None) -> None:
     try:
         wf = loader.load(name)
     except WorkflowLoadError as e:
+        if json_output:
+            click.echo(json.dumps({"error": str(e), "name": name}, indent=2, sort_keys=True))
+            return
         raise click.ClickException(str(e))
+
+    if json_output:
+        steps_data = []
+        for step in wf.steps:
+            resolved = step.resolve()
+            steps_data.append(
+                {
+                    "name": step.name,
+                    "type": step.type.value,
+                    "tools": resolved.tools or [],
+                    "traits": list(resolved.traits.keys()) if resolved.traits else [],
+                    "async": step.async_exec,
+                }
+            )
+        click.echo(
+            json.dumps(
+                {
+                    "name": wf.name,
+                    "description": wf.description,
+                    "version": wf.version,
+                    "inputs": wf.inputs or [],
+                    "steps": steps_data,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
 
     click.echo(f"Workflow: {wf.name}")
     click.echo(f"Description: {wf.description}")
@@ -277,7 +314,8 @@ def inspect_specs(spec_id: str | None, fix_mode: bool, specs_dir: str) -> None:
 @click.option("--pending", "filter_state", flag_value="approved", help="Show approved (in progress) plans")
 @click.option("--completed", "filter_state", flag_value="landed", help="Show landed plans")
 @click.option("--aborted", "filter_state", flag_value="aborted", help="Show aborted plans")
-def list_plans(filter_state: str) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def list_plans(filter_state: str, json_output: bool) -> None:
     """List all plans."""
     from village.config import get_config
     from village.plans.models import PlanState
@@ -291,7 +329,26 @@ def list_plans(filter_state: str) -> None:
     plans = store.list(state=state)
 
     if not plans:
+        if json_output:
+            click.echo(json.dumps([], indent=2))
+            return
         click.echo("No plans found.")
+        return
+
+    if json_output:
+        output = [
+            {
+                "slug": p.slug,
+                "state": p.state.value,
+                "objective": p.objective,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat(),
+                "task_ids": p.task_ids,
+                "worktree_path": p.worktree_path,
+            }
+            for p in plans
+        ]
+        click.echo(json.dumps(output, indent=2, sort_keys=True, default=str))
         return
 
     for plan in plans:
@@ -308,7 +365,8 @@ def list_plans(filter_state: str) -> None:
 
 @planner_group.command("plan")
 @click.argument("slug", shell_complete=_complete_slug)
-def show_plan(slug: str) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def show_plan(slug: str, json_output: bool) -> None:
     """Show plan details."""
     from village.config import get_config
     from village.plans.store import FilePlanStore, PlanNotFoundError
@@ -320,7 +378,29 @@ def show_plan(slug: str) -> None:
     try:
         plan = store.get(slug)
     except PlanNotFoundError:
+        if json_output:
+            click.echo(json.dumps({"error": f"Plan '{slug}' not found", "slug": slug}, indent=2, sort_keys=True))
+            return
         raise click.ClickException(f"Plan '{slug}' not found")
+
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "slug": plan.slug,
+                    "state": plan.state.value,
+                    "objective": plan.objective,
+                    "created_at": plan.created_at.isoformat(),
+                    "updated_at": plan.updated_at.isoformat(),
+                    "task_ids": plan.task_ids,
+                    "worktree_path": plan.worktree_path,
+                },
+                indent=2,
+                sort_keys=True,
+                default=str,
+            )
+        )
+        return
 
     click.echo(f"# {plan.slug}")
     click.echo(f"State: {plan.state.value}")
@@ -334,7 +414,8 @@ def show_plan(slug: str) -> None:
 @planner_group.command("approve")
 @click.argument("slug", shell_complete=_complete_slug)
 @click.option("--name", "name_override", default=None, help="Override worktree name")
-def approve_plan(slug: str, name_override: str | None) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def approve_plan(slug: str, name_override: str | None, json_output: bool) -> None:
     """Approve a plan and create worktree to start development."""
     from village.config import get_config
     from village.plans.models import PlanState
@@ -347,9 +428,18 @@ def approve_plan(slug: str, name_override: str | None) -> None:
     try:
         plan = store.get(slug)
     except PlanNotFoundError:
+        if json_output:
+            err_data = {"success": False, "slug": slug, "error": "Plan not found"}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         raise click.ClickException(f"Plan '{slug}' not found")
 
     if plan.state != PlanState.DRAFT:
+        if json_output:
+            err_msg = f"Not a draft (current: {plan.state.value})"
+            err_data = {"success": False, "slug": slug, "error": err_msg}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         raise click.ClickException(f"Plan '{slug}' is not a draft (current state: {plan.state.value})")
 
     worktree_name = name_override or slug
@@ -358,19 +448,33 @@ def approve_plan(slug: str, name_override: str | None) -> None:
 
     import subprocess
 
-    result = subprocess.run(
+    subp_result = subprocess.run(
         ["git", "worktree", "add", "-b", f"plan/{worktree_name}", str(worktree_path), "HEAD"],
         capture_output=True,
         text=True,
     )
 
-    if result.returncode != 0:
-        click.echo(f"Warning: worktree creation failed: {result.stderr.strip()}", err=True)
+    if subp_result.returncode != 0:
+        click.echo(f"Warning: worktree creation failed: {subp_result.stderr.strip()}", err=True)
         worktree_path = None
 
     plan.state = PlanState.APPROVED
     plan.worktree_path = str(worktree_path) if worktree_path else None
     store.update(plan)
+
+    if json_output:
+        click.echo(
+            json.dumps(
+                {
+                    "success": True,
+                    "slug": slug,
+                    "worktree_path": plan.worktree_path,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return
 
     click.echo(f"Plan '{slug}' approved.")
     if worktree_path:
@@ -381,7 +485,8 @@ def approve_plan(slug: str, name_override: str | None) -> None:
 @planner_group.command("delete")
 @click.argument("slug", shell_complete=_complete_slug)
 @click.option("--force", is_flag=True, help="Force delete non-draft plans")
-def delete_plan(slug: str, force: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def delete_plan(slug: str, force: bool, json_output: bool) -> None:
     """Delete a plan."""
     from village.config import get_config
     from village.plans.models import PlanState
@@ -394,17 +499,34 @@ def delete_plan(slug: str, force: bool) -> None:
     try:
         plan = store.get(slug)
     except PlanNotFoundError:
+        if json_output:
+            err_data = {"success": False, "slug": slug, "error": "Plan not found"}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         raise click.ClickException(f"Plan '{slug}' not found")
 
     if plan.state != PlanState.DRAFT and not force:
+        if json_output:
+            err_msg = f"Plan is {plan.state.value}. Use --force to delete non-draft plans."
+            err_data = {"success": False, "slug": slug, "error": err_msg}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         raise click.ClickException(f"Plan '{slug}' is {plan.state.value}. Use --force to delete non-draft plans.")
 
     if plan.worktree_path:
+        if json_output:
+            err_msg = f"Plan has worktree at {plan.worktree_path}"
+            err_data = {"success": False, "slug": slug, "error": err_msg}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         click.echo(f"Warning: Plan has worktree at {plan.worktree_path}", err=True)
         click.echo("Delete the worktree manually before deleting the plan.", err=True)
         return
 
     store.delete(slug)
+    if json_output:
+        click.echo(json.dumps({"success": True, "slug": slug}, indent=2, sort_keys=True))
+        return
     click.echo(f"Plan '{slug}' deleted.")
 
 

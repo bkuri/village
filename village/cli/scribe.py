@@ -152,7 +152,8 @@ def curate(json_output: bool, fix: bool) -> None:
 @scribe_group.command()
 @click.option("--scope", type=str, help="Filter by scope (feature|fix|investigation|refactoring)")
 @click.option("--total", is_flag=True, help="Return draft count (for statusbar)")
-def drafts(scope: str | None, total: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def drafts(scope: str | None, total: bool, json_output: bool) -> None:
     """List or count draft tasks."""
     from village.chat.drafts import list_drafts
     from village.config import get_config
@@ -162,11 +163,35 @@ def drafts(scope: str | None, total: bool) -> None:
     all_drafts = list_drafts(config)
 
     if total:
+        if json_output:
+            click.echo(json.dumps({"count": len(all_drafts)}, indent=2, sort_keys=True))
+            return
         click.echo(str(len(all_drafts)))
         return
 
     if scope:
         all_drafts = [d for d in all_drafts if d.scope == scope]
 
-    output = render_drafts_table(all_drafts)
-    click.echo(output)
+    if json_output:
+        drafts_data = [
+            {
+                "id": d.id,
+                "title": d.title,
+                "description": d.description,
+                "scope": d.scope,
+                "created_at": d.created_at.isoformat(),
+                "relates_to_goals": d.relates_to_goals,
+                "success_criteria": d.success_criteria,
+                "blockers": d.blockers,
+                "estimate": d.estimate,
+                "tags": d.tags,
+                "notes": d.notes,
+                "llm_notes": d.llm_notes,
+            }
+            for d in all_drafts
+        ]
+        click.echo(json.dumps(drafts_data, indent=2, sort_keys=True, default=str))
+        return
+
+    table_output = render_drafts_table(all_drafts)
+    click.echo(table_output)

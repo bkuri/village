@@ -173,19 +173,35 @@ def status(
 
 
 @watcher_group.command()
-def locks() -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def locks(json_output: bool) -> None:
     """List all locks with ACTIVE/STALE status."""
     from village.render.text import render_worker_table
 
     config = get_config()
     workers = collect_workers(config.tmux_session)
 
+    if json_output:
+        locks_data = [
+            {
+                "task_id": w.task_id,
+                "pane_id": w.pane_id,
+                "window": w.window,
+                "agent": w.agent,
+                "claimed_at": w.claimed_at,
+                "status": w.status,
+            }
+            for w in workers
+        ]
+        click.echo(json.dumps(locks_data, indent=2, sort_keys=True))
+        return
+
     if not workers:
         click.echo("No locks found")
         return
 
-    output = render_worker_table(workers)
-    click.echo(output)
+    table_output = render_worker_table(workers)
+    click.echo(table_output)
 
 
 @watcher_group.command()
@@ -311,7 +327,8 @@ def dashboard(watch: bool, refresh_interval: int | None) -> None:
 @click.option("--dry-run", is_flag=True, help="Show what would be removed")
 @click.option("--plan", is_flag=True, help="Generate cleanup plan")
 @click.option("--apply", is_flag=True, help="Include orphan and stale worktrees")
-def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def cleanup(dry_run: bool, plan: bool, apply: bool, json_output: bool) -> None:
     """
     Remove stale locks and optionally remove orphan/stale worktrees.
 
@@ -330,6 +347,26 @@ def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
     config = get_config()
 
     cleanup_plan = plan_cleanup(config.tmux_session, apply=apply)
+
+    if json_output:
+        data = {
+            "stale_locks": [
+                {
+                    "task_id": lock.task_id,
+                    "pane_id": lock.pane_id,
+                    "window": lock.window,
+                    "agent": lock.agent,
+                    "claimed_at": lock.claimed_at.isoformat(),
+                }
+                for lock in cleanup_plan.stale_locks
+            ],
+            "orphan_worktrees": [str(p) for p in cleanup_plan.orphan_worktrees],
+            "stale_worktrees": [str(p) for p in cleanup_plan.stale_worktrees],
+        }
+        if dry_run or plan:
+            data["dry_run"] = True
+        click.echo(json.dumps(data, indent=2, sort_keys=True))
+        return
 
     if apply:
         if cleanup_plan.orphan_worktrees:
@@ -374,7 +411,8 @@ def cleanup(dry_run: bool, plan: bool, apply: bool) -> None:
 @click.argument("task_id", default=None, required=False, type=str)
 @click.option("--force", is_flag=True, help="Force unlock even if pane is active")
 @click.option("--select", "select_mode", is_flag=True, help="Select from list interactively")
-def unlock(task_id: str | None, force: bool, select_mode: bool) -> None:
+@click.option("--json", "json_output", is_flag=True, help="JSON output")
+def unlock(task_id: str | None, force: bool, select_mode: bool, json_output: bool) -> None:
     """
     Unlock a task (remove lock file).
 
@@ -387,12 +425,21 @@ def unlock(task_id: str | None, force: bool, select_mode: bool) -> None:
 
     config = get_config()
 
-    if task_id is None or select_mode:
+    if task_id is None or (select_mode and not json_output):
         workers = collect_workers(config.tmux_session)
         if not workers:
+            if json_output:
+                err_data = {"unlocked": False, "task_id": None, "error": "No locks found"}
+                click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+                return
             click.echo("No locks found")
             if task_id is None:
                 sys.exit(0)
+            return
+
+        if json_output:
+            err_data = {"unlocked": False, "task_id": None, "error": "Task ID required with --json"}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
             return
 
         selected = select_from_list(
@@ -408,21 +455,46 @@ def unlock(task_id: str | None, force: bool, select_mode: bool) -> None:
     lock_path = config.locks_dir / f"{task_id}.lock"
 
     if not lock_path.exists():
+        if json_output:
+            err_data = {"unlocked": False, "task_id": task_id, "error": f"No such lock: {task_id}"}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         click.echo(f"Lock not found: {task_id}")
         raise click.ClickException(f"No such lock: {task_id}")
 
     lock = parse_lock(lock_path)
     if not lock:
+        if json_output:
+            err_data = {"unlocked": False, "task_id": task_id, "error": f"Failed to parse lock: {task_id}"}
+            click.echo(json.dumps(err_data, indent=2, sort_keys=True))
+            return
         click.echo(f"Invalid lock file: {task_id}")
         raise click.ClickException(f"Failed to parse lock: {task_id}")
 
     if is_active(lock, config.tmux_session):
         if not force:
+            if json_output:
+                click.echo(
+                    json.dumps(
+                        {
+                            "unlocked": False,
+                            "task_id": task_id,
+                            "error": f"Lock is ACTIVE (pane {lock.pane_id}) — use --force",
+                            "active": True,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                )
+                return
             click.echo(f"Lock is ACTIVE (pane {lock.pane_id} exists)")
             click.echo("Use --force to unlock anyway")
             raise click.ClickException(f"Lock {task_id} is active")
 
     lock_path.unlink()
+    if json_output:
+        click.echo(json.dumps({"unlocked": True, "task_id": task_id, "force": force}, indent=2, sort_keys=True))
+        return
     click.echo(f"Unlocked: {task_id}")
 
 
