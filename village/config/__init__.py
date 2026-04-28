@@ -1,4 +1,5 @@
 from village.config._agents import AgentConfig, _parse_ppc_traits, _validate_acp_agent
+from village.config._agents_yaml import AgentRole, AgentsYamlConfig, load_agents_yaml, load_agents_yaml_from_string
 from village.config._helpers import _env_or_config, _parse_bool, _parse_int, _parse_str
 from village.config._loader import (
     Config,
@@ -47,6 +48,8 @@ __all__ = [
     "ACPAgentCapability",
     "ACPConfig",
     "AgentConfig",
+    "AgentRole",
+    "AgentsYamlConfig",
     "ApprovalConfig",
     "CIConfig",
     "Config",
@@ -88,4 +91,6 @@ __all__ = [
     "get_config",
     "get_config_for_cwd",
     "get_global_config",
+    "load_agents_yaml",
+    "load_agents_yaml_from_string",
 ]

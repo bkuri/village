@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from village.config._agents import AgentConfig, _parse_ppc_traits, _validate_acp_agent
+from village.config._agents_yaml import AgentsYamlConfig, load_agents_yaml
 from village.config._sub_configs import (
     ACPConfig,
     ApprovalConfig,
@@ -26,6 +27,8 @@ from village.config._sub_configs import (
     TransportConfig,
 )
 from village.probes.repo import find_git_root
+from village.rules.loader import load_rules
+from village.rules.schema import RulesConfig
 
 TMUX_SESSION = "village"
 DEFAULT_WORKTREES_DIR_NAME = ".worktrees"
@@ -125,6 +128,8 @@ class GlobalConfig:
     """
 
     agents: dict[str, AgentConfig] = field(default_factory=dict)
+    agents_yaml: AgentsYamlConfig | None = None
+    rules: RulesConfig | None = None
     llm: LLMConfig = field(default_factory=LLMConfig)
     onboard: OnboardConfig = field(default_factory=OnboardConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
@@ -164,6 +169,8 @@ class Config:
     max_workers: int = DEFAULT_MAX_WORKERS
     queue_ttl_minutes: int = DEFAULT_QUEUE_TTL_MINUTES
     agents: dict[str, AgentConfig] = field(default_factory=dict)
+    agents_yaml: AgentsYamlConfig | None = None
+    rules: RulesConfig | None = None
     _config_path: Path = field(init=False)
     locks_dir: Path = field(init=False)
     traces_dir: Path = field(init=False)
@@ -276,6 +283,12 @@ def _build_config(git_root: Path) -> Config:
 
     sub_configs = _build_sub_configs(file_config)
 
+    # Load YAML-based configurations
+    rules_yaml_path = village_dir / "rules.yaml"
+    rules = load_rules(rules_yaml_path)
+    agents_yaml_path = village_dir / "agents.yaml"
+    agents_yaml = load_agents_yaml(agents_yaml_path)
+
     agents: dict[str, AgentConfig] = {}
     for key, value in file_config.items():
         if key.startswith("agent.") or key.startswith("AGENT."):
@@ -349,5 +362,7 @@ def _build_config(git_root: Path) -> Config:
         queue_ttl_minutes=queue_ttl_minutes,
         default_agent=default_agent,
         agents=agents,
+        rules=rules,
+        agents_yaml=agents_yaml,
         **sub_configs,  # type: ignore[arg-type]
     )
