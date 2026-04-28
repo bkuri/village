@@ -8,12 +8,19 @@ executes approved actions.
 Agent proposes actions -> Engine validates -> Engine executes approved -> Agent observes results
 ```
 
+## Prerequisites
+
+- **PPC** (hard dependency) — compiles behavioral prompts for agent contracts.
+  Install: https://github.com/bkuri/ppc. PPC must be available on `PATH`.
+
 ## Four-Layer Defense
 
 ### Layer 1: Contract integration (agent instructions)
 
-PPC guardrail modules describe behavioral constraints in the agent's system prompt.
-Agents learn the rules before they start working.
+PPC compiles behavioral constraints (base prompt + modes + traits + policies +
+contracts + guardrails) into the agent's system prompt. Village then appends
+village-specific sections: the execution_enforcement guardrail, the PlanProtocol
+section, and goal context. Agents learn the rules before they start working.
 
 ### Layer 2: Execution engine (runtime validation)
 
@@ -71,6 +78,27 @@ Optional CI workflows validate that each role's commits only touch allowed paths
 | Nested repo bypass | `git clone` is classified as Tier 2 minimum |
 | Resource exhaustion | `setrlimit` on CPU, memory, file size, processes + wall-clock timeout |
 
+## Contract Generation
+
+Spec-driven contracts are built in a pipeline:
+
+1. **PPC compilation** — PPC compiles the behavioral prompt from base prompt,
+   modes, traits, policies, contracts, and guardrails.
+2. **Dynamic variables** — Village passes `--var key=value` flags to PPC with
+   runtime context (`spec_name`, `worktree_path`, `git_root`, `window_name`,
+   `spec_content`).
+3. **Policy loading** — Village passes `--policies spec_context` so PPC can
+   include project-specific policy sections.
+4. **execution_enforcement guardrail** — Village appends its own guardrail
+   (from `village/guardrails/execution_enforcement.md`) after PPC output.
+5. **PlanProtocol section** — Village appends the `<plan>`/`<executed>` protocol
+   instructions.
+6. **Goal context** — Village appends the current objective from `GOALS.md` if
+   available.
+
+For task-driven (non-spec) contracts, the pipeline is similar but omits steps
+2–3 and 5 (no spec variables, no PlanProtocol).
+
 ## Modules
 
 | Module | Class | Purpose |
@@ -98,6 +126,12 @@ Global policy rules loaded at build start and read from the frozen git commit. S
 - `command_rules`: forbidden commands with flag, subcommand, and pipe-to checks
 - `filename`: casing enforcement (`snake_case`, `kebab-case`, `camelCase`)
 - `tdd`: test-driven development enforcement
+- `guardrails`: list of PPC guardrail module names to include in contracts
+
+PPC guardrails (configured via `guardrails` in `rules.yaml`) are compiled by PPC
+into the agent's system prompt. Village also appends its own
+`execution_enforcement` guardrail (`village/guardrails/execution_enforcement.md`)
+which is village-specific and lives outside PPC.
 
 ### `.village/agents.yaml`
 
@@ -124,6 +158,20 @@ allowed_paths:
 test_required: true
 filename_casing: snake_case
 ```
+
+## PPC Integration
+
+PPC is invoked as a subprocess with the following flags:
+
+- **`--var key=value`** — Pass dynamic variables (e.g., `spec_name`, `worktree_path`).
+  Multiple `--var` flags can be supplied.
+- **`--policies spec_context`** — Include project-specific policy sections in the
+  compiled prompt.
+- **`--guardrails mod1,mod2`** — Include named PPC guardrail modules from
+  `rules.yaml`.
+
+If PPC is not on `PATH`, contract generation fails with an error message
+including installation instructions.
 
 ## Protocol
 
