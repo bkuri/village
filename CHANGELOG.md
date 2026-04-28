@@ -7,32 +7,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [3.0.0] - 2026-04-28
 
 ### Breaking
-- **Execution engine**: Agents no longer have direct shell access. All actions flow through the execution engine via `<plan>`/`<executed>` protocol — classify, validate, execute. Agents propose, village executes. Cannot be circumvented regardless of agent or harness.
-- **Git commit/push**: Only the execution engine can commit. Agent `git` operations blocked (Tier 3). Commits are validated against allowed paths and content rules at commit time.
-- **Config files**: Build loop reads config from frozen `BUILD_COMMIT` git object, not filesystem. Agent filesystem writes to `.village/` or `specs/` are invisible to the builder.
+- Agents no longer have direct shell access. All actions flow through the execution engine: agents propose, village validates and executes.
+- Only the execution engine can commit or push. Agent `git` operations are blocked. Commits are validated against allowed paths and content rules.
+- Build loop reads config from a frozen git commit, not the filesystem. Agent writes to `.village/` or `specs/` are invisible to the builder.
 
 ### Added
-- **PPC guardrails layer**: New module layer (order 5) with `--guardrails` CLI flag. Ships `tdd`, `unsafe_commands`, `snake_case`, `forbidden_patterns` guardrail modules.
-- **`.village/rules.yaml`** — declarative policy schema: content rules, command rules, TDD config, filename casing, guardrail references.
-- **`.village/agents.yaml`** — per-role git identities and permissions (planner, builder, release) with distinct SSH keys and allowed paths.
-- **`.village/approvals/<spec-id>.yaml`** — per-spec command/script whitelists, read from git objects for tamper-proofing.
-- **Tier classifier**: Deterministic rule-based command tiers (0=read-only, 1=safe-write, 2=destructive, 3=dangerous). Executable resolution catches `/bin/rm` → `rm`, aliases.
-- **Command validator**: `shlex`-based parsing blocks `$()`, backticks, `&&`, `||`, `| sh` patterns. Script injection prevention via `allowed_scripts` whitelist.
-- **Content scanner**: Real-time file scanning for forbidden patterns with gitignore-style path scoping (`src/**`, `!src/vendor/**`) and line-level violation tracking.
-- **Commit engine**: Tamper-proof commits via `git hash-object` + `write-tree` + `commit-tree`. Validates every file at commit time. Filters to allowed paths. Rejects `specs/`, `.village/`, `.git/` paths.
-- **Environment sanitizer**: Strips `SSH_AUTH_SOCK`, `PYTHONPATH`, `LD_PRELOAD`, `GIT_DIR`, and 7 other dangerous variables per command.
-- **Symlink escape protection**: `Path.resolve()` on all boundary checks catches symlink escape attempts.
-- **Resource limits**: Optional `setrlimit` for CPU (5 min), memory (4 GB), file size (1 GB) — prevents fork bombs and runaway processes.
-- **Remote CI template**: GitHub Actions workflow template for push-time role-based path enforcement.
-- **Execution protocol**: Agents communicate via `<plan>[JSON]</plan>` / `<executed>[JSON]</executed>` markers in tmux pane output.
-- **Post-hoc verification gate**: After `<promise>DONE`, runs content scan, TDD check, filename casing check before marking spec complete.
-- **8 attack vector regression tests**: Git tampering, script injection, metachar smuggling, symlink escape, race conditions, env injection, nested repo, resource exhaustion.
-- **Documentation**: `docs/execution-engine.md` with architecture, tier table, attack vector matrix, and config reference.
+- PPC guardrails layer: new module layer with `--guardrails` CLI flag. Ships `tdd`, `unsafe_commands`, `snake_case`, `forbidden_patterns` guardrail modules.
+- `.village/rules.yaml`: declarative policy schema for content rules, command rules, TDD config, filename casing.
+- `.village/agents.yaml`: per-role git identities and permissions with distinct SSH keys.
+- `.village/approvals/<spec-id>.yaml`: per-spec command and script whitelists, read from git objects.
+- Tier classifier: deterministic command tiers (0=read-only, 1=safe-write, 2=destructive, 3=dangerous). Resolves `/bin/rm` to `rm`.
+- Command validator: `shlex`-based parsing blocks `$()`, backticks, `&&`, `||`, `| sh`. Script injection prevented via `allowed_scripts` whitelist.
+- Content scanner: scans files for forbidden patterns with gitignore-style path scoping and line-level tracking.
+- Commit engine: uses `git hash-object` + `write-tree` + `commit-tree` instead of `git add`. Validates every file at commit time.
+- Environment sanitizer: strips `SSH_AUTH_SOCK`, `PYTHONPATH`, `LD_PRELOAD`, `GIT_DIR` per command.
+- Symlink escape protection: `Path.resolve()` on all boundary checks.
+- Resource limits: optional `setrlimit` for CPU (5 min), memory (4 GB), file size (1 GB).
+- Remote CI template: GitHub Actions workflow for push-time role-based path enforcement.
+- Execution protocol: agents communicate via `<plan>`/`<executed>` markers in tmux pane output.
+- Post-hoc verification gate: runs content scan, TDD check, filename casing after `<promise>DONE` before marking spec complete.
+- 8 attack vector regression tests covering git tampering, script injection, metachar smuggling, symlink escape, race conditions, env injection, nested repos, and resource exhaustion.
+- `docs/execution-engine.md` with architecture, tier table, attack vector matrix, and configuration reference.
 
 ### Changed
-- Build loop now freezes `BUILD_COMMIT` hash at `run_loop()` start. All config reads use `git show BUILD_COMMIT:path`.
-- Contract generation includes guardrail instructions and execution protocol from PPC or inline.
-- `village/contracts.py` and `village/ppc.py` accept optional `guardrails` parameter for PPC `--guardrails` flag.
+- Build loop freezes `BUILD_COMMIT` at `run_loop()` start. All config reads use `git show BUILD_COMMIT:path`.
+- Contract generation includes guardrail instructions and execution protocol.
+- `village/contracts.py` and `village/ppc.py` accept an optional `guardrails` parameter.
 
 ## [2.2.0] - 2026-04-19
 

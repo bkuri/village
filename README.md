@@ -8,33 +8,35 @@
 
 **A tiny operating system for parallel development.**
 
-Village orchestrates multiple AI agents working in parallel — safely, locally, and transparently — using tools you already trust: tmux, git, and your task store. It provides role-based specialists for planning, building, knowledge management, and deliberation, all coordinated through a spec-driven autonomous build loop.
-
-No daemon. No database. No hidden state.
+Village orchestrates multiple AI agents working in parallel using tools you already
+trust: tmux, git, and a file-based task store. It provides role-based specialists for
+planning, building, knowledge management, and deliberation, coordinated through a
+spec-driven autonomous build loop. No daemon, no database, no hidden state.
 
 ---
 
 ## Why Village?
 
-Modern development has a coordination problem. We can run multiple AI agents — but we can't reliably coordinate them. Most systems fail in one of three ways:
+We can run multiple AI agents, but we can't reliably coordinate them. Most systems
+fail in one of three ways:
 
-- **Too much magic** — Background services, opaque schedulers, hidden state.
+- **Too much magic** — background services, opaque schedulers, hidden state.
 - **Too much ceremony** — YAML pipelines, workflow DSLs, configuration graphs.
-- **No recovery model** — When terminals close or machines reboot, work is duplicated or lost.
+- **No recovery model** — when terminals close or machines reboot, work is lost.
 
-Village takes a different approach. It treats your local machine like a **tiny operating system**:
+Village treats your local machine like an operating system:
 
-- **Task store** decides *what work is ready*
-- **Village** decides *who should work on it*
-- **tmux panes** prove *what is actually running*
+- **Task store** decides what work is ready
+- **Village** decides who should work on it
+- **tmux panes** prove what is actually running
 
-If the pane exists → work exists. If it doesn't → it doesn't. No guessing.
+If the pane exists, work exists. If it doesn't, it doesn't.
 
 ---
 
 ## 5-Minute Demo
 
-This is the complete journey — from nothing to parallel agents running — on a fresh machine.
+From nothing to parallel agents running on a fresh machine.
 
 ### Install
 
@@ -52,7 +54,7 @@ mkdir my-app && cd my-app && git init
 village up
 ```
 
-`village up` is idempotent. It creates the `.village/` directory, a tmux session, and a default config. Run it again and nothing changes.
+`village up` creates `.village/`, a tmux session, and a default config. It is idempotent and safe to re-run.
 
 ### Define work
 
@@ -85,9 +87,10 @@ village builder run         # Sequential: one spec at a time
 village builder run -p 3    # Parallel: 3 agents in 3 worktrees
 ```
 
-The builder loops through specs. For each one, it spins up an AI agent in an isolated git worktree inside a tmux pane. The agent reads the spec, implements the code, runs tests, and outputs `<promise>DONE</promise>` when all acceptance criteria pass.
-
-If it fails? Village rolls back the worktree and marks the spec for retry.
+The builder loops through specs. For each one, it spawns an AI agent in an isolated
+git worktree inside a tmux pane. The agent reads the spec, implements code, runs tests,
+and outputs `<promise>DONE</promise>` when all acceptance criteria pass. On failure,
+Village rolls back the worktree and marks the spec for retry.
 
 ### Watch
 
@@ -113,25 +116,21 @@ village builder arrange --dry-run        # Preview version bump + changelog
 village builder arrange                  # Apply and tag
 ```
 
-That's it. No daemon. No database. No hidden state.
+That's the full loop: no daemon, no database, no hidden state.
 
 ---
 
 ## Village vs Manual Coordination
 
-You have 10 tasks ready. Here's how the two approaches compare:
-
 | | **Manual** | **With Village** |
 |---|---|---|
 | **Start work** | Open 3 terminals, pick tasks by feel | `village builder run -p 3` |
-| **Avoid conflicts** | Slack message: "anyone editing auth.py?" | Lock system + conflict detection |
+| **Avoid conflicts** | Slack: "anyone editing auth.py?" | Lock system + conflict detection |
 | **Know what's running** | Check each terminal manually | `village watcher status --system` |
-| **Recover from crash** | Guess which tasks were running, re-do work | `village watcher cleanup --apply` picks up where you left off |
-| **Track state** | Post-it notes, spreadsheets, hope | Event log, lock files, state machine |
-| **Release** | Manual version bump, copy-paste changelog | `village builder arrange` — semver + categorized changelog |
-| **Scale to N agents** | Open N more terminals, manage N more contexts | `village builder run -p N` |
-
-**The key difference:** Village makes coordination *boring*. Not exciting, not magical — boring. Boring is reliable. Boring is auditable. Boring lets you focus on the code.
+| **Recover from crash** | Guess which tasks were running | `village watcher cleanup --apply` |
+| **Track state** | Post-it notes, spreadsheets | Event log, lock files, state machine |
+| **Release** | Manual version bump, copy-paste changelog | `village builder arrange` |
+| **Scale to N agents** | Open N more terminals | `village builder run -p N` |
 
 ---
 
@@ -497,7 +496,7 @@ Release process:
 5. Create git tag `v{version}`
 6. Clear bump queue and record release
 
-Bump labels are applied per task: `bd label add <task-id> bump:<type>`
+Bump labels are applied per task: `village tasks label <task-id> add bump:<type>`
 
 ---
 
@@ -505,7 +504,7 @@ Bump labels are applied per task: `bd label add <task-id> bump:<type>`
 
 | Code | Meaning | Example |
 |------|---------|---------|
-| 0 | Success | `village builder resume --task bd-a3f8` completes |
+| 0 | Success | `village builder resume --task village-t1` completes |
 | 1 | Generic error | Worktree creation failed |
 | 2 | Not ready / precondition failed | `village builder queue` when no tasks ready |
 | 3 | Blocked / no work available | `village builder queue` with no ready tasks |
@@ -516,7 +515,8 @@ Bump labels are applied per task: `bd label add <task-id> bump:<type>`
 
 ## Philosophy
 
-Village is intentionally boring. It does not hide execution. It does not predict intent. It does not require belief. It simply coordinates reality.
+Village is intentionally boring. No hidden execution, no intent prediction, no belief
+required. It coordinates what is actually running.
 
 ---
 
@@ -622,10 +622,10 @@ MIT
 
 - [AGENTS.md](AGENTS.md) — Agent development guide
 - [CHANGELOG.md](CHANGELOG.md) — Version history
+- [docs/execution-engine.md](docs/execution-engine.md) — Policy enforcement for AI agents
 - [docs/PRD.md](docs/PRD.md) — Product requirements document
 - [docs/ROADMAP.md](docs/ROADMAP.md) — Implementation roadmap
-- [EXTENSIBILITY.md](EXTENSIBILITY.md) — Extensibility framework (PRD)
-- [EXTENSIBILITY_GUIDE.md](EXTENSIBILITY_GUIDE.md) — Extensibility development guide
-- [EXTENSIBILITY_API.md](EXTENSIBILITY_API.md) — Extensibility API reference
+- [docs/EXTENSIBILITY_GUIDE.md](docs/EXTENSIBILITY_GUIDE.md) — Extensibility guide
+- [docs/EXTENSIBILITY_API.md](docs/EXTENSIBILITY_API.md) — Extensibility API reference
 - [docs/SHELL_COMPLETION.md](docs/SHELL_COMPLETION.md) — Shell setup
 - [docs/examples/](docs/examples/) — Practical examples
