@@ -75,7 +75,7 @@ village-t3    ACTIVE    %14      test       test-1-village-t3   12:35:01
 
 ```bash
 # Resume a task with frontend agent (override default)
-village resume village-t2 --agent frontend
+village builder resume --task village-t2 --agent frontend
 ```
 
 ## Custom Contracts (Optional)

@@ -353,12 +353,24 @@ def render_resume_result(result: "ResumeResult") -> str:
         return "\n".join(output)
 
 
+_ACTION_COMMANDS = {
+    "resume": "village builder resume",
+    "queue": "village builder queue",
+    "status": "village builder status",
+    "cleanup": "village builder cleanup",
+    "ready": "village builder ready",
+    "up": "village up",
+    "down": "village down",
+}
+
+
 def render_resume_actions(action: "ResumeAction") -> str:
     """
     Render resume action as text.
     """
+    command = _ACTION_COMMANDS.get(action.action, f"village {action.action}")
     output = [
-        f"Action: village {action.action}",
+        f"Action: {command}",
         f"Reason: {action.reason}",
     ]
 

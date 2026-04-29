@@ -22,10 +22,9 @@ source ~/.bashrc
 ### Usage
 
 ```bash
-village <TAB>              # Complete commands
-village status <TAB>         # Complete status options
-village resume <TAB>         # Complete task IDs (if native task store available)
-village queue <TAB>         # Complete queue options
+village <TAB>                      # Complete commands
+village builder <TAB>               # Complete builder subcommands
+village builder resume --task <TAB> # Complete task IDs (if native task store available)
 ```
 
 ## Zsh Completion
@@ -48,10 +47,9 @@ source ~/.zshrc
 ### Usage
 
 ```zsh
-village <TAB>              # Complete commands
-village status <TAB>         # Complete status options
-village resume <TAB>         # Complete task IDs (if native task store available)
-village queue <TAB>         # Complete queue options
+village <TAB>                      # Complete commands
+village builder <TAB>               # Complete builder subcommands
+village builder resume --task <TAB> # Complete task IDs (if native task store available)
 ```
 
 ## Fish Completion (Future Enhancement)
@@ -107,7 +105,7 @@ Both should be `bash_source` or `zsh_source`.
 
 ### Task ID Completion Not Available
 
-**Symptom**: `village resume <TAB>` doesn't complete task IDs.
+**Symptom**: `village builder resume --task <TAB>` doesn't complete task IDs.
 
 **Solution**: Task ID completion works automatically when `village tasks` is available.
 

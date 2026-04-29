@@ -122,10 +122,10 @@ update-docs            ACTIVE    %14      worker  worker-3-update-docs     2026-
 
 ```bash
 # Resume a specific task
-village resume add-auth-api
+village builder resume --task add-auth-api
 
-# Or resume without specifying (use planner mode)
-village resume
+# Or open builder for interactive mode
+village builder resume
 ```
 
 ---
@@ -257,7 +257,7 @@ village queue --n 3
 village status --workers
 
 # Resume a task to review progress
-village resume add-auth-api
+village builder resume --task add-auth-api
 
 # End of day: Shutdown
 village down
@@ -283,7 +283,7 @@ village queue --n 10
 village queue --agent test --n 5
 
 # Review test results
-village resume test-add-auth-tests
+village builder resume --task test-add-auth-tests
 ```
 
 ### Pattern 4: Documentation Sprint

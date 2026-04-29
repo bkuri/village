@@ -264,13 +264,13 @@ def resume(
       5. Otherwise show 'village ready'
 
     Examples:
-      village resume bd-a3f8              # Explicit resume
-      village resume --agent build       # Use specific agent
-      village resume bd-a3f8 --detached # Detached mode
-      village resume                    # Use planner
-      village resume --select           # Interactive selection
-      village resume --html            # HTML output
-      village resume --dry-run          # Preview mode
+      village builder resume --task bd-a3f8              # Explicit resume
+      village builder resume --agent build               # Use specific agent
+      village builder resume --task bd-a3f8 --detached  # Detached mode
+      village builder resume                            # Use planner
+      village builder resume --select                   # Interactive selection
+      village builder resume --html                     # HTML output
+      village builder resume --dry-run                  # Preview mode
     """
     from village.interactive import select_from_list
     from village.status import collect_workers

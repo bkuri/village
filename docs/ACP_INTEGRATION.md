@@ -205,7 +205,7 @@ class ACPBridge:
 **Before ACP:** Village only accessible via CLI
 ```bash
 village queue --n 3
-village resume bd-a3f8
+village builder resume --task bd-a3f8
 ```
 
 **After ACP:** Use Village from your favorite editor
@@ -408,7 +408,7 @@ Afternoon: Monitor from CLI
   ↓
 [CLI] village status --workers
   ↓
-[CLI] village resume bd-a3f8
+[CLI] village builder resume --task bd-a3f8
 ```
 
 ### Workflow 2: Mixed Agents
@@ -603,4 +603,4 @@ village acp
 - **ACP Specification**: https://agent-client-protocol.dev
 - **Official SDK**: `pip install agent-client-protocol`
 - **Village ACP Code**: `village/acp/`
-- **Task Breakdown**: [docs/ACP_INTEGRATION_TASKS.md](ACP_INTEGRATION_TASKS.md)
+- **Task Breakdown**: [docs/archive/ACP_INTEGRATION_TASKS.md](archive/ACP_INTEGRATION_TASKS.md) (archived)

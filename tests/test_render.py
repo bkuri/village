@@ -466,7 +466,7 @@ def test_render_resume_actions_without_meta():
     )
 
     output = render_resume_actions(action)
-    assert "Action: village resume" in output
+    assert "Action: village builder resume" in output
     assert "Reason: Task ready" in output
     assert "Run:" not in output
 

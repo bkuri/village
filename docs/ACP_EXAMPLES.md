@@ -122,7 +122,7 @@ village tasks create "Add API endpoints"
 # Same workflow via CLI
 village queue --n 2
 village status --workers
-village resume bd-a3f8
+village builder resume --task bd-a3f8
 ```
 
 ---
@@ -318,7 +318,7 @@ Note: Agent is running. Use the connection object to interact.
 village tasks create "Research best practices for REST API design" --label research
 
 # Assign to Claude agent
-village resume bd-research --agent claude
+village builder resume --task bd-research --agent claude
 ```
 
 **What happens:**
@@ -363,9 +363,9 @@ acp_capabilities = filesystem,terminal
 EOF
 
 # Queue tasks with different agents
-village queue --n 3 --agent worker    # OpenCode tasks
-village resume bd-research --agent claude  # Claude task
-village resume bd-analysis --agent gemini  # Gemini task
+village builder queue --n 3 --agent worker    # OpenCode tasks
+village builder resume --task bd-research --agent claude  # Claude task
+village builder resume --task bd-analysis --agent gemini  # Gemini task
 ```
 
 ---
@@ -425,14 +425,14 @@ Testing ACP agent: gemini...
 village tasks create "Analyze competitor pricing strategies" --label research
 
 # Assign to Gemini
-village resume bd-competitor-analysis --agent gemini
+village builder resume --task bd-competitor-analysis --agent gemini
 ```
 
 ### Step 5: Monitor and Interact
 
 ```bash
 # Attach to Gemini task
-village resume bd-competitor-analysis
+village builder resume --task bd-competitor-analysis
 
 # Inside tmux pane, interact with Gemini
 > Analyze the pricing data in data/pricing.csv
@@ -524,10 +524,10 @@ village tasks create "Write auth tests" --label test
 village queue --n 2 --agent backend
 
 # 3. Start frontend task (Claude)
-village resume bd-login-ui --agent frontend
+village builder resume --task bd-login-ui --agent frontend
 
 # 4. Start research task (Gemini)
-village resume bd-auth-research --agent research
+village builder resume --task bd-auth-research --agent research
 
 # 5. Queue tests (OpenCode)
 village queue --n 1 --agent test
@@ -576,8 +576,8 @@ village acp --server start &
 
 # Queue mixed tasks
 village queue --n 4 --agent backend    # OpenCode
-village resume bd-frontend-1 --agent frontend  # Claude
-village resume bd-research-1 --agent research  # Gemini
+village builder resume --task bd-frontend-1 --agent frontend  # Claude
+village builder resume --task bd-research-1 --agent research  # Gemini
 
 # Monitor from CLI
 watch -n 10 'village status --workers'
@@ -930,7 +930,7 @@ village acp --client spawn custom
 village tasks create "Specialized processing" --label custom
 
 # Assign to custom agent
-village resume bd-special --agent custom
+village builder resume --task bd-special --agent custom
 ```
 
 ---

@@ -63,7 +63,7 @@ After reviewing, create a review summary in the task log.
 village queue --agent review --n 1
 
 # Or resume a specific task with the review agent
-village resume village-t1 --agent review
+village builder resume --task village-t1 --agent review
 ```
 
 ## Verification

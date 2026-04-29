@@ -136,10 +136,10 @@ test-e2e-auth      ACTIVE    %14      test     test-1-test-e2e-auth    2026-01-2
 
 ```bash
 # Resume a backend task
-village resume backend-api-auth
+village builder resume --task backend-api-auth
 
 # Resume with specific agent (override auto-detection)
-village resume backend-api-auth --agent backend
+village builder resume --task backend-api-auth --agent backend
 ```
 
 ---

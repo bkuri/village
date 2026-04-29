@@ -284,7 +284,7 @@ def _help_text(args: list[str], config: _Config) -> tuple[str, str, int]:
 1. Use chat to clarify intent and write context files.
 2. Use `/create` to define work.
 3. Use `village ready` to validate execution readiness.
-4. Use `village queue` / `village resume` to execute.
+4. Use `village builder queue` / `village builder resume` to execute.
 
 ## Task Creation Workflow
 1. `/create [title]` — start task creation mode
@@ -366,7 +366,7 @@ See `/help workflow` for proper usage.
 1. Use chat to clarify intent and write context files.
 2. Use `/create` to define work.
 3. Use `village ready` to validate execution readiness.
-4. Use `village queue` / `village resume` to execute.
+4. Use `village builder queue` / `village builder resume` to execute.
 
 ## Task Creation Workflow
 1. `/create [title]` — start task creation
