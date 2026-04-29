@@ -59,6 +59,10 @@ def _compile_ppc_prompt(config: _Config, mode: ChatMode) -> str:
         )
 
     cmd = ["ppc", "explore", "--profile", profile_name]
+    # Use village-specific prompts for chat profiles
+    village_prompts = config.village_dir.parent / "village" / "prompts"
+    if village_prompts.is_dir():
+        cmd.extend(["-prompts", str(village_prompts)])
 
     try:
         return run_command_output_cwd(cmd, cwd=config.git_root)

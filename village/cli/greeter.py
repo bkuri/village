@@ -53,7 +53,7 @@ def _build_llm_client(model: str | None, config: Config, max_tokens: int | None 
 
 
 def _load_system_prompt() -> str | None:
-    prompt_path = Path(__file__).parent.parent.parent / "prompts" / "chat" / "ppc_task_spec.md"
+    prompt_path = Path(__file__).parent.parent / "prompts" / "chat" / "ppc_task_spec.md"
     try:
         with open(prompt_path, encoding="utf-8") as f:
             return f.read()
