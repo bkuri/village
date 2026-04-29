@@ -627,7 +627,7 @@ MIT
 - [AGENTS.md](AGENTS.md) — Agent development guide
 - [CHANGELOG.md](CHANGELOG.md) — Version history
 - [docs/execution-engine.md](docs/execution-engine.md) — Policy enforcement for AI agents
-- [docs/PRD.md](docs/PRD.md) — Product requirements document
+- [docs/archive/PRD.md](docs/archive/PRD.md) — Product requirements document (archived)
 - [docs/ROADMAP.md](docs/ROADMAP.md) — Implementation roadmap
 - [docs/EXTENSIBILITY_GUIDE.md](docs/EXTENSIBILITY_GUIDE.md) — Extensibility guide
 - [docs/EXTENSIBILITY_API.md](docs/EXTENSIBILITY_API.md) — Extensibility API reference
