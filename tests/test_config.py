@@ -20,7 +20,7 @@ def test_get_config_in_git_repo(tmp_path: Path):
     assert config.git_root == tmp_path
     assert config.village_dir == tmp_path / ".village"
     assert config.worktrees_dir == tmp_path / ".worktrees"
-    assert config.tmux_session == "village"
+    assert config.tmux_session.startswith("village")
 
 
 def test_config_env_vars_override(tmp_path: Path):

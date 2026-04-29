@@ -2,6 +2,7 @@
 
 import enum
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from village.chat.errors import PromptGenerationError
@@ -60,7 +61,7 @@ def _compile_ppc_prompt(config: _Config, mode: ChatMode) -> str:
 
     cmd = ["ppc", "explore", "--profile", profile_name]
     # Use village-specific prompts for chat profiles
-    village_prompts = config.village_dir.parent / "village" / "prompts"
+    village_prompts = Path(__file__).resolve().parent / "prompts"
     if village_prompts.is_dir():
         cmd.extend(["-prompts", str(village_prompts)])
 

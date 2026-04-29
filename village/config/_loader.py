@@ -351,10 +351,23 @@ def _build_config(git_root: Path) -> Config:
     logger.debug(f"Default agent: {default_agent}")
     logger.debug(f"Agent configs: {list(agents.keys())}")
 
+    # Derive tmux session name from project directory for easy identification
+    # Format: village_<project>
+    # Can be overridden via TMUX_SESSION env var or config file
+    env_tmux = os.environ.get("VILLAGE_TMUX_SESSION")
+    file_tmux = file_config.get("TMUX_SESSION")
+    if env_tmux:
+        tmux_session = env_tmux
+    elif file_tmux:
+        tmux_session = file_tmux
+    else:
+        tmux_session = f"village_{git_root.name}"
+
     return Config(
         git_root=git_root,
         village_dir=village_dir,
         worktrees_dir=worktrees_dir,
+        tmux_session=tmux_session,
         scm_kind=scm_kind,
         max_workers=max_workers,
         queue_ttl_minutes=queue_ttl_minutes,

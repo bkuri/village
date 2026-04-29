@@ -7,6 +7,7 @@ PPC is a required Go binary. This module provides:
 
 import logging
 import shutil
+from pathlib import Path
 
 import click
 
@@ -16,6 +17,12 @@ from village.probes.tools import SubprocessError, run_command_output_cwd
 logger = logging.getLogger(__name__)
 
 PPC_INSTALL_URL = "https://github.com/bkuri/ppc"
+
+# Resolve PPC prompts directory relative to the village package
+_PPC_PROMPTS: str | None = None
+_prompts_path = Path(__file__).resolve().parent.parent / "prompts"
+if _prompts_path.is_dir():
+    _PPC_PROMPTS = str(_prompts_path)
 
 
 def require_ppc() -> None:
@@ -49,6 +56,8 @@ def generate_ppc_contract(
         for key, value in vars.items():
             cmd.extend(["--var", f"{key}={value}"])
         cmd.extend(["--policies", "spec_context"])
+    if _PPC_PROMPTS is not None:
+        cmd.extend(["-prompts", _PPC_PROMPTS])
 
     try:
         return run_command_output_cwd(cmd, cwd=config.git_root)

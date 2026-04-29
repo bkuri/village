@@ -37,7 +37,7 @@ def test_dashboard_init():
     """Test VillageDashboard initialization."""
     dashboard = VillageDashboard()
 
-    assert dashboard.session_name == "village"
+    assert dashboard.session_name.startswith("village_")
     assert dashboard.state.max_workers == 2
     assert not dashboard._running
 

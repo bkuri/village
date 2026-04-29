@@ -211,7 +211,7 @@ def test_ensure_tasks_initialized_dry_run():
 
 def test_ensure_session_exists():
     """Test _ensure_session when session already exists."""
-    with patch("village.config.get_config") as mock_config:
+    with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
         config_mock.tmux_session = "existing_session"
         mock_config.return_value = config_mock
@@ -226,7 +226,7 @@ def test_ensure_session_exists():
 
 def test_ensure_session_create_success():
     """Test _ensure_session creating session successfully."""
-    with patch("village.config.get_config") as mock_config:
+    with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
         config_mock.tmux_session = "village"
         mock_config.return_value = config_mock
@@ -245,7 +245,7 @@ def test_ensure_session_create_success():
 
 def test_ensure_session_create_failure():
     """Test _ensure_session when session creation fails."""
-    with patch("village.config.get_config") as mock_config:
+    with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
         config_mock.tmux_session = "village"
         mock_config.return_value = config_mock
@@ -264,7 +264,7 @@ def test_ensure_session_create_failure():
 
 def test_ensure_session_dry_run():
     """Test _ensure_session with dry_run=True."""
-    with patch("village.config.get_config") as mock_config:
+    with patch("village.runtime.get_config") as mock_config:
         config_mock = Mock()
         config_mock.tmux_session = "village"
         mock_config.return_value = config_mock
