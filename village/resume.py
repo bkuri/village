@@ -13,6 +13,7 @@ from village.contracts import ContractEnvelope, generate_contract
 from village.errors import InterruptedResume
 from village.event_log import log_task_error, log_task_start, log_task_success
 from village.locks import Lock, parse_lock, write_lock
+from village.ppc import require_ppc
 from village.probes.tmux import (
     panes,
     send_keys,
@@ -181,6 +182,8 @@ def execute_resume(
     """
     if config is None:
         config = get_config()
+
+    require_ppc()
 
     session_name = config.tmux_session
     base_task_id = task_id

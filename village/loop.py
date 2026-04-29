@@ -22,6 +22,7 @@ from village.execution.manifest import ManifestStore
 from village.execution.refs import freeze_build_commit
 from village.execution.verify import inject_violation_notes, run_verification
 from village.locks import Lock, write_lock
+from village.ppc import require_ppc
 from village.probes.tmux import capture_pane, pane_exists
 from village.resume import _create_resume_window, _inject_contract
 from village.rules.loader import load_rules
@@ -458,6 +459,8 @@ def run_loop(
 ) -> LoopResult:
     if config is None:
         config = get_config()
+
+    require_ppc()
 
     # Freeze build commit at the very start — all config reads during
     # this build use this commit hash for tamper-proofing
