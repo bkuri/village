@@ -502,7 +502,8 @@ def capture_pane(session_name: str, pane_id: str, limit: int | None = None) -> s
     Raises:
         SubprocessError: If capture fails
     """
-    cmd = ["tmux", "capture-pane", "-t", f"{session_name}:{pane_id}", "-p"]
+    target = pane_id if pane_id.startswith("%") else f"{session_name}:{pane_id}"
+    cmd = ["tmux", "capture-pane", "-t", target, "-p"]
 
     if limit:
         cmd.extend(["-S", f"-{limit}"])
